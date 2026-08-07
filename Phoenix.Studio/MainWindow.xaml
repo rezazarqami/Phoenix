@@ -70,7 +70,7 @@
                         <TextBlock DockPanel.Dock="Top" Text="سفارش‌های شبیه‌سازی‌شده" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <DataGrid x:Name="OrdersGrid" AutoGenerateColumns="False" IsReadOnly="True" Background="#111B2E" Foreground="#111827" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="زمان" Binding="{Binding CreatedAt, StringFormat=HH:mm:ss}" Width="90"/>
+                                <DataGridTextColumn Header="زمان" Binding="{Binding LocalCreatedAt, StringFormat=HH:mm:ss}" Width="90"/>
                                 <DataGridTextColumn Header="نوع سفارش" Binding="{Binding Type}" Width="*"/>
                                 <DataGridTextColumn Header="قیمت" Binding="{Binding Price, StringFormat=N4}" Width="130"/>
                                 <DataGridTextColumn Header="مقدار" Binding="{Binding Quantity, StringFormat=N8}" Width="130"/>

@@ -7,6 +7,12 @@ public class StrategyCalculator : IStrategyCalculator
 {
     public TradePlan Calculate(Signal signal)
     {
+        if (signal.High <= signal.Low)
+            throw new ArgumentException("High price must be greater than low price.", nameof(signal));
+
+        if (signal.PositionSizeUsdt <= 0)
+            throw new ArgumentException("Position size must be greater than zero.", nameof(signal));
+
         decimal range = signal.High - signal.Low;
 
         decimal x = range * 0.618m;

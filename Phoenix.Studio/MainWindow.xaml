@@ -33,7 +33,10 @@
                 <TextBlock Text="Paper Trading Studio · محیط آزمایشی بدون سرمایه واقعی" Foreground="#8FA4C4"/>
             </StackPanel>
             <Border DockPanel.Dock="Right" Background="#123B32" CornerRadius="18" Padding="14,7" VerticalAlignment="Center">
-                <TextBlock Text="● PAPER MODE" Foreground="#5EE2B0" FontWeight="Bold"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="● PAPER MODE" Foreground="#5EE2B0" FontWeight="Bold" Margin="0,0,18,0"/>
+                    <TextBlock x:Name="BybitStatusText" Text="BYBIT TESTNET: بررسی نشده" Foreground="#FBBF24" FontWeight="Bold"/>
+                </StackPanel>
             </Border>
         </DockPanel>
 
@@ -49,6 +52,8 @@
                         <TextBlock Text="پایین‌ترین قیمت"/><TextBox x:Name="LowTextBox" Text="118000" FlowDirection="LeftToRight"/>
                         <TextBlock Text="سرمایه موقعیت (USDT)"/><TextBox x:Name="SizeTextBox" Text="100" FlowDirection="LeftToRight"/>
                         <TextBlock Text="قیمت فعلی"/><TextBox x:Name="CurrentPriceTextBox" Text="118700" FlowDirection="LeftToRight"/>
+                        <Button Content="دریافت قیمت از Bybit Testnet" Click="FetchBybitPrice_Click" Background="#0F766E"/>
+                        <Button Content="بررسی اتصال حساب Testnet" Click="CheckBybitConnection_Click" Background="#475569"/>
                         <Button Content="محاسبه برنامه معامله" Click="Calculate_Click"/>
                         <Button Content="اجرای سفارش آزمایشی" Click="Execute_Click" Background="#2563EB"/>
                         <TextBlock x:Name="ValidationText" TextWrapping="Wrap" Foreground="#FCA5A5" Margin="0,8,0,0"/>

@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Net.Http;
 using System.Windows;
 using Phoenix.Core.Entities;
 using Phoenix.Engine.Exchanges;
+using Phoenix.Engine.Exchanges.Bybit;
 using Phoenix.Engine.Managers;
 using Phoenix.Engine.Services;
 
@@ -10,6 +12,7 @@ namespace Phoenix.Studio;
 public partial class MainWindow : Window
 {
     private readonly PaperExchange _exchange = new();
+    private readonly BybitTestnetClient _bybitClient = new(BybitTestnetOptions.FromEnvironment());
     private Signal? _signal;
 
     public MainWindow()
@@ -17,6 +20,34 @@ public partial class MainWindow : Window
         InitializeComponent();
         OrdersGrid.ItemsSource = _exchange.Orders;
         Log("پنل در حالت Paper Trading راه‌اندازی شد؛ هیچ سفارش واقعی ارسال نمی‌شود.");
+    }
+
+    private async void FetchBybitPrice_Click(object sender, RoutedEventArgs e)
+    {
+        await RunBybitActionAsync(async () =>
+        {
+            var ticker = await _bybitClient.GetLastPriceAsync(SymbolTextBox.Text);
+            CurrentPriceTextBox.Text = ticker.LastPrice.ToString(CultureInfo.InvariantCulture);
+            BybitStatusText.Text = "● BYBIT TESTNET: متصل";
+            BybitStatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
+            Log($"قیمت {ticker.Symbol} از Bybit Testnet دریافت شد: {ticker.LastPrice:N4}");
+        });
+    }
+
+    private async void CheckBybitConnection_Click(object sender, RoutedEventArgs e)
+    {
+        await RunBybitActionAsync(async () =>
+        {
+            var status = await _bybitClient.CheckConnectionAsync();
+            BybitStatusText.Text = status.Authenticated
+                ? "● BYBIT TESTNET: احراز هویت شد"
+                : "● BYBIT TESTNET: عمومی متصل";
+            BybitStatusText.Foreground = status.Authenticated
+                ? System.Windows.Media.Brushes.LightGreen
+                : System.Windows.Media.Brushes.Khaki;
+            var equity = status.TotalEquityUsd is null ? string.Empty : $" موجودی کل: {status.TotalEquityUsd:N2} USD.";
+            Log(status.Message + equity);
+        });
     }
 
     private void Calculate_Click(object sender, RoutedEventArgs e)
@@ -103,4 +134,23 @@ public partial class MainWindow : Window
         || decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result);
 
     private void Log(string message) => EventsList.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {message}");
+
+    private async Task RunBybitActionAsync(Func<Task> action)
+    {
+        ValidationText.Text = string.Empty;
+        try
+        {
+            await action();
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or InvalidOperationException
+                                          or ArgumentException)
+        {
+            BybitStatusText.Text = "● BYBIT TESTNET: خطا";
+            BybitStatusText.Foreground = System.Windows.Media.Brushes.LightCoral;
+            ValidationText.Text = exception.Message;
+            Log($"خطای اتصال Bybit: {exception.Message}");
+        }
+    }
 }

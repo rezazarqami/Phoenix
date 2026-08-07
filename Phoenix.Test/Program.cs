@@ -1,5 +1,6 @@
 using Phoenix.Core.Entities;
 using Phoenix.Engine.Exchanges;
+using Phoenix.Engine.Exchanges.Bybit;
 using Phoenix.Engine.Managers;
 using Phoenix.Engine.Services;
 
@@ -59,6 +60,32 @@ Run("Entry rules respect trade direction", () =>
     var shortSignal = Prepare(BuildSignal(Direction.Short));
     True(new EntryManager().CanOpenPosition(shortSignal, shortSignal.TradePlan!.EntryPrice));
     False(new EntryManager().CanOpenPosition(shortSignal, shortSignal.TradePlan.EntryPrice - 1));
+});
+
+Run("Bybit HMAC uses lowercase SHA-256 signature", () =>
+{
+    var signature = BybitSignature.CreateHmacSha256(
+        "key",
+        "The quick brown fox jumps over the lazy dog");
+    Equal("f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8", signature);
+});
+
+Run("Bybit signed requests contain required V5 headers", () =>
+{
+    var options = new BybitTestnetOptions("test-key", "test-secret");
+    var client = new BybitTestnetClient(options, timestampProvider: () => 1_700_000_000_000);
+    using var request = client.CreateSignedGetRequest("/v5/account/wallet-balance", "accountType=UNIFIED&coin=USDT");
+    Equal("test-key", request.Headers.GetValues("X-BAPI-API-KEY").Single());
+    Equal("1700000000000", request.Headers.GetValues("X-BAPI-TIMESTAMP").Single());
+    Equal("5000", request.Headers.GetValues("X-BAPI-RECV-WINDOW").Single());
+    Equal(64, request.Headers.GetValues("X-BAPI-SIGN").Single().Length);
+});
+
+Run("Bybit private requests require Testnet credentials", () =>
+{
+    var client = new BybitTestnetClient(new BybitTestnetOptions(null, null));
+    Throws<InvalidOperationException>(() =>
+        client.CreateSignedGetRequest("/v5/account/wallet-balance", "accountType=UNIFIED"));
 });
 
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");

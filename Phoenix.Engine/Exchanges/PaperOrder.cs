@@ -6,4 +6,7 @@ public sealed record PaperOrder(
     Guid PositionId,
     decimal Price,
     decimal Quantity,
-    string Status);
+    string Status)
+{
+    public DateTime LocalCreatedAt => CreatedAt.ToLocalTime();
+}

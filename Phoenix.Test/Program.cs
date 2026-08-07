@@ -1,71 +1,98 @@
-﻿using Phoenix.Core.Entities;
+using Phoenix.Core.Entities;
 using Phoenix.Engine.Exchanges;
 using Phoenix.Engine.Managers;
 using Phoenix.Engine.Services;
 
-Signal signal = new()
+var passed = 0;
+var failed = 0;
+
+Run("Long strategy calculates expected levels", () =>
 {
-    Id = Guid.NewGuid(),
+    var signal = BuildSignal(Direction.Long);
+    var plan = new StrategyCalculator().Calculate(signal);
+    Equal(118764m, plan.EntryPrice);
+    Equal(119000m, plan.TakeProfit);
+    Equal(118542m, plan.StopLoss1);
+});
 
-    Symbol = "BTCUSDT",
+Run("Short strategy calculates expected levels", () =>
+{
+    var signal = BuildSignal(Direction.Short);
+    var plan = new StrategyCalculator().Calculate(signal);
+    Equal(119236m, plan.EntryPrice);
+    Equal(119000m, plan.TakeProfit);
+    Equal(119458m, plan.StopLoss1);
+});
 
-    Direction = Direction.Long,
+Run("Invalid range is rejected", () =>
+{
+    var signal = BuildSignal(Direction.Long);
+    signal.High = signal.Low;
+    Throws<ArgumentException>(() => new StrategyCalculator().Calculate(signal));
+});
 
-    High = 120000m,
+Run("Position quantity is calculated from USDT value", () =>
+{
+    var signal = Prepare(BuildSignal(Direction.Long));
+    var position = new ExecutionManager().OpenPosition(signal)!;
+    Equal(signal.PositionSizeUsdt / signal.TradePlan!.EntryPrice, position.Quantity);
+    Equal(100m, position.PositionSizeUsdt);
+});
 
-    Low = 118000m,
+Run("Paper exchange records full protective order set", () =>
+{
+    var signal = Prepare(BuildSignal(Direction.Long));
+    var position = new ExecutionManager().OpenPosition(signal)!;
+    var exchange = new PaperExchange();
+    True(new OrderManager(exchange).PlaceOrders(position));
+    Equal(4, exchange.Orders.Count);
+    Equal("FILLED", exchange.Orders[0].Status);
+    Equal("WAITING", exchange.Orders[3].Status);
+});
 
-    PositionSizeUsdt = 100m,
+Run("Entry rules respect trade direction", () =>
+{
+    var longSignal = Prepare(BuildSignal(Direction.Long));
+    True(new EntryManager().CanOpenPosition(longSignal, longSignal.TradePlan!.EntryPrice));
+    False(new EntryManager().CanOpenPosition(longSignal, longSignal.TradePlan.EntryPrice + 1));
 
-    Status = SignalStatus.WaitingEntry,
+    var shortSignal = Prepare(BuildSignal(Direction.Short));
+    True(new EntryManager().CanOpenPosition(shortSignal, shortSignal.TradePlan!.EntryPrice));
+    False(new EntryManager().CanOpenPosition(shortSignal, shortSignal.TradePlan.EntryPrice - 1));
+});
 
-    CreatedAt = DateTime.UtcNow
+Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
+return failed == 0 ? 0 : 1;
+
+void Run(string name, Action test)
+{
+    try { test(); passed++; Console.WriteLine($"PASS  {name}"); }
+    catch (Exception exception) { failed++; Console.WriteLine($"FAIL  {name}: {exception.Message}"); }
+}
+
+static Signal BuildSignal(Direction direction) => new()
+{
+    Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = direction,
+    High = 120000m, Low = 118000m, PositionSizeUsdt = 100m,
+    Status = SignalStatus.WaitingEntry, CreatedAt = DateTime.UtcNow
 };
 
-StrategyCalculator calculator = new();
-
-CalculationService calculationService = new(calculator);
-
-SignalManager signalManager = new(calculationService);
-
-bool added = signalManager.AddSignal(signal);
-
-EntryManager entryManager = new();
-
-bool canOpen = entryManager.CanOpenPosition(signal, 118700m);
-
-Console.WriteLine($"Added : {added}");
-
-Console.WriteLine($"Can Open : {canOpen}");
-
-if (canOpen)
+static Signal Prepare(Signal signal)
 {
-    ExecutionManager executionManager = new();
+    new SignalManager(new CalculationService(new StrategyCalculator())).AddSignal(signal);
+    return signal;
+}
 
-    Position? position = executionManager.OpenPosition(signal);
-
-    if (position != null)
-    {
-        Console.WriteLine();
-
-        Console.WriteLine("===== POSITION OPENED =====");
-
-        Console.WriteLine($"Position Id : {position.Id}");
-
-        Console.WriteLine($"Signal Id   : {position.SignalId}");
-
-        Console.WriteLine($"Entry Price : {position.EntryPrice}");
-
-        Console.WriteLine($"Quantity    : {position.Quantity}");
-
-        Console.WriteLine($"Status      : {position.Status}");
-
-        Console.WriteLine();
-
-        TestExchange exchange = new();
-
-        OrderManager orderManager = new(exchange);
-
-        orderManager.PlaceOrders(position);
-    }
+static void True(bool value) { if (!value) throw new Exception("Expected true."); }
+static void False(bool value) { if (value) throw new Exception("Expected false."); }
+static void Equal<T>(T expected, T actual) where T : notnull
+{
+    if (!EqualityComparer<T>.Default.Equals(expected, actual))
+        throw new Exception($"Expected {expected}, got {actual}.");
+}
+static void Throws<T>(Action action) where T : Exception
+{
+    try { action(); }
+    catch (T) { return; }
+    throw new Exception($"Expected {typeof(T).Name}.");
 }

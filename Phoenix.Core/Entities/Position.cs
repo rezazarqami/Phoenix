@@ -12,6 +12,8 @@ public class Position
 
     public decimal Quantity { get; set; }
 
+    public decimal PositionSizeUsdt { get; set; }
+
     public decimal TakeProfit { get; set; }
 
     public decimal StopLoss1 { get; set; }
@@ -23,4 +25,6 @@ public class Position
     public SignalStatus Status { get; set; }
 
     public DateTime OpenedAt { get; set; }
+
+    public DateTime? ClosedAt { get; set; }
 }

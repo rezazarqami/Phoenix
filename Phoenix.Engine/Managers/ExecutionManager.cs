@@ -6,7 +6,7 @@ public class ExecutionManager
 {
     public Position? OpenPosition(Signal signal)
     {
-        if (signal.TradePlan == null)
+        if (signal.TradePlan == null || signal.TradePlan.EntryPrice <= 0 || signal.PositionSizeUsdt <= 0)
             return null;
 
         Position position = new()
@@ -19,7 +19,9 @@ public class ExecutionManager
 
             EntryPrice = signal.TradePlan.EntryPrice,
 
-            Quantity = signal.PositionSizeUsdt,
+            Quantity = signal.PositionSizeUsdt / signal.TradePlan.EntryPrice,
+
+            PositionSizeUsdt = signal.PositionSizeUsdt,
 
             TakeProfit = signal.TradePlan.TakeProfit,
 

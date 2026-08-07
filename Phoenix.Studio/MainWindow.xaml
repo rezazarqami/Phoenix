@@ -1,12 +1,92 @@
-﻿<Window x:Class="Phoenix.Studio.MainWindow"
+<Window x:Class="Phoenix.Studio.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Phoenix.Studio"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Phoenix Paper Trading Studio" Height="760" Width="1180"
+        MinHeight="650" MinWidth="1000" Background="#0B1220"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#DCE7F7"/></Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="0,6,0,12"/><Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Background" Value="#172238"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#31415F"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Margin" Value="0,6,0,12"/><Setter Property="Padding" Value="8,5"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="14,9"/><Setter Property="Margin" Value="0,6,0,6"/>
+            <Setter Property="Background" Value="#F97316"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/><Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="#111B2E"/><Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="18"/><Setter Property="Margin" Value="0,0,14,14"/>
+        </Style>
+    </Window.Resources>
 
+    <Grid Margin="22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,18">
+            <StackPanel DockPanel.Dock="Left">
+                <TextBlock Text="PHOENIX" FontSize="28" FontWeight="Bold" Foreground="#F97316"/>
+                <TextBlock Text="Paper Trading Studio · محیط آزمایشی بدون سرمایه واقعی" Foreground="#8FA4C4"/>
+            </StackPanel>
+            <Border DockPanel.Dock="Right" Background="#123B32" CornerRadius="18" Padding="14,7" VerticalAlignment="Center">
+                <TextBlock Text="● PAPER MODE" Foreground="#5EE2B0" FontWeight="Bold"/>
+            </Border>
+        </DockPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="310"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Style="{StaticResource Card}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel FlowDirection="RightToLeft">
+                        <TextBlock Text="ثبت سیگنال آزمایشی" FontSize="19" FontWeight="SemiBold" Margin="0,0,0,14"/>
+                        <TextBlock Text="نماد"/><TextBox x:Name="SymbolTextBox" Text="BTCUSDT" FlowDirection="LeftToRight"/>
+                        <TextBlock Text="جهت"/><ComboBox x:Name="DirectionComboBox" SelectedIndex="0"><ComboBoxItem Content="Long"/><ComboBoxItem Content="Short"/></ComboBox>
+                        <TextBlock Text="بالاترین قیمت"/><TextBox x:Name="HighTextBox" Text="120000" FlowDirection="LeftToRight"/>
+                        <TextBlock Text="پایین‌ترین قیمت"/><TextBox x:Name="LowTextBox" Text="118000" FlowDirection="LeftToRight"/>
+                        <TextBlock Text="سرمایه موقعیت (USDT)"/><TextBox x:Name="SizeTextBox" Text="100" FlowDirection="LeftToRight"/>
+                        <TextBlock Text="قیمت فعلی"/><TextBox x:Name="CurrentPriceTextBox" Text="118700" FlowDirection="LeftToRight"/>
+                        <Button Content="محاسبه برنامه معامله" Click="Calculate_Click"/>
+                        <Button Content="اجرای سفارش آزمایشی" Click="Execute_Click" Background="#2563EB"/>
+                        <TextBlock x:Name="ValidationText" TextWrapping="Wrap" Foreground="#FCA5A5" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="160"/></Grid.RowDefinitions>
+                <UniformGrid Rows="1" Columns="4">
+                    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="ورود" Foreground="#8FA4C4"/><TextBlock x:Name="EntryValue" Text="—" FontSize="22" FontWeight="Bold"/></StackPanel></Border>
+                    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="حد سود" Foreground="#8FA4C4"/><TextBlock x:Name="TakeProfitValue" Text="—" FontSize="22" FontWeight="Bold" Foreground="#5EE2B0"/></StackPanel></Border>
+                    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="حد ضرر" Foreground="#8FA4C4"/><TextBlock x:Name="StopLossValue" Text="—" FontSize="22" FontWeight="Bold" Foreground="#FCA5A5"/></StackPanel></Border>
+                    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="وضعیت" Foreground="#8FA4C4"/><TextBlock x:Name="StatusValue" Text="آماده" FontSize="18" FontWeight="Bold" Foreground="#FBBF24"/></StackPanel></Border>
+                </UniformGrid>
+
+                <Border Grid.Row="1" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="سفارش‌های شبیه‌سازی‌شده" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                        <DataGrid x:Name="OrdersGrid" AutoGenerateColumns="False" IsReadOnly="True" Background="#111B2E" Foreground="#111827" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="زمان" Binding="{Binding CreatedAt, StringFormat=HH:mm:ss}" Width="90"/>
+                                <DataGridTextColumn Header="نوع سفارش" Binding="{Binding Type}" Width="*"/>
+                                <DataGridTextColumn Header="قیمت" Binding="{Binding Price, StringFormat=N4}" Width="130"/>
+                                <DataGridTextColumn Header="مقدار" Binding="{Binding Quantity, StringFormat=N8}" Width="130"/>
+                                <DataGridTextColumn Header="وضعیت" Binding="{Binding Status}" Width="100"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="رویدادها" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                        <ListBox x:Name="EventsList" Background="#0D1627" Foreground="#BFD0E8" BorderThickness="0"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>

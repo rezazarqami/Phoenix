@@ -12,14 +12,11 @@ public class OrderManager
         _exchange = exchange;
     }
 
-    public void PlaceOrders(Position position)
+    public bool PlaceOrders(Position position)
     {
-        _exchange.SendMarketOrder(position);
-
-        _exchange.SendTakeProfit(position);
-
-        _exchange.SendStopLoss1(position);
-
-        _exchange.SendStopLoss2(position);
+        return _exchange.SendMarketOrder(position)
+            && _exchange.SendTakeProfit(position)
+            && _exchange.SendStopLoss1(position)
+            && _exchange.SendStopLoss2(position);
     }
 }

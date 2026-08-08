@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private readonly PaperExchange _exchange = new();
     private readonly BybitTestnetClient _bybitClient = new(BybitTestnetOptions.FromEnvironment());
     private Signal? _signal;
+    private Position? _position;
 
     public MainWindow()
     {
@@ -96,8 +97,25 @@ public partial class MainWindow : Window
         }
 
         OrdersGrid.Items.Refresh();
+        _position = position;
         StatusValue.Text = "موقعیت باز";
         Log($"موقعیت آزمایشی باز شد: {position.Quantity:N8} {position.Direction} با ارزش {position.PositionSizeUsdt:N2} USDT.");
+    }
+
+    private async void PreviewBybitOrder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_position is null)
+        {
+            ValidationText.Text = "ابتدا برنامه را محاسبه و سفارش آزمایشی را اجرا کنید.";
+            return;
+        }
+
+        await RunBybitActionAsync(async () =>
+        {
+            var rules = await _bybitClient.GetInstrumentRulesAsync(SymbolTextBox.Text);
+            var preview = BybitOrderPreviewBuilder.Build(SymbolTextBox.Text, _position, rules);
+            Log($"پیش‌نمایش Bybit: {preview.Side} {preview.Quantity} {preview.Symbol}، ارزش تقریبی {preview.EstimatedNotional:N2} USDT، TP={preview.TakeProfit}، SL={preview.StopLoss}. هیچ سفارشی ارسال نشد.");
+        });
     }
 
     private bool TryBuildSignal(out Signal signal)

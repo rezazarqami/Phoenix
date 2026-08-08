@@ -88,6 +88,29 @@ Run("Bybit private requests require Testnet credentials", () =>
         client.CreateSignedGetRequest("/v5/account/wallet-balance", "accountType=UNIFIED"));
 });
 
+Run("Bybit order preview follows instrument precision", () =>
+{
+    var signal = BuildSignal(Direction.Long);
+    signal.PositionSizeUsdt = 200m;
+    Prepare(signal);
+    var position = new ExecutionManager().OpenPosition(signal)!;
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
+    var preview = BybitOrderPreviewBuilder.Build("btcusdt", position, rules);
+    Equal(0.001m, preview.Quantity);
+    Equal(119000.00m, preview.TakeProfit);
+    Equal(118542.00m, preview.StopLoss);
+    Equal("Buy", preview.Side);
+});
+
+Run("Bybit order preview rejects orders below minimum", () =>
+{
+    var signal = Prepare(BuildSignal(Direction.Long));
+    signal.PositionSizeUsdt = 1m;
+    var position = new ExecutionManager().OpenPosition(signal)!;
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
+    Throws<InvalidOperationException>(() => BybitOrderPreviewBuilder.Build("BTCUSDT", position, rules));
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

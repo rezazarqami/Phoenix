@@ -46,6 +46,30 @@ public sealed class BybitTestnetClient
         return new BybitTicker(returnedSymbol, lastPrice, DateTime.UtcNow);
     }
 
+    public async Task<BybitInstrumentRules> GetInstrumentRulesAsync(
+        string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        symbol = NormalizeSymbol(symbol);
+        var path = $"/v5/market/instruments-info?category=linear&symbol={Uri.EscapeDataString(symbol)}";
+        using var response = await _httpClient.GetAsync(path, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var item = document.RootElement.GetProperty("result").GetProperty("list")[0];
+        var priceFilter = item.GetProperty("priceFilter");
+        var lotFilter = item.GetProperty("lotSizeFilter");
+
+        return new BybitInstrumentRules(
+            item.GetProperty("symbol").GetString() ?? symbol,
+            ReadDecimal(priceFilter, "tickSize"),
+            ReadDecimal(lotFilter, "qtyStep"),
+            ReadDecimal(lotFilter, "minOrderQty"),
+            ReadDecimal(lotFilter, "minNotionalValue"));
+    }
+
     public async Task<BybitTestnetStatus> CheckConnectionAsync(CancellationToken cancellationToken = default)
     {
         using var publicResponse = await _httpClient.GetAsync("/v5/market/time", cancellationToken);
@@ -112,5 +136,13 @@ public sealed class BybitTestnetClient
 
         var message = root.TryGetProperty("retMsg", out var value) ? value.GetString() : "Unknown Bybit error";
         throw new InvalidOperationException($"Bybit API error {code}: {message}");
+    }
+
+    private static decimal ReadDecimal(JsonElement element, string propertyName)
+    {
+        var text = element.GetProperty(propertyName).GetString();
+        if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+            throw new InvalidOperationException($"Bybit returned an invalid {propertyName}.");
+        return value;
     }
 }

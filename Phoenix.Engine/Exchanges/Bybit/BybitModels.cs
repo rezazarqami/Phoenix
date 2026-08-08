@@ -7,3 +7,18 @@ public sealed record BybitTestnetStatus(
     bool Authenticated,
     decimal? TotalEquityUsd,
     string Message);
+
+public sealed record BybitInstrumentRules(
+    string Symbol,
+    decimal TickSize,
+    decimal QuantityStep,
+    decimal MinimumOrderQuantity,
+    decimal MinimumNotionalValue);
+
+public sealed record BybitOrderPreview(
+    string Symbol,
+    string Side,
+    decimal Quantity,
+    decimal TakeProfit,
+    decimal StopLoss,
+    decimal EstimatedNotional);

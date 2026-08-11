@@ -20,12 +20,14 @@ public partial class MainWindow : Window
     private readonly OrderQueueStore _queueStore = new();
     private readonly ObservableCollection<QueuedOrder> _queuedOrders = [];
     private readonly DispatcherTimer _monitorTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _marketTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private Signal? _signal;
     private Position? _position;
     private BybitOrderPreview? _lastPreview;
     private BybitOrderResult? _lastDemoOrder;
     private bool _monitorRunning;
     private bool _queueCheckInProgress;
+    private bool _marketRefreshInProgress;
 
     public MainWindow()
     {
@@ -33,6 +35,13 @@ public partial class MainWindow : Window
         OrdersGrid.ItemsSource = _exchange.Orders;
         QueueGrid.ItemsSource = _queuedOrders;
         _monitorTimer.Tick += async (_, _) => await CheckQueueAsync(allowSubmission: true);
+        _marketTimer.Tick += async (_, _) => await RefreshMarketPriceAsync();
+        Loaded += async (_, _) => await StartAutomaticBybitAsync();
+        Closed += (_, _) =>
+        {
+            _marketTimer.Stop();
+            _monitorTimer.Stop();
+        };
         Log("پنل در حالت Paper Trading راه‌اندازی شد؛ هیچ سفارش واقعی ارسال نمی‌شود.");
         try
         {
@@ -45,6 +54,115 @@ public partial class MainWindow : Window
             Log(ValidationText.Text);
         }
         Log($"{_queuedOrders.Count} سفارش ذخیره‌شده از صف بازیابی شد. پایش به‌صورت پیش‌فرض خاموش است.");
+    }
+
+    private async Task StartAutomaticBybitAsync()
+    {
+        await RunBybitActionAsync(async () =>
+        {
+            var status = await _bybitClient.CheckConnectionAsync();
+            BybitStatusText.Text = status.Authenticated
+                ? "● BYBIT DEMO: احراز هویت شد"
+                : "● BYBIT DEMO: اتصال عمومی";
+            BybitStatusText.Foreground = status.Authenticated
+                ? System.Windows.Media.Brushes.LightGreen
+                : System.Windows.Media.Brushes.Khaki;
+            var equity = status.TotalEquityUsd is null ? string.Empty : $" موجودی: {status.TotalEquityUsd:N2} USD.";
+            Log(status.Message + equity);
+        });
+
+        await RefreshMarketPriceAsync();
+        _marketTimer.Start();
+    }
+
+    private async Task RefreshMarketPriceAsync()
+    {
+        if (_marketRefreshInProgress)
+            return;
+
+        _marketRefreshInProgress = true;
+        try
+        {
+            var symbol = SymbolTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(symbol))
+                return;
+            var ticker = await _bybitClient.GetLastPriceAsync(symbol);
+            CurrentPriceTextBox.Text = ticker.LastPrice.ToString("N4", CultureInfo.InvariantCulture);
+            if (!BybitStatusText.Text.Contains("احراز هویت", StringComparison.Ordinal))
+            {
+                BybitStatusText.Text = "● BYBIT DEMO: متصل";
+                BybitStatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or InvalidOperationException
+                                          or ArgumentException)
+        {
+            CurrentPriceTextBox.Text = "خطا در دریافت قیمت";
+            BybitStatusText.Text = "● BYBIT DEMO: خطا";
+            BybitStatusText.Foreground = System.Windows.Media.Brushes.LightCoral;
+        }
+        finally
+        {
+            _marketRefreshInProgress = false;
+        }
+    }
+
+    private async void CreateQueuedOrder_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryBuildSignal(out var signal))
+            return;
+
+        CreateOrderButton.IsEnabled = false;
+        try
+        {
+            var manager = new SignalManager(new CalculationService(new StrategyCalculator()));
+            manager.AddSignal(signal);
+            var position = new ExecutionManager().PreparePosition(signal)
+                ?? throw new InvalidOperationException("ساخت سفارش برنامه‌ریزی‌شده ناموفق بود.");
+            var rules = await _bybitClient.GetInstrumentRulesAsync(signal.Symbol);
+            var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
+            var queuedOrder = new QueuedOrder
+            {
+                Symbol = preview.Symbol,
+                Side = preview.Side,
+                Quantity = preview.Quantity,
+                EntryPrice = preview.Price,
+                TakeProfit = preview.TakeProfit,
+                StopLoss = preview.StopLoss,
+                PositionSizeUsdt = preview.EstimatedNotional
+            };
+
+            _queuedOrders.Add(queuedOrder);
+            if (!SaveQueue())
+            {
+                _queuedOrders.Remove(queuedOrder);
+                return;
+            }
+
+            _signal = signal;
+            _position = null;
+            _lastPreview = null;
+            ShowPlan(signal.TradePlan!);
+            StatusValue.Text = "در صف سفارش‌ها";
+            ValidationText.Text = string.Empty;
+            QueueGrid.Items.Refresh();
+            OrdersTabs.SelectedIndex = 1;
+            Log($"سفارش {queuedOrder.Side} {queuedOrder.Symbol} @ {queuedOrder.EntryPrice} به صف اضافه شد.");
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+                                          or TaskCanceledException
+                                          or InvalidOperationException
+                                          or ArgumentException)
+        {
+            ValidationText.Text = exception.Message;
+            Log($"ثبت سفارش ناموفق بود: {exception.Message}");
+        }
+        finally
+        {
+            CreateOrderButton.IsEnabled = true;
+        }
     }
 
     private async void FetchBybitPrice_Click(object sender, RoutedEventArgs e)

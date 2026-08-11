@@ -38,7 +38,7 @@ Phoenix can submit a manually confirmed linear Limit order to Bybit Demo with fu
 
 ## Persistent order queue
 
-The **Order Queue** tab stores multiple prepared entries under the current Windows user's local application-data directory. Pending entries survive application restarts. A manual check only refreshes prices; automatic Demo submission starts only after the user explicitly enables monitoring for the current session. While monitoring is enabled and Phoenix remains open, pending orders are checked every 30 seconds and submitted once their directional entry condition is reached. Monitoring is intentionally off after every application restart.
+The **Order Queue** tab stores multiple prepared entries under the current Windows user's local application-data directory. Pending entries survive application restarts. A manual check only refreshes prices; automatic Demo submission starts only after the user explicitly enables monitoring for the current session. The monitoring interval is selectable (1, 2, 5, or 10 seconds) and defaults to 1 second. Orders for the same symbol share one ticker request per cycle. While monitoring is enabled and Phoenix remains open, pending orders are submitted once their directional entry condition is reached. Monitoring is intentionally off after every application restart.
 
 Bybit or its network provider may reject requests based on the originating region. Phoenix reports that response in the dashboard and does not attempt to bypass it.
 

@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     private readonly BybitDemoClient _bybitClient = new(BybitDemoOptions.FromEnvironment());
     private readonly OrderQueueStore _queueStore = new();
     private readonly ObservableCollection<QueuedOrder> _queuedOrders = [];
-    private readonly DispatcherTimer _monitorTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly DispatcherTimer _monitorTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private Signal? _signal;
     private Position? _position;
     private BybitOrderPreview? _lastPreview;
@@ -228,11 +228,14 @@ public partial class MainWindow : Window
         if (confirmation != MessageBoxResult.Yes)
             return;
 
+        var intervalItem = (System.Windows.Controls.ComboBoxItem)MonitorIntervalComboBox.SelectedItem;
+        var intervalSeconds = int.Parse(intervalItem.Tag.ToString()!, CultureInfo.InvariantCulture);
+        _monitorTimer.Interval = TimeSpan.FromSeconds(intervalSeconds);
         _monitorRunning = true;
         _monitorTimer.Start();
         ToggleMonitorButton.Content = "توقف پایش";
         ToggleMonitorButton.Background = System.Windows.Media.Brushes.Firebrick;
-        QueueStatusText.Text = "پایش فعال است؛ هر ۳۰ ثانیه";
+        QueueStatusText.Text = $"پایش فعال است؛ هر {intervalSeconds} ثانیه";
         QueueStatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
         Log("پایش خودکار صف سفارش‌های Demo فعال شد.");
         await CheckQueueAsync(allowSubmission: true);

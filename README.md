@@ -1,5 +1,18 @@
 # Phoenix
 
+## Phoenix Web (mobile/server foundation)
+
+`Phoenix.Web` is the first always-on server and mobile PWA foundation. It includes:
+
+- a responsive Persian signal-entry panel;
+- an automatic one-second Bybit Demo public connectivity/price probe;
+- optional Demo account authentication through existing environment variables;
+- a server-side signal queue API;
+- a panel access key through `PHOENIX_PANEL_KEY`;
+- safe monitoring mode: exchange order submission is intentionally disabled.
+
+Run locally with `dotnet run --project Phoenix.Web`. Deploy the repository root with the included `Dockerfile`.
+
 Phoenix is a .NET 10 trading engine and WPF paper-trading studio. The current version is intentionally restricted to simulation and never connects to a live exchange.
 
 ## Projects

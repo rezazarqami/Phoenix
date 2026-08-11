@@ -120,9 +120,13 @@ public sealed class BybitDemoClient
 
     public async Task<BybitOrderResult> PlaceLimitOrderAsync(
         BybitOrderPreview preview,
+        string? orderLinkId = null,
         CancellationToken cancellationToken = default)
     {
-        var orderLinkId = $"phoenix-{Guid.NewGuid():N}"[..36];
+        orderLinkId ??= $"phoenix-{Guid.NewGuid():N}"[..36];
+        if (orderLinkId.Length > 36 || orderLinkId.Any(character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_'))
+            throw new ArgumentException("Order link ID is invalid.", nameof(orderLinkId));
         var body = JsonSerializer.Serialize(new Dictionary<string, object>
         {
             ["category"] = "linear",

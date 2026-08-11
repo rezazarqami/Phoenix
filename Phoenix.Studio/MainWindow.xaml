@@ -57,6 +57,7 @@
                         <Button Content="محاسبه برنامه معامله" Click="Calculate_Click"/>
                         <Button Content="اجرای سفارش آزمایشی" Click="Execute_Click" Background="#2563EB"/>
                         <Button Content="پیش‌نمایش سفارش Bybit" Click="PreviewBybitOrder_Click" Background="#7C3AED"/>
+                        <Button Content="افزودن سفارش به صف" Click="AddToQueue_Click" Background="#0369A1"/>
                         <Button Content="ارسال سفارش Limit به Demo" Click="SubmitBybitOrder_Click" Background="#DC2626"/>
                         <Button Content="لغو آخرین سفارش Demo" Click="CancelBybitOrder_Click" Background="#991B1B"/>
                         <TextBlock x:Name="ValidationText" TextWrapping="Wrap" Foreground="#FCA5A5" Margin="0,8,0,0"/>
@@ -73,7 +74,9 @@
                     <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="وضعیت" Foreground="#8FA4C4"/><TextBlock x:Name="StatusValue" Text="آماده" FontSize="18" FontWeight="Bold" Foreground="#FBBF24"/></StackPanel></Border>
                 </UniformGrid>
 
-                <Border Grid.Row="1" Style="{StaticResource Card}">
+                <TabControl Grid.Row="1" Margin="0,0,14,14" Background="#111B2E">
+                    <TabItem Header="سفارش‌های شبیه‌سازی‌شده">
+                <Border Style="{StaticResource Card}" Margin="0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="سفارش‌های شبیه‌سازی‌شده" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
                         <DataGrid x:Name="OrdersGrid" AutoGenerateColumns="False" IsReadOnly="True" Background="#111B2E" Foreground="#111827" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
@@ -87,6 +90,41 @@
                         </DataGrid>
                     </DockPanel>
                 </Border>
+                    </TabItem>
+                    <TabItem Header="صف سفارش‌ها">
+                        <Border Style="{StaticResource Card}" Margin="0">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" FlowDirection="RightToLeft" Margin="0,0,0,10">
+                                    <Button x:Name="ToggleMonitorButton" Content="فعال‌سازی پایش" Click="ToggleMonitor_Click" Background="#059669" Margin="6"/>
+                                    <ComboBox x:Name="MonitorIntervalComboBox" SelectedIndex="0" Width="105" Margin="6" ToolTip="فاصله بررسی قیمت">
+                                        <ComboBoxItem Content="۱ ثانیه" Tag="1"/>
+                                        <ComboBoxItem Content="۲ ثانیه" Tag="2"/>
+                                        <ComboBoxItem Content="۵ ثانیه" Tag="5"/>
+                                        <ComboBoxItem Content="۱۰ ثانیه" Tag="10"/>
+                                    </ComboBox>
+                                    <Button Content="بررسی همین حالا" Click="CheckQueueNow_Click" Background="#2563EB" Margin="6"/>
+                                    <Button Content="تلاش مجدد" Click="RetryQueueItem_Click" Background="#D97706" Margin="6"/>
+                                    <Button Content="حذف انتخاب‌شده" Click="DeleteQueueItem_Click" Background="#991B1B" Margin="6"/>
+                                    <TextBlock x:Name="QueueStatusText" Text="پایش خاموش است" VerticalAlignment="Center" Foreground="#FBBF24" Margin="14,0"/>
+                                </StackPanel>
+                                <DataGrid x:Name="QueueGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" Background="#111B2E" Foreground="#111827" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="زمان" Binding="{Binding LocalCreatedAt, StringFormat=MM/dd HH:mm}" Width="105"/>
+                                        <DataGridTextColumn Header="نماد" Binding="{Binding Symbol}" Width="95"/>
+                                        <DataGridTextColumn Header="جهت" Binding="{Binding Side}" Width="70"/>
+                                        <DataGridTextColumn Header="ورود" Binding="{Binding EntryPrice, StringFormat=N4}" Width="110"/>
+                                        <DataGridTextColumn Header="مقدار" Binding="{Binding Quantity, StringFormat=N8}" Width="110"/>
+                                        <DataGridTextColumn Header="TP" Binding="{Binding TakeProfit, StringFormat=N4}" Width="105"/>
+                                        <DataGridTextColumn Header="SL" Binding="{Binding StopLoss, StringFormat=N4}" Width="105"/>
+                                        <DataGridTextColumn Header="آخرین قیمت" Binding="{Binding LastPrice, StringFormat=N4}" Width="110"/>
+                                        <DataGridTextColumn Header="وضعیت" Binding="{Binding DisplayStatus}" Width="100"/>
+                                        <DataGridTextColumn Header="پیام" Binding="{Binding ErrorMessage}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </Border>
+                    </TabItem>
+                </TabControl>
 
                 <Border Grid.Row="2" Style="{StaticResource Card}">
                     <DockPanel>

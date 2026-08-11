@@ -6,6 +6,18 @@ public class ExecutionManager
 {
     public Position? OpenPosition(Signal signal)
     {
+        var position = PreparePosition(signal);
+        if (position is null)
+            return null;
+
+        position.Status = SignalStatus.PositionOpen;
+        position.OpenedAt = DateTime.UtcNow;
+        signal.Status = SignalStatus.PositionOpen;
+        return position;
+    }
+
+    public Position? PreparePosition(Signal signal)
+    {
         if (signal.TradePlan == null || signal.TradePlan.EntryPrice <= 0 || signal.PositionSizeUsdt <= 0)
             return null;
 
@@ -31,13 +43,10 @@ public class ExecutionManager
 
             RiskFreePrice = signal.TradePlan.RiskFreePrice,
 
-            Status = SignalStatus.PositionOpen,
+            Status = SignalStatus.WaitingEntry,
 
-            OpenedAt = DateTime.UtcNow
+            OpenedAt = default
         };
-
-        signal.Status = SignalStatus.PositionOpen;
-
         return position;
     }
 }

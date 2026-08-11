@@ -35,7 +35,7 @@
             <Border DockPanel.Dock="Right" Background="#123B32" CornerRadius="18" Padding="14,7" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="● PAPER MODE" Foreground="#5EE2B0" FontWeight="Bold" Margin="0,0,18,0"/>
-                    <TextBlock x:Name="BybitStatusText" Text="BYBIT TESTNET: بررسی نشده" Foreground="#FBBF24" FontWeight="Bold"/>
+                    <TextBlock x:Name="BybitStatusText" Text="BYBIT DEMO: بررسی نشده" Foreground="#FBBF24" FontWeight="Bold"/>
                 </StackPanel>
             </Border>
         </DockPanel>
@@ -52,8 +52,8 @@
                         <TextBlock Text="پایین‌ترین قیمت"/><TextBox x:Name="LowTextBox" Text="118000" FlowDirection="LeftToRight"/>
                         <TextBlock Text="سرمایه موقعیت (USDT)"/><TextBox x:Name="SizeTextBox" Text="100" FlowDirection="LeftToRight"/>
                         <TextBlock Text="قیمت فعلی"/><TextBox x:Name="CurrentPriceTextBox" Text="118700" FlowDirection="LeftToRight"/>
-                        <Button Content="دریافت قیمت از Bybit Testnet" Click="FetchBybitPrice_Click" Background="#0F766E"/>
-                        <Button Content="بررسی اتصال حساب Testnet" Click="CheckBybitConnection_Click" Background="#475569"/>
+                        <Button Content="دریافت قیمت از Bybit Demo" Click="FetchBybitPrice_Click" Background="#0F766E"/>
+                        <Button Content="بررسی اتصال حساب Demo" Click="CheckBybitConnection_Click" Background="#475569"/>
                         <Button Content="محاسبه برنامه معامله" Click="Calculate_Click"/>
                         <Button Content="اجرای سفارش آزمایشی" Click="Execute_Click" Background="#2563EB"/>
                         <Button Content="پیش‌نمایش سفارش Bybit" Click="PreviewBybitOrder_Click" Background="#7C3AED"/>

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Phoenix Mobile</title>
+</head>
+<body>
+  <main>
+    <header><div><h1>PHOENIX</h1><p>پنل ثبت سیگنال</p></div><span id="connection" class="badge">در حال بررسی…</span></header>
+    <section class="price"><small>قیمت لحظه‌ای BTCUSDT</small><strong id="price">—</strong><span id="updated">در حال اتصال به Bybit</span></section>
+    <section class="card">
+      <h2>سیگنال جدید</h2>
+      <form id="signalForm">
+        <label id="keyField">کلید ورود پنل<input name="panelKey" type="password" autocomplete="current-password" placeholder="کلید خصوصی پنل"></label>
+        <label>نماد<input name="symbol" value="BTCUSDT" autocomplete="off" required></label>
+        <label>جهت<select name="direction"><option>Long</option><option>Short</option></select></label>
+        <div class="row"><label>سقف<input name="ceiling" inputmode="decimal" required></label><label>کف<input name="floor" inputmode="decimal" required></label></div>
+        <label>سرمایه موقعیت (USDT)<input name="positionSizeUsdt" inputmode="decimal" required></label>
+        <button type="submit">ثبت در صف سفارش‌ها</button>
+        <small class="safe">حالت امن فعال است؛ فعلاً هیچ سفارشی به صرافی ارسال نمی‌شود.</small>
+        <p id="message" role="status"></p>
+      </form>
+    </section>
+    <section class="card"><div class="title"><h2>سفارش‌ها</h2><span id="count">۰</span></div><div id="orders" class="orders"><p class="empty">هنوز سیگنالی ثبت نشده است.</p></div></section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

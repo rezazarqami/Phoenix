@@ -3,4 +3,5 @@
   <Project Path="Phoenix.Engine/Phoenix.Engine.csproj" />
   <Project Path="Phoenix.Studio/Phoenix.Studio.csproj" />
   <Project Path="Phoenix.Test/Phoenix.Test.csproj" />
+  <Project Path="Phoenix.Web/Phoenix.Web.csproj" />
 </Solution>

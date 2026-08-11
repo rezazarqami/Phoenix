@@ -57,6 +57,8 @@
                         <Button Content="محاسبه برنامه معامله" Click="Calculate_Click"/>
                         <Button Content="اجرای سفارش آزمایشی" Click="Execute_Click" Background="#2563EB"/>
                         <Button Content="پیش‌نمایش سفارش Bybit" Click="PreviewBybitOrder_Click" Background="#7C3AED"/>
+                        <Button Content="ارسال سفارش Limit به Demo" Click="SubmitBybitOrder_Click" Background="#DC2626"/>
+                        <Button Content="لغو آخرین سفارش Demo" Click="CancelBybitOrder_Click" Background="#991B1B"/>
                         <TextBlock x:Name="ValidationText" TextWrapping="Wrap" Foreground="#FCA5A5" Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>

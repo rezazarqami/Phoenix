@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 
 namespace Phoenix.Engine.Exchanges.Bybit;
@@ -116,6 +117,101 @@ public sealed class BybitDemoClient
         request.Headers.Add("X-BAPI-SIGN", signature);
         return request;
     }
+
+    public async Task<BybitOrderResult> PlaceLimitOrderAsync(
+        BybitOrderPreview preview,
+        CancellationToken cancellationToken = default)
+    {
+        var orderLinkId = $"phoenix-{Guid.NewGuid():N}"[..36];
+        var body = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["category"] = "linear",
+            ["symbol"] = NormalizeSymbol(preview.Symbol),
+            ["side"] = preview.Side,
+            ["orderType"] = "Limit",
+            ["qty"] = FormatDecimal(preview.Quantity),
+            ["price"] = FormatDecimal(preview.Price),
+            ["timeInForce"] = "GTC",
+            ["positionIdx"] = 0,
+            ["orderLinkId"] = orderLinkId,
+            ["reduceOnly"] = false,
+            ["takeProfit"] = FormatDecimal(preview.TakeProfit),
+            ["stopLoss"] = FormatDecimal(preview.StopLoss),
+            ["tpTriggerBy"] = "MarkPrice",
+            ["slTriggerBy"] = "MarkPrice",
+            ["tpslMode"] = "Full",
+            ["tpOrderType"] = "Market",
+            ["slOrderType"] = "Market"
+        });
+
+        using var request = CreateSignedPostRequest("/v5/order/create", body);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var result = document.RootElement.GetProperty("result");
+
+        return new BybitOrderResult(
+            result.GetProperty("orderId").GetString() ?? string.Empty,
+            result.GetProperty("orderLinkId").GetString() ?? orderLinkId,
+            preview.Symbol,
+            preview.Side,
+            preview.Quantity,
+            preview.Price);
+    }
+
+    public async Task<BybitCancelResult> CancelOrderAsync(
+        string symbol,
+        string orderId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+            throw new ArgumentException("Order ID is required.", nameof(orderId));
+
+        var body = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["category"] = "linear",
+            ["symbol"] = NormalizeSymbol(symbol),
+            ["orderId"] = orderId
+        });
+
+        using var request = CreateSignedPostRequest("/v5/order/cancel", body);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var result = document.RootElement.GetProperty("result");
+        return new BybitCancelResult(
+            result.GetProperty("orderId").GetString() ?? orderId,
+            result.GetProperty("orderLinkId").GetString() ?? string.Empty);
+    }
+
+    public HttpRequestMessage CreateSignedPostRequest(string path, string jsonBody)
+    {
+        if (!_options.HasCredentials)
+            throw new InvalidOperationException("Bybit Demo API credentials are not configured.");
+        if (!path.StartsWith("/v5/", StringComparison.Ordinal))
+            throw new InvalidOperationException("Only Bybit V5 endpoints are allowed.");
+
+        var timestamp = _timestampProvider().ToString(CultureInfo.InvariantCulture);
+        var receiveWindow = BybitDemoOptions.ReceiveWindowMilliseconds.ToString(CultureInfo.InvariantCulture);
+        var signature = BybitSignature.CreateHmacSha256(
+            _options.ApiSecret!, timestamp + _options.ApiKey + receiveWindow + jsonBody);
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("X-BAPI-API-KEY", _options.ApiKey);
+        request.Headers.Add("X-BAPI-TIMESTAMP", timestamp);
+        request.Headers.Add("X-BAPI-RECV-WINDOW", receiveWindow);
+        request.Headers.Add("X-BAPI-SIGN", signature);
+        return request;
+    }
+
+    private static string FormatDecimal(decimal value) =>
+        value.ToString("0.############################", CultureInfo.InvariantCulture);
 
     private static string NormalizeSymbol(string symbol)
     {

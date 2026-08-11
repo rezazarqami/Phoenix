@@ -34,6 +34,8 @@ Create the API keys while the main Bybit account is switched to Demo Trading, th
 
 Restart Visual Studio after setting the variables. Never commit, paste into source code, or share either value. The current milestone does not submit orders to Bybit; it only verifies public connectivity and authenticated Demo wallet access.
 
+Phoenix can submit a manually confirmed linear Limit order to Bybit Demo with full-position market TP/SL protection. It stores the returned order ID in memory so the same UI session can request cancellation. Mainnet is hard-disabled, Market entry orders are unavailable, and no order is submitted without a confirmation dialog.
+
 Bybit or its network provider may reject requests based on the originating region. Phoenix reports that response in the dashboard and does not attempt to bypass it.
 
 ## Next milestones

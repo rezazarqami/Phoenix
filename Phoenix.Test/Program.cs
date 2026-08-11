@@ -97,6 +97,7 @@ Run("Bybit order preview follows instrument precision", () =>
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     var preview = BybitOrderPreviewBuilder.Build("btcusdt", position, rules);
     Equal(0.001m, preview.Quantity);
+    Equal(118764.00m, preview.Price);
     Equal(119000.00m, preview.TakeProfit);
     Equal(118542.00m, preview.StopLoss);
     Equal("Buy", preview.Side);
@@ -109,6 +110,41 @@ Run("Bybit order preview rejects orders below minimum", () =>
     var position = new ExecutionManager().OpenPosition(signal)!;
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     Throws<InvalidOperationException>(() => BybitOrderPreviewBuilder.Build("BTCUSDT", position, rules));
+});
+
+Run("Bybit POST requests sign the exact JSON body", () =>
+{
+    const string body = "{\"category\":\"linear\",\"symbol\":\"BTCUSDT\"}";
+    var options = new BybitDemoOptions("test-key", "test-secret");
+    var client = new BybitDemoClient(options, timestampProvider: () => 1_700_000_000_000);
+    using var request = client.CreateSignedPostRequest("/v5/order/create", body);
+    Equal(HttpMethod.Post, request.Method);
+    Equal("application/json", request.Content!.Headers.ContentType!.MediaType!);
+    Equal(body, request.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+    Equal(64, request.Headers.GetValues("X-BAPI-SIGN").Single().Length);
+});
+
+Run("Bybit Demo limit orders include protection and return an order ID", () =>
+{
+    var handler = new StubHttpHandler(request =>
+    {
+        Equal("/v5/order/create", request.RequestUri!.AbsolutePath);
+        var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        True(body.Contains("\"orderType\":\"Limit\"", StringComparison.Ordinal));
+        True(body.Contains("\"takeProfit\":\"119000\"", StringComparison.Ordinal));
+        True(body.Contains("\"stopLoss\":\"118542\"", StringComparison.Ordinal));
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"demo-123\",\"orderLinkId\":\"phoenix-test\"}}")
+        };
+    });
+    var client = new BybitDemoClient(
+        new BybitDemoOptions("test-key", "test-secret"),
+        new HttpClient(handler),
+        () => 1_700_000_000_000);
+    var preview = new BybitOrderPreview("BTCUSDT", "Buy", 0.001m, 118764m, 119000m, 118542m, 118.764m);
+    var result = client.PlaceLimitOrderAsync(preview).GetAwaiter().GetResult();
+    Equal("demo-123", result.OrderId);
 });
 
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
@@ -145,4 +181,11 @@ static void Throws<T>(Action action) where T : Exception
     try { action(); }
     catch (T) { return; }
     throw new Exception($"Expected {typeof(T).Name}.");
+}
+
+sealed class StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken) => Task.FromResult(responseFactory(request));
 }

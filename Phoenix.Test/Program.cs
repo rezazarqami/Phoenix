@@ -3,6 +3,7 @@ using Phoenix.Engine.Exchanges;
 using Phoenix.Engine.Exchanges.Bybit;
 using Phoenix.Engine.Managers;
 using Phoenix.Engine.Services;
+using Phoenix.Web;
 
 var passed = 0;
 var failed = 0;
@@ -176,6 +177,35 @@ Run("Order queue persists across application restarts", () =>
     }
     finally
     {
+        if (File.Exists(path)) File.Delete(path);
+        if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
+    }
+});
+
+Run("Server signal queue persists across application restarts", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-server-queue-{Guid.NewGuid():N}.json");
+    var previous = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH");
+    try
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", path);
+        var signal = new ServerSignal
+        {
+            Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Quantity = 0.001m,
+            EntryPrice = 100m, TakeProfit = 110m, StopLoss = 90m,
+            OrderLinkId = "phoenix-server-test", CreatedAtUtc = DateTime.UtcNow
+        };
+        new ServerOrderStore().AddAsync(signal).GetAwaiter().GetResult();
+        var restored = new ServerOrderStore().GetAllAsync().GetAwaiter().GetResult();
+        Equal(1, restored.Count);
+        Equal("phoenix-server-test", restored[0].OrderLinkId);
+        Equal("Pending", restored[0].Status);
+        True(new ServerOrderStore().RemoveAsync(signal.Id).GetAwaiter().GetResult());
+        Equal(0, new ServerOrderStore().GetAllAsync().GetAwaiter().GetResult().Count);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         if (File.Exists(path)) File.Delete(path);
         if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
     }

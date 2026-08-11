@@ -7,9 +7,10 @@
 - a responsive Persian signal-entry panel;
 - an automatic one-second Bybit Demo public connectivity/price probe;
 - optional Demo account authentication through existing environment variables;
-- a server-side signal queue API;
+- a persistent server-side signal queue API;
 - a panel access key through `PHOENIX_PANEL_KEY`;
-- safe monitoring mode: exchange order submission is intentionally disabled.
+- a one-second Demo order worker with explicit `PHOENIX_DEMO_TRADING_ENABLED=true` activation;
+- stable Bybit `orderLinkId` values persisted before submission to reduce duplicate-order risk.
 
 Run locally with `dotnet run --project Phoenix.Web`. Deploy the repository root with the included `Dockerfile`.
 

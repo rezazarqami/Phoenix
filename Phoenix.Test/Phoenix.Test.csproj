@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Phoenix.Core\Phoenix.Core.csproj" />
     <ProjectReference Include="..\Phoenix.Engine\Phoenix.Engine.csproj" />
+    <ProjectReference Include="..\Phoenix.Web\Phoenix.Web.csproj" />
   </ItemGroup>
 
 </Project>

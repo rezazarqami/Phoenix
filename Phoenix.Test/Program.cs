@@ -200,6 +200,8 @@ Run("Server signal queue persists across application restarts", () =>
         Equal(1, restored.Count);
         Equal("phoenix-server-test", restored[0].OrderLinkId);
         Equal("Pending", restored[0].Status);
+        True(new ServerOrderStore().RemoveAsync(signal.Id).GetAwaiter().GetResult());
+        Equal(0, new ServerOrderStore().GetAllAsync().GetAwaiter().GetResult().Count);
     }
     finally
     {

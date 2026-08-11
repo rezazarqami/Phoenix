@@ -95,6 +95,19 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    public async Task<bool> RemoveAsync(Guid id, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var removed = signals.RemoveAll(x => x.Id == id) > 0;
+            if (removed) await SaveUnsafeAsync(signals, token);
+            return removed;
+        }
+        finally { _gate.Release(); }
+    }
+
     private async Task<List<ServerSignal>> LoadUnsafeAsync(CancellationToken token)
     {
         if (_signals is not null) return _signals;

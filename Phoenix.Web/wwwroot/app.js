@@ -29,11 +29,19 @@ async function refreshSignals() {
   document.querySelector('#count').textContent = fa.format(signals.length);
   document.querySelector('#orders').innerHTML = signals.length ? signals.map(s => `
     <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
-    <small>ورود ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · خطا: ' + s.error : ''}</small></article>`).join('') : '<p class="empty">هنوز سیگنالی ثبت نشده است.</p>';
+    <small>ورود ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · خطا: ' + s.error : ''}</small>
+    <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش Demo' : 'حذف از صف'}</button></article>`).join('') : '<p class="empty">هنوز سیگنالی ثبت نشده است.</p>';
 }
 
 function statusLabel(status) {
   return ({Pending:'در انتظار ورود',Submitting:'در حال ارسال',Submitted:'ارسال‌شده به Demo',Error:'خطا'})[status] || status;
+}
+
+async function removeSignal(id) {
+  if (!confirm('این سفارش حذف یا لغو شود؟')) return;
+  const response = await fetch('/api/signals/' + id, { method:'DELETE' });
+  if (!response.ok) { const data = await response.json(); alert(data.error || 'عملیات ناموفق بود.'); }
+  await refreshSignals();
 }
 
 form.addEventListener('submit', async event => {

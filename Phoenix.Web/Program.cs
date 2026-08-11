@@ -72,6 +72,22 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
     }
 });
 
+app.MapDelete("/api/signals/{id:guid}", async (Guid id, ServerOrderStore store, BybitDemoClient bybit,
+    CancellationToken token) =>
+{
+    var signal = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
+    if (signal is null) return Results.NotFound(new { error = "سفارش پیدا نشد." });
+    if (signal.Status == "Submitting")
+        return Results.Conflict(new { error = "سفارش در حال ارسال است؛ چند ثانیه بعد دوباره تلاش کنید." });
+    if (signal.Status == "Submitted" && !string.IsNullOrWhiteSpace(signal.BybitOrderId))
+    {
+        try { await bybit.CancelOrderAsync(signal.Symbol, signal.BybitOrderId, token); }
+        catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+    }
+    await store.RemoveAsync(id, token);
+    return Results.NoContent();
+});
+
 app.MapFallbackToFile("index.html");
 app.Run();
 

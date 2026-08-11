@@ -7,9 +7,10 @@ public static class BybitOrderPreviewBuilder
     public static BybitOrderPreview Build(string symbol, Position position, BybitInstrumentRules rules)
     {
         var quantity = FloorToStep(position.Quantity, rules.QuantityStep);
+        var price = RoundToStep(position.EntryPrice, rules.TickSize);
         var takeProfit = RoundToStep(position.TakeProfit, rules.TickSize);
         var stopLoss = RoundToStep(position.StopLoss1, rules.TickSize);
-        var notional = quantity * position.EntryPrice;
+        var notional = quantity * price;
 
         if (quantity < rules.MinimumOrderQuantity)
             throw new InvalidOperationException($"Quantity {quantity} is below Bybit minimum {rules.MinimumOrderQuantity}.");
@@ -20,6 +21,7 @@ public static class BybitOrderPreviewBuilder
             symbol.Trim().ToUpperInvariant(),
             position.Direction == Direction.Long ? "Buy" : "Sell",
             quantity,
+            price,
             takeProfit,
             stopLoss,
             notional);

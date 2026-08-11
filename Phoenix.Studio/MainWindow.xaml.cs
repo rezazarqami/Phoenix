@@ -15,6 +15,8 @@ public partial class MainWindow : Window
     private readonly BybitDemoClient _bybitClient = new(BybitDemoOptions.FromEnvironment());
     private Signal? _signal;
     private Position? _position;
+    private BybitOrderPreview? _lastPreview;
+    private BybitOrderResult? _lastDemoOrder;
 
     public MainWindow()
     {
@@ -61,6 +63,7 @@ public partial class MainWindow : Window
             var manager = new SignalManager(new CalculationService(new StrategyCalculator()));
             manager.AddSignal(signal);
             _signal = signal;
+            _lastPreview = null;
             ShowPlan(signal.TradePlan!);
             StatusValue.Text = "برنامه آماده";
             ValidationText.Text = string.Empty;
@@ -98,6 +101,7 @@ public partial class MainWindow : Window
 
         OrdersGrid.Items.Refresh();
         _position = position;
+        _lastPreview = null;
         StatusValue.Text = "موقعیت باز";
         Log($"موقعیت آزمایشی باز شد: {position.Quantity:N8} {position.Direction} با ارزش {position.PositionSizeUsdt:N2} USDT.");
     }
@@ -114,7 +118,65 @@ public partial class MainWindow : Window
         {
             var rules = await _bybitClient.GetInstrumentRulesAsync(SymbolTextBox.Text);
             var preview = BybitOrderPreviewBuilder.Build(SymbolTextBox.Text, _position, rules);
-            Log($"پیش‌نمایش Bybit: {preview.Side} {preview.Quantity} {preview.Symbol}، ارزش تقریبی {preview.EstimatedNotional:N2} USDT، TP={preview.TakeProfit}، SL={preview.StopLoss}. هیچ سفارشی ارسال نشد.");
+            _lastPreview = preview;
+            Log($"پیش‌نمایش Bybit: {preview.Side} {preview.Quantity} {preview.Symbol} @ {preview.Price}، ارزش تقریبی {preview.EstimatedNotional:N2} USDT، TP={preview.TakeProfit}، SL={preview.StopLoss}. هیچ سفارشی ارسال نشد.");
+        });
+    }
+
+    private async void SubmitBybitOrder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastPreview is null)
+        {
+            ValidationText.Text = "ابتدا پیش‌نمایش سفارش Bybit را اجرا کنید.";
+            return;
+        }
+
+        var preview = _lastPreview;
+        var confirmation = MessageBox.Show(
+            $"این سفارش فقط به Bybit Demo ارسال می‌شود.\n\n{preview.Side} {preview.Quantity} {preview.Symbol}\nLimit: {preview.Price}\nTP: {preview.TakeProfit}\nSL: {preview.StopLoss}\n\nارسال شود؟",
+            "تأیید نهایی سفارش Demo",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            Log("ارسال سفارش Demo توسط کاربر لغو شد.");
+            return;
+        }
+
+        await RunBybitActionAsync(async () =>
+        {
+            _lastDemoOrder = await _bybitClient.PlaceLimitOrderAsync(preview);
+            _lastPreview = null;
+            StatusValue.Text = "سفارش Demo ارسال شد";
+            Log($"سفارش Bybit Demo پذیرفته شد: {_lastDemoOrder.OrderId}، {_lastDemoOrder.Side} {_lastDemoOrder.Quantity} {_lastDemoOrder.Symbol} @ {_lastDemoOrder.Price}.");
+        });
+    }
+
+    private async void CancelBybitOrder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastDemoOrder is null)
+        {
+            ValidationText.Text = "هنوز سفارشی از این پنل به Demo ارسال نشده است.";
+            return;
+        }
+
+        var order = _lastDemoOrder;
+        var confirmation = MessageBox.Show(
+            $"سفارش {order.OrderId} در Bybit Demo لغو شود؟",
+            "تأیید لغو سفارش Demo",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.No);
+        if (confirmation != MessageBoxResult.Yes)
+            return;
+
+        await RunBybitActionAsync(async () =>
+        {
+            var result = await _bybitClient.CancelOrderAsync(order.Symbol, order.OrderId);
+            _lastDemoOrder = null;
+            StatusValue.Text = "لغو سفارش درخواست شد";
+            Log($"درخواست لغو سفارش Bybit Demo پذیرفته شد: {result.OrderId}.");
         });
     }
 

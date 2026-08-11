@@ -19,6 +19,17 @@ public sealed record BybitOrderPreview(
     string Symbol,
     string Side,
     decimal Quantity,
+    decimal Price,
     decimal TakeProfit,
     decimal StopLoss,
     decimal EstimatedNotional);
+
+public sealed record BybitOrderResult(
+    string OrderId,
+    string OrderLinkId,
+    string Symbol,
+    string Side,
+    decimal Quantity,
+    decimal Price);
+
+public sealed record BybitCancelResult(string OrderId, string OrderLinkId);

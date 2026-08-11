@@ -12,7 +12,7 @@ namespace Phoenix.Studio;
 public partial class MainWindow : Window
 {
     private readonly PaperExchange _exchange = new();
-    private readonly BybitTestnetClient _bybitClient = new(BybitTestnetOptions.FromEnvironment());
+    private readonly BybitDemoClient _bybitClient = new(BybitDemoOptions.FromEnvironment());
     private Signal? _signal;
     private Position? _position;
 
@@ -29,9 +29,9 @@ public partial class MainWindow : Window
         {
             var ticker = await _bybitClient.GetLastPriceAsync(SymbolTextBox.Text);
             CurrentPriceTextBox.Text = ticker.LastPrice.ToString(CultureInfo.InvariantCulture);
-            BybitStatusText.Text = "● BYBIT TESTNET: متصل";
+            BybitStatusText.Text = "● BYBIT DEMO: متصل";
             BybitStatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
-            Log($"قیمت {ticker.Symbol} از Bybit Testnet دریافت شد: {ticker.LastPrice:N4}");
+            Log($"قیمت {ticker.Symbol} از Bybit Demo دریافت شد: {ticker.LastPrice:N4}");
         });
     }
 
@@ -41,8 +41,8 @@ public partial class MainWindow : Window
         {
             var status = await _bybitClient.CheckConnectionAsync();
             BybitStatusText.Text = status.Authenticated
-                ? "● BYBIT TESTNET: احراز هویت شد"
-                : "● BYBIT TESTNET: عمومی متصل";
+                ? "● BYBIT DEMO: احراز هویت شد"
+                : "● BYBIT DEMO: عمومی متصل";
             BybitStatusText.Foreground = status.Authenticated
                 ? System.Windows.Media.Brushes.LightGreen
                 : System.Windows.Media.Brushes.Khaki;
@@ -165,7 +165,7 @@ public partial class MainWindow : Window
                                           or InvalidOperationException
                                           or ArgumentException)
         {
-            BybitStatusText.Text = "● BYBIT TESTNET: خطا";
+            BybitStatusText.Text = "● BYBIT DEMO: خطا";
             BybitStatusText.Foreground = System.Windows.Media.Brushes.LightCoral;
             ValidationText.Text = exception.Message;
             Log($"خطای اتصال Bybit: {exception.Message}");

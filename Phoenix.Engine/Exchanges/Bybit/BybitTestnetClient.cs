@@ -4,14 +4,14 @@ using System.Text.Json;
 
 namespace Phoenix.Engine.Exchanges.Bybit;
 
-public sealed class BybitTestnetClient
+public sealed class BybitDemoClient
 {
     private readonly HttpClient _httpClient;
-    private readonly BybitTestnetOptions _options;
+    private readonly BybitDemoOptions _options;
     private readonly Func<long> _timestampProvider;
 
-    public BybitTestnetClient(
-        BybitTestnetOptions options,
+    public BybitDemoClient(
+        BybitDemoOptions options,
         HttpClient? httpClient = null,
         Func<long>? timestampProvider = null)
     {
@@ -19,7 +19,7 @@ public sealed class BybitTestnetClient
         _httpClient = httpClient ?? new HttpClient();
         _timestampProvider = timestampProvider ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-        _httpClient.BaseAddress = new Uri(BybitTestnetOptions.BaseUrl, UriKind.Absolute);
+        _httpClient.BaseAddress = new Uri(BybitDemoOptions.BaseUrl, UriKind.Absolute);
         _httpClient.Timeout = TimeSpan.FromSeconds(10);
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
@@ -70,7 +70,7 @@ public sealed class BybitTestnetClient
             ReadDecimal(lotFilter, "minNotionalValue"));
     }
 
-    public async Task<BybitTestnetStatus> CheckConnectionAsync(CancellationToken cancellationToken = default)
+    public async Task<BybitDemoStatus> CheckConnectionAsync(CancellationToken cancellationToken = default)
     {
         using var publicResponse = await _httpClient.GetAsync("/v5/market/time", cancellationToken);
         var publicJson = await publicResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -79,7 +79,7 @@ public sealed class BybitTestnetClient
             EnsureSuccess(publicDocument.RootElement);
 
         if (!_options.HasCredentials)
-            return new BybitTestnetStatus(true, false, null, "Public API connected; Testnet API keys are not configured.");
+            return new BybitDemoStatus(true, false, null, "Public API connected; Demo API keys are not configured.");
 
         const string query = "accountType=UNIFIED&coin=USDT";
         using var request = CreateSignedGetRequest("/v5/account/wallet-balance", query);
@@ -94,19 +94,19 @@ public sealed class BybitTestnetClient
         decimal? equity = decimal.TryParse(equityText, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
             ? value : null;
 
-        return new BybitTestnetStatus(true, true, equity, "Bybit Testnet authentication succeeded.");
+        return new BybitDemoStatus(true, true, equity, "Bybit Demo authentication succeeded.");
     }
 
     public HttpRequestMessage CreateSignedGetRequest(string path, string queryString)
     {
         if (!_options.HasCredentials)
-            throw new InvalidOperationException("Bybit Testnet API credentials are not configured.");
+            throw new InvalidOperationException("Bybit Demo API credentials are not configured.");
 
         if (!path.StartsWith("/v5/", StringComparison.Ordinal))
             throw new InvalidOperationException("Only Bybit V5 endpoints are allowed.");
 
         var timestamp = _timestampProvider().ToString(CultureInfo.InvariantCulture);
-        var receiveWindow = BybitTestnetOptions.ReceiveWindowMilliseconds.ToString(CultureInfo.InvariantCulture);
+        var receiveWindow = BybitDemoOptions.ReceiveWindowMilliseconds.ToString(CultureInfo.InvariantCulture);
         var payload = timestamp + _options.ApiKey + receiveWindow + queryString;
         var signature = BybitSignature.CreateHmacSha256(_options.ApiSecret!, payload);
         var request = new HttpRequestMessage(HttpMethod.Get, $"{path}?{queryString}");

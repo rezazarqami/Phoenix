@@ -72,8 +72,8 @@ Run("Bybit HMAC uses lowercase SHA-256 signature", () =>
 
 Run("Bybit signed requests contain required V5 headers", () =>
 {
-    var options = new BybitTestnetOptions("test-key", "test-secret");
-    var client = new BybitTestnetClient(options, timestampProvider: () => 1_700_000_000_000);
+    var options = new BybitDemoOptions("test-key", "test-secret");
+    var client = new BybitDemoClient(options, timestampProvider: () => 1_700_000_000_000);
     using var request = client.CreateSignedGetRequest("/v5/account/wallet-balance", "accountType=UNIFIED&coin=USDT");
     Equal("test-key", request.Headers.GetValues("X-BAPI-API-KEY").Single());
     Equal("1700000000000", request.Headers.GetValues("X-BAPI-TIMESTAMP").Single());
@@ -81,9 +81,9 @@ Run("Bybit signed requests contain required V5 headers", () =>
     Equal(64, request.Headers.GetValues("X-BAPI-SIGN").Single().Length);
 });
 
-Run("Bybit private requests require Testnet credentials", () =>
+Run("Bybit private requests require Demo credentials", () =>
 {
-    var client = new BybitTestnetClient(new BybitTestnetOptions(null, null));
+    var client = new BybitDemoClient(new BybitDemoOptions(null, null));
     Throws<InvalidOperationException>(() =>
         client.CreateSignedGetRequest("/v5/account/wallet-balance", "accountType=UNIFIED"));
 });

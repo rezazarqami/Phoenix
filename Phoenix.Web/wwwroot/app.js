@@ -14,6 +14,9 @@ async function refreshStatus() {
     if (data.lastPrice) price.textContent = fa.format(data.lastPrice) + ' USDT';
     const connected = data.publicApiConnected;
     document.querySelector('#keyField').style.display = data.panelLocked ? 'block' : 'none';
+    document.querySelector('#modeNote').textContent = data.tradingEnabled
+      ? 'موتور Bybit Demo فعال است؛ سفارش پس از رسیدن قیمت به نقطه ورود ارسال می‌شود.'
+      : 'موتور ارسال سفارش خاموش است؛ سیگنال فقط در صف دائمی ذخیره می‌شود.';
     connection.textContent = connected ? (data.demoAuthenticated ? 'Bybit Demo متصل' : 'Bybit عمومی متصل') : 'خطای اتصال';
     connection.className = 'badge ' + (connected ? 'ok' : 'bad');
     updated.textContent = connected ? 'به‌روزرسانی خودکار هر ۱ ثانیه' : (data.error || 'ارتباط برقرار نشد');
@@ -25,8 +28,12 @@ async function refreshSignals() {
   const signals = await response.json();
   document.querySelector('#count').textContent = fa.format(signals.length);
   document.querySelector('#orders').innerHTML = signals.length ? signals.map(s => `
-    <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${s.status}</span>
-    <small>کف ${fa.format(s.floor)} · سقف ${fa.format(s.ceiling)} · ${fa.format(s.positionSizeUsdt)} USDT</small></article>`).join('') : '<p class="empty">هنوز سیگنالی ثبت نشده است.</p>';
+    <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
+    <small>ورود ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · خطا: ' + s.error : ''}</small></article>`).join('') : '<p class="empty">هنوز سیگنالی ثبت نشده است.</p>';
+}
+
+function statusLabel(status) {
+  return ({Pending:'در انتظار ورود',Submitting:'در حال ارسال',Submitted:'ارسال‌شده به Demo',Error:'خطا'})[status] || status;
 }
 
 form.addEventListener('submit', async event => {

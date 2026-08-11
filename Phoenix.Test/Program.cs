@@ -143,8 +143,42 @@ Run("Bybit Demo limit orders include protection and return an order ID", () =>
         new HttpClient(handler),
         () => 1_700_000_000_000);
     var preview = new BybitOrderPreview("BTCUSDT", "Buy", 0.001m, 118764m, 119000m, 118542m, 118.764m);
-    var result = client.PlaceLimitOrderAsync(preview).GetAwaiter().GetResult();
+    var result = client.PlaceLimitOrderAsync(preview, "phoenix-test").GetAwaiter().GetResult();
     Equal("demo-123", result.OrderId);
+});
+
+Run("Queued order entry rules respect Buy and Sell direction", () =>
+{
+    var buy = new QueuedOrder { Side = "Buy", EntryPrice = 100m };
+    True(QueuedOrderRules.IsEntryReached(buy, 99m));
+    False(QueuedOrderRules.IsEntryReached(buy, 101m));
+
+    var sell = new QueuedOrder { Side = "Sell", EntryPrice = 100m };
+    True(QueuedOrderRules.IsEntryReached(sell, 101m));
+    False(QueuedOrderRules.IsEntryReached(sell, 99m));
+});
+
+Run("Order queue persists across application restarts", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-queue-{Guid.NewGuid():N}.json");
+    try
+    {
+        var store = new OrderQueueStore(path);
+        store.Save([new QueuedOrder
+        {
+            Symbol = "BTCUSDT", Side = "Buy", Quantity = 0.001m,
+            EntryPrice = 100m, TakeProfit = 110m, StopLoss = 90m
+        }]);
+        var restored = store.Load();
+        Equal(1, restored.Count);
+        Equal("BTCUSDT", restored[0].Symbol);
+        Equal(QueuedOrderStatus.Pending, restored[0].Status);
+    }
+    finally
+    {
+        if (File.Exists(path)) File.Delete(path);
+        if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
+    }
 });
 
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");

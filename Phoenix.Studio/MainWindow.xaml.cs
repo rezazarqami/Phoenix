@@ -1,6 +1,10 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
+using System.Windows.Threading;
 using Phoenix.Core.Entities;
 using Phoenix.Engine.Exchanges;
 using Phoenix.Engine.Exchanges.Bybit;
@@ -13,16 +17,34 @@ public partial class MainWindow : Window
 {
     private readonly PaperExchange _exchange = new();
     private readonly BybitDemoClient _bybitClient = new(BybitDemoOptions.FromEnvironment());
+    private readonly OrderQueueStore _queueStore = new();
+    private readonly ObservableCollection<QueuedOrder> _queuedOrders = [];
+    private readonly DispatcherTimer _monitorTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Signal? _signal;
     private Position? _position;
     private BybitOrderPreview? _lastPreview;
     private BybitOrderResult? _lastDemoOrder;
+    private bool _monitorRunning;
+    private bool _queueCheckInProgress;
 
     public MainWindow()
     {
         InitializeComponent();
         OrdersGrid.ItemsSource = _exchange.Orders;
+        QueueGrid.ItemsSource = _queuedOrders;
+        _monitorTimer.Tick += async (_, _) => await CheckQueueAsync(allowSubmission: true);
         Log("پنل در حالت Paper Trading راه‌اندازی شد؛ هیچ سفارش واقعی ارسال نمی‌شود.");
+        try
+        {
+            foreach (var order in _queueStore.Load())
+                _queuedOrders.Add(order);
+        }
+        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
+        {
+            ValidationText.Text = $"بازیابی صف سفارش‌ها ناموفق بود: {exception.Message}";
+            Log(ValidationText.Text);
+        }
+        Log($"{_queuedOrders.Count} سفارش ذخیره‌شده از صف بازیابی شد. پایش به‌صورت پیش‌فرض خاموش است.");
     }
 
     private async void FetchBybitPrice_Click(object sender, RoutedEventArgs e)
@@ -63,6 +85,7 @@ public partial class MainWindow : Window
             var manager = new SignalManager(new CalculationService(new StrategyCalculator()));
             manager.AddSignal(signal);
             _signal = signal;
+            _position = null;
             _lastPreview = null;
             ShowPlan(signal.TradePlan!);
             StatusValue.Text = "برنامه آماده";
@@ -108,16 +131,18 @@ public partial class MainWindow : Window
 
     private async void PreviewBybitOrder_Click(object sender, RoutedEventArgs e)
     {
-        if (_position is null)
+        if (_signal?.TradePlan is null)
         {
-            ValidationText.Text = "ابتدا برنامه را محاسبه و سفارش آزمایشی را اجرا کنید.";
+            ValidationText.Text = "ابتدا برنامه معامله را محاسبه کنید.";
             return;
         }
 
         await RunBybitActionAsync(async () =>
         {
+            var plannedPosition = _position ?? new ExecutionManager().PreparePosition(_signal)
+                ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
             var rules = await _bybitClient.GetInstrumentRulesAsync(SymbolTextBox.Text);
-            var preview = BybitOrderPreviewBuilder.Build(SymbolTextBox.Text, _position, rules);
+            var preview = BybitOrderPreviewBuilder.Build(SymbolTextBox.Text, plannedPosition, rules);
             _lastPreview = preview;
             Log($"پیش‌نمایش Bybit: {preview.Side} {preview.Quantity} {preview.Symbol} @ {preview.Price}، ارزش تقریبی {preview.EstimatedNotional:N2} USDT، TP={preview.TakeProfit}، SL={preview.StopLoss}. هیچ سفارشی ارسال نشد.");
         });
@@ -151,6 +176,201 @@ public partial class MainWindow : Window
             StatusValue.Text = "سفارش Demo ارسال شد";
             Log($"سفارش Bybit Demo پذیرفته شد: {_lastDemoOrder.OrderId}، {_lastDemoOrder.Side} {_lastDemoOrder.Quantity} {_lastDemoOrder.Symbol} @ {_lastDemoOrder.Price}.");
         });
+    }
+
+    private void AddToQueue_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastPreview is null)
+        {
+            ValidationText.Text = "ابتدا پیش‌نمایش سفارش Bybit را اجرا کنید.";
+            return;
+        }
+
+        var preview = _lastPreview;
+        var queuedOrder = new QueuedOrder
+        {
+            Symbol = preview.Symbol,
+            Side = preview.Side,
+            Quantity = preview.Quantity,
+            EntryPrice = preview.Price,
+            TakeProfit = preview.TakeProfit,
+            StopLoss = preview.StopLoss,
+            PositionSizeUsdt = preview.EstimatedNotional
+        };
+        _queuedOrders.Add(queuedOrder);
+        SaveQueue();
+        _lastPreview = null;
+        ValidationText.Text = string.Empty;
+        Log($"سفارش {queuedOrder.Side} {queuedOrder.Symbol} @ {queuedOrder.EntryPrice} به صف اضافه شد.");
+    }
+
+    private async void ToggleMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_monitorRunning)
+        {
+            StopMonitor();
+            return;
+        }
+
+        var pendingCount = _queuedOrders.Count(order => order.Status == QueuedOrderStatus.Pending);
+        if (pendingCount == 0)
+        {
+            ValidationText.Text = "هیچ سفارش در انتظاری برای پایش وجود ندارد.";
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            $"پایش {pendingCount} سفارش فعال شود؟\n\nبا رسیدن قیمت به شرط ورود، سفارش‌ها بدون تأیید دوباره و فقط به Bybit Demo ارسال می‌شوند. برنامه باید باز بماند.",
+            "فعال‌سازی پایش خودکار Demo",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (confirmation != MessageBoxResult.Yes)
+            return;
+
+        _monitorRunning = true;
+        _monitorTimer.Start();
+        ToggleMonitorButton.Content = "توقف پایش";
+        ToggleMonitorButton.Background = System.Windows.Media.Brushes.Firebrick;
+        QueueStatusText.Text = "پایش فعال است؛ هر ۳۰ ثانیه";
+        QueueStatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
+        Log("پایش خودکار صف سفارش‌های Demo فعال شد.");
+        await CheckQueueAsync(allowSubmission: true);
+    }
+
+    private void StopMonitor()
+    {
+        _monitorRunning = false;
+        _monitorTimer.Stop();
+        ToggleMonitorButton.Content = "فعال‌سازی پایش";
+        ToggleMonitorButton.Background = System.Windows.Media.Brushes.SeaGreen;
+        QueueStatusText.Text = "پایش خاموش است";
+        QueueStatusText.Foreground = System.Windows.Media.Brushes.Gold;
+        Log("پایش خودکار صف متوقف شد.");
+    }
+
+    private async void CheckQueueNow_Click(object sender, RoutedEventArgs e) =>
+        await CheckQueueAsync(allowSubmission: false);
+
+    private async Task CheckQueueAsync(bool allowSubmission)
+    {
+        if (_queueCheckInProgress)
+            return;
+
+        _queueCheckInProgress = true;
+        try
+        {
+            var pendingOrders = _queuedOrders
+                .Where(order => order.Status == QueuedOrderStatus.Pending)
+                .ToList();
+            var tickers = new Dictionary<string, BybitTicker>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var order in pendingOrders)
+            {
+                try
+                {
+                    if (!tickers.TryGetValue(order.Symbol, out var ticker))
+                    {
+                        ticker = await _bybitClient.GetLastPriceAsync(order.Symbol);
+                        tickers[order.Symbol] = ticker;
+                    }
+
+                    order.LastPrice = ticker.LastPrice;
+                    order.LastCheckedAtUtc = DateTime.UtcNow;
+                    order.ErrorMessage = null;
+                    if (!QueuedOrderRules.IsEntryReached(order, ticker.LastPrice))
+                        continue;
+                    if (!allowSubmission || !_monitorRunning)
+                        continue;
+
+                    var preview = new BybitOrderPreview(
+                        order.Symbol,
+                        order.Side,
+                        order.Quantity,
+                        order.EntryPrice,
+                        order.TakeProfit,
+                        order.StopLoss,
+                        order.PositionSizeUsdt);
+                    order.OrderLinkId ??= $"phoenix-q-{order.Id:N}"[..36];
+                    if (!SaveQueue())
+                    {
+                        order.Status = QueuedOrderStatus.Error;
+                        order.ErrorMessage = "شناسه سفارش پیش از ارسال ذخیره نشد؛ برای جلوگیری از سفارش تکراری ارسال متوقف شد.";
+                        continue;
+                    }
+                    var result = await _bybitClient.PlaceLimitOrderAsync(preview, order.OrderLinkId);
+                    order.BybitOrderId = result.OrderId;
+                    order.SubmittedAtUtc = DateTime.UtcNow;
+                    order.Status = QueuedOrderStatus.Submitted;
+                    Log($"سفارش صف به Bybit Demo ارسال شد: {result.OrderId}، {order.Side} {order.Quantity} {order.Symbol} @ {order.EntryPrice}.");
+                }
+                catch (Exception exception) when (exception is HttpRequestException
+                                                  or TaskCanceledException
+                                                  or InvalidOperationException
+                                                  or ArgumentException)
+                {
+                    order.Status = QueuedOrderStatus.Error;
+                    order.ErrorMessage = exception.Message;
+                    Log($"خطای سفارش صف {order.Symbol}: {exception.Message}");
+                }
+            }
+
+            SaveQueue();
+            QueueGrid.Items.Refresh();
+            QueueStatusText.Text = _monitorRunning
+                ? $"پایش فعال؛ آخرین بررسی {DateTime.Now:HH:mm:ss}"
+                : $"بررسی دستی {DateTime.Now:HH:mm:ss}";
+        }
+        finally
+        {
+            _queueCheckInProgress = false;
+        }
+    }
+
+    private void RetryQueueItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (QueueGrid.SelectedItem is not QueuedOrder order)
+            return;
+        if (order.Status == QueuedOrderStatus.Submitted)
+        {
+            ValidationText.Text = "سفارش ارسال‌شده را نمی‌توان دوباره به صف برگرداند.";
+            return;
+        }
+
+        order.Status = QueuedOrderStatus.Pending;
+        order.ErrorMessage = null;
+        SaveQueue();
+        QueueGrid.Items.Refresh();
+    }
+
+    private void DeleteQueueItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (QueueGrid.SelectedItem is not QueuedOrder order)
+            return;
+        if (order.Status == QueuedOrderStatus.Submitted)
+        {
+            ValidationText.Text = "این مورد قبلاً به Bybit ارسال شده است؛ حذف آن سفارش صرافی را لغو نمی‌کند.";
+            return;
+        }
+
+        _queuedOrders.Remove(order);
+        SaveQueue();
+        Log($"سفارش {order.Symbol} از صف محلی حذف شد.");
+    }
+
+    private bool SaveQueue()
+    {
+        try
+        {
+            _queueStore.Save(_queuedOrders);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ValidationText.Text = $"ذخیره صف سفارش‌ها ناموفق بود: {exception.Message}";
+            Log(ValidationText.Text);
+            return false;
+        }
     }
 
     private async void CancelBybitOrder_Click(object sender, RoutedEventArgs e)

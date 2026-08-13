@@ -29,11 +29,9 @@ public class StrategyCalculator : IStrategyCalculator
 
             plan.StopLoss1 = signal.High - z;
 
-            // فعلاً همان مقدار قبلی
-            plan.StopLoss2 = signal.High;
-
-            // نقطه ورود به حالت Risk Free
-            plan.RiskFreePrice = signal.High - y;
+            var profitDistance = plan.TakeProfit - plan.EntryPrice;
+            plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
+            plan.RiskFreePrice = plan.EntryPrice + profitDistance * 0.75m;
         }
         else
         {
@@ -43,11 +41,9 @@ public class StrategyCalculator : IStrategyCalculator
 
             plan.StopLoss1 = signal.Low + z;
 
-            // فعلاً همان مقدار قبلی
-            plan.StopLoss2 = signal.Low;
-
-            // نقطه ورود به حالت Risk Free
-            plan.RiskFreePrice = signal.Low + y;
+            var profitDistance = plan.TakeProfit - plan.EntryPrice;
+            plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
+            plan.RiskFreePrice = plan.EntryPrice + profitDistance * 0.75m;
         }
 
         return plan;

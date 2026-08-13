@@ -15,6 +15,8 @@ Run("Long strategy calculates expected levels", () =>
     Equal(118764m, plan.EntryPrice);
     Equal(119000m, plan.TakeProfit);
     Equal(118542m, plan.StopLoss1);
+    Equal(118823m, plan.StopLoss2!.Value);
+    Equal(118941m, plan.RiskFreePrice);
 });
 
 Run("Short strategy calculates expected levels", () =>
@@ -24,6 +26,8 @@ Run("Short strategy calculates expected levels", () =>
     Equal(119236m, plan.EntryPrice);
     Equal(119000m, plan.TakeProfit);
     Equal(119458m, plan.StopLoss1);
+    Equal(119177m, plan.StopLoss2!.Value);
+    Equal(119059m, plan.RiskFreePrice);
 });
 
 Run("Invalid range is rejected", () =>
@@ -180,6 +184,32 @@ Run("Order queue persists across application restarts", () =>
         if (File.Exists(path)) File.Delete(path);
         if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
     }
+});
+
+Run("Bybit SL2 is a reduce-only conditional stop-limit order", () =>
+{
+    var requests = new List<string>();
+    var handler = new StubHttpHandler(request =>
+    {
+        var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        requests.Add(body);
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"sl2-123\",\"orderLinkId\":\"sl2-test\"}}")
+        };
+    });
+    var client = new BybitDemoClient(new BybitDemoOptions("key", "secret"), new HttpClient(handler));
+    client.PlaceStopLimitAsync("BTCUSDT", "Long", 0.01m, 101.25m, 0.1m, "sl2-test").GetAwaiter().GetResult();
+    True(requests[0].Contains("\"side\":\"Sell\"", StringComparison.Ordinal));
+    True(requests[0].Contains("\"orderType\":\"Limit\"", StringComparison.Ordinal));
+    True(requests[0].Contains("\"triggerDirection\":2", StringComparison.Ordinal));
+    True(requests[0].Contains("\"triggerPrice\":\"101.3\"", StringComparison.Ordinal));
+    True(requests[0].Contains("\"price\":\"101.3\"", StringComparison.Ordinal));
+    True(requests[0].Contains("\"reduceOnly\":true", StringComparison.Ordinal));
+    True(requests[0].Contains("\"closeOnTrigger\":true", StringComparison.Ordinal));
+    client.PlaceStopLimitAsync("BTCUSDT", "Short", 0.01m, 98.75m, 0.1m, "sl2-short").GetAwaiter().GetResult();
+    True(requests[1].Contains("\"side\":\"Buy\"", StringComparison.Ordinal));
+    True(requests[1].Contains("\"triggerDirection\":1", StringComparison.Ordinal));
 });
 
 Run("Server signal queue persists across application restarts", () =>

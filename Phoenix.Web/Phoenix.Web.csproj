@@ -8,4 +8,8 @@
     <ProjectReference Include="..\Phoenix.Core\Phoenix.Core.csproj" />
     <ProjectReference Include="..\Phoenix.Engine\Phoenix.Engine.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.4" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+  </ItemGroup>
 </Project>

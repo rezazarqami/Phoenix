@@ -7,6 +7,7 @@ public sealed class DemoOrderWorker(
     BybitDemoOptions options,
     ServerState state,
     ServerOrderStore store,
+    TelegramNotifier telegram,
     ILogger<DemoOrderWorker> logger) : BackgroundService
 {
     public static bool IsTradingEnabled(BybitDemoOptions options) =>
@@ -20,7 +21,7 @@ public sealed class DemoOrderWorker(
             try
             {
                 var orders = await store.GetAllAsync(stoppingToken);
-                var symbols = orders.Where(x => x.Status == "Pending").Select(x => x.Symbol)
+                var symbols = orders.Where(x => x.Status is "Pending" or "Submitted" or "Filled").Select(x => x.Symbol)
                     .Append("BTCUSDT").Distinct(StringComparer.OrdinalIgnoreCase);
                 foreach (var symbol in symbols)
                 {
@@ -30,11 +31,21 @@ public sealed class DemoOrderWorker(
                         state.LastPrice = ticker.LastPrice;
                         state.LastUpdatedUtc = DateTime.UtcNow;
                     }
-                    foreach (var order in orders.Where(x => x.Status == "Pending" && x.Symbol == symbol))
+                    foreach (var order in orders.Where(x =>
+                                 (x.Status is "Pending" or "Submitted" or "Filled") && x.Symbol == symbol))
                     {
                         order.LastPrice = ticker.LastPrice;
-                        if (EntryReached(order, ticker.LastPrice) && IsTradingEnabled(options))
-                            await SubmitAsync(order, stoppingToken);
+                        if (order.Status == "Pending")
+                        {
+                            if (EntryReached(order, ticker.LastPrice) && IsTradingEnabled(options))
+                                await SubmitAsync(order, stoppingToken);
+                            else
+                                await TrackPendingExpiryAsync(order, ticker.LastPrice, stoppingToken);
+                        }
+                        else if (order.Status == "Submitted")
+                            await SynchronizeOrderAsync(order, ticker.LastPrice, stoppingToken);
+                        else if (order.Status == "Filled")
+                            await TrackLevelsAsync(order, ticker.LastPrice, stoppingToken);
                         else
                             await store.UpdateAsync(order, stoppingToken);
                     }
@@ -57,24 +68,127 @@ public sealed class DemoOrderWorker(
         }
     }
 
+    private async Task TrackPendingExpiryAsync(ServerSignal order, decimal price, CancellationToken token)
+    {
+        if (order.ExpirePrice == 0)
+            order.ExpirePrice = order.Direction == "Long" ? order.Ceiling : order.Floor;
+        if (order.ExpireActivationPrice == 0)
+            order.ExpireActivationPrice = order.EntryPrice + 0.20m * (order.TakeProfit - order.EntryPrice);
+
+        if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
+        {
+            order.Status = "Expired";
+            order.ExpiredAtUtc = DateTime.UtcNow;
+            await store.UpdateAsync(order, token);
+            return;
+        }
+
+        if (order.ExpireStage == "Initial" && ExpireActivationReached(order, price))
+        {
+            order.ExpireStage = "Target";
+            order.ExpirePrice = order.TakeProfit;
+            order.ExpireAdjustedAtUtc = DateTime.UtcNow;
+        }
+
+        if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
+        {
+            order.Status = "Expired";
+            order.ExpiredAtUtc = DateTime.UtcNow;
+        }
+
+        await store.UpdateAsync(order, token);
+    }
+
+    private static bool InitialExpiryReached(ServerSignal order, decimal price) => order.Direction switch
+    {
+        "Long" => price >= order.Ceiling,
+        "Short" => price <= order.Floor,
+        _ => false
+    };
+
+    public static bool ExpireActivationReached(ServerSignal order, decimal price) => order.Direction switch
+    {
+        "Long" => price <= order.ExpireActivationPrice,
+        "Short" => price >= order.ExpireActivationPrice,
+        _ => false
+    };
+
+    public static bool TargetExpiryReached(ServerSignal order, decimal price) => order.Direction switch
+    {
+        "Long" => price >= order.TakeProfit,
+        "Short" => price <= order.TakeProfit,
+        _ => false
+    };
+
+    private async Task SynchronizeOrderAsync(ServerSignal order, decimal price, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(order.BybitOrderId)) return;
+        var status = await client.GetOrderStatusAsync(order.BybitOrderId, token);
+        if (status is null) return;
+
+        order.AverageFillPrice = status.AveragePrice;
+        order.ExecutedQuantity = status.ExecutedQuantity;
+        if (status.Status == "Filled")
+        {
+            order.Status = "Filled";
+            order.FilledAtUtc = status.UpdatedAtUtc ?? DateTime.UtcNow;
+            await store.UpdateAsync(order, token);
+            await TrackLevelsAsync(order, price, token);
+            return;
+        }
+        if (status.Status is "Cancelled" or "Rejected" or "Deactivated")
+        {
+            order.Status = status.Status;
+            await store.UpdateAsync(order, token);
+            return;
+        }
+        await store.UpdateAsync(order, token);
+    }
+
     private async Task SubmitAsync(ServerSignal order, CancellationToken token)
     {
         order.Status = "Submitting";
         order.Error = null;
         await store.UpdateAsync(order, token);
+        await telegram.EntryReachedAsync(order, token);
         try
         {
             var result = await client.PlaceLimitOrderAsync(order.ToPreview(), order.OrderLinkId, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;
+            await telegram.OrderSubmittedAsync(order, token);
         }
         catch (Exception exception)
         {
             order.Status = "Error";
             order.Error = exception.Message;
             logger.LogError(exception, "Demo order {OrderLinkId} was not confirmed", order.OrderLinkId);
+            await telegram.OrderErrorAsync(order, token);
         }
+        await store.UpdateAsync(order, token);
+    }
+
+    private async Task TrackLevelsAsync(ServerSignal order, decimal price, CancellationToken token)
+    {
+        if (order.TargetReachedAtUtc is null && TargetReached(order, price))
+        {
+            order.TargetReachedAtUtc = DateTime.UtcNow;
+            await telegram.TargetReachedAsync(order, token);
+        }
+        else if (order.RiskFreeReachedAtUtc is null && order.RiskFreePrice is { } riskFree &&
+                 riskFree != order.TakeProfit && ProfitLevelReached(order, price, riskFree))
+        {
+            order.RiskFreeReachedAtUtc = DateTime.UtcNow;
+            await telegram.RiskFreeReachedAsync(order, token);
+        }
+
+        if (order.StopLossReachedAtUtc is null && StopLossReached(order, price))
+        {
+            order.StopLossReachedAtUtc = DateTime.UtcNow;
+            await telegram.StopLossReachedAsync(order, token);
+        }
+
         await store.UpdateAsync(order, token);
     }
 
@@ -82,6 +196,23 @@ public sealed class DemoOrderWorker(
     {
         "Long" => price <= order.EntryPrice,
         "Short" => price >= order.EntryPrice,
+        _ => false
+    };
+
+    public static bool TargetReached(ServerSignal order, decimal price) =>
+        ProfitLevelReached(order, price, order.TakeProfit);
+
+    public static bool StopLossReached(ServerSignal order, decimal price) => order.Direction switch
+    {
+        "Long" => price <= order.StopLoss,
+        "Short" => price >= order.StopLoss,
+        _ => false
+    };
+
+    private static bool ProfitLevelReached(ServerSignal order, decimal price, decimal level) => order.Direction switch
+    {
+        "Long" => price >= level,
+        "Short" => price <= level,
         _ => false
     };
 }

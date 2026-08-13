@@ -50,6 +50,19 @@ Restart Visual Studio after setting the variables. Never commit, paste into sour
 
 Phoenix can submit a manually confirmed linear Limit order to Bybit Demo with full-position market TP/SL protection. It stores the returned order ID in memory so the same UI session can request cancellation. Mainnet is hard-disabled, Market entry orders are unavailable, and no order is submitted without a confirmation dialog.
 
+## Telegram notifications
+
+The web service can send Persian notifications when a signal is queued, reaches entry, is accepted by Bybit Demo, is cancelled, fails, or touches its target, risk-free/SL2 activation, or stop-loss level. Configure the bot outside source control:
+
+```text
+TELEGRAM_BOT_TOKEN=<token from BotFather>
+TELEGRAM_CHAT_ID=<private chat, group, or channel id>
+```
+
+`TELEGRAM_CHAT_ID` is optional. If it is omitted, send `/start` to the bot and Phoenix discovers the most recent chat automatically.
+
+Telegram failures are logged but never block or change order execution. Price-level messages say that a level was touched; they do not claim an exchange fill without exchange confirmation.
+
 ## Persistent order queue
 
 The **Order Queue** tab stores multiple prepared entries under the current Windows user's local application-data directory. Pending entries survive application restarts. A manual check only refreshes prices; automatic Demo submission starts only after the user explicitly enables monitoring for the current session. The monitoring interval is selectable (1, 2, 5, or 10 seconds) and defaults to 1 second. Orders for the same symbol share one ticker request per cycle. While monitoring is enabled and Phoenix remains open, pending orders are submitted once their directional entry condition is reached. Monitoring is intentionally off after every application restart.

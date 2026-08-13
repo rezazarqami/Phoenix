@@ -159,12 +159,13 @@ async function refreshSignals() {
 }
 
 function isFinished(signal) {
-  return Boolean(signal.targetReachedAtUtc || signal.stopLossReachedAtUtc || signal.removedAtUtc) ||
+  return Boolean(signal.targetReachedAtUtc || signal.riskFreeClosedAtUtc || signal.stopLossReachedAtUtc || signal.removedAtUtc) ||
     ['Expired', 'Cancelled', 'Rejected', 'Deactivated', 'Error'].includes(signal.status);
 }
 
 function resultLabel(signal) {
   if (signal.targetReachedAtUtc) return 'تارگت خورده';
+  if (signal.riskFreeClosedAtUtc) return 'ریسک‌فری';
   if (signal.stopLossReachedAtUtc) return 'استاپ خورده';
   if (signal.status === 'Expired') return 'اکسپایر شده';
   if (signal.status === 'Cancelled') return 'لغو شده';
@@ -181,8 +182,8 @@ async function refreshHistory() {
     document.querySelector('#historyCount').textContent = fa.format(finished.length);
     document.querySelector('#history').innerHTML = finished.length ? finished.map(item => {
       const s = item.signal;
-      const ended = s.targetReachedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
-      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.targetReachedAtUtc ? 'win' : s.stopLossReachedAtUtc ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT</small><time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
+      const ended = s.targetReachedAtUtc || s.riskFreeClosedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
+      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.targetReachedAtUtc || s.riskFreeClosedAtUtc ? 'win' : s.stopLossReachedAtUtc ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT</small><time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
     }).join('') : '<div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div>';
   } catch { /* history remains unchanged until the next refresh */ }
 }

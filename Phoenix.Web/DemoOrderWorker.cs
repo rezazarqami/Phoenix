@@ -37,7 +37,8 @@ public sealed class DemoOrderWorker(
                         order.LastPrice = ticker.LastPrice;
                         if (order.Status == "Pending")
                         {
-                            if (EntryReached(order, ticker.LastPrice) && IsTradingEnabled(options))
+                            if (EntryReached(order, ticker.LastPrice) && IsTradingEnabled(options) &&
+                                await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken))
                                 await SubmitAsync(order, stoppingToken);
                             else
                                 await TrackPendingExpiryAsync(order, ticker.LastPrice, stoppingToken);
@@ -177,8 +178,8 @@ public sealed class DemoOrderWorker(
             var sl2Status = await client.GetOrderStatusAsync(order.StopLoss2OrderId, token);
             if (sl2Status?.Status == "Filled")
             {
-                order.StopLossReachedAtUtc = sl2Status.UpdatedAtUtc ?? DateTime.UtcNow;
-                await telegram.StopLossReachedAsync(order, token);
+                order.RiskFreeClosedAtUtc = sl2Status.UpdatedAtUtc ?? DateTime.UtcNow;
+                await telegram.RiskFreeClosedAsync(order, token);
                 await store.UpdateAsync(order, token);
                 return;
             }
@@ -241,7 +242,7 @@ public sealed class DemoOrderWorker(
         }
     }
 
-    private static bool EntryReached(ServerSignal order, decimal price) => order.Direction switch
+    public static bool EntryReached(ServerSignal order, decimal price) => order.Direction switch
     {
         "Long" => price <= order.EntryPrice,
         "Short" => price >= order.EntryPrice,

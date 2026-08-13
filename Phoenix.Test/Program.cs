@@ -271,6 +271,35 @@ Run("Server lifecycle levels respect Short direction", () =>
     False(DemoOrderWorker.StopLossReached(signal, 109m));
 });
 
+Run("Only one trigger can claim a pending server signal", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-claim-{Guid.NewGuid():N}.json");
+    var historyPath = Path.ChangeExtension(path, ".db");
+    var previous = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH");
+    var previousHistory = Environment.GetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH");
+    try
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", path);
+        Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", historyPath);
+        var store = new ServerOrderStore();
+        var signal = new ServerSignal { Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long",
+            EntryPrice = 100m, Status = "Pending", CreatedAtUtc = DateTime.UtcNow };
+        store.AddAsync(signal).GetAwaiter().GetResult();
+        var claims = Task.WhenAll(
+            store.TryClaimSubmissionAsync(signal.Id, 100m),
+            store.TryClaimSubmissionAsync(signal.Id, 99.9m)).GetAwaiter().GetResult();
+        Equal(1, claims.Count(x => x));
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
+        Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
+            if (File.Exists(file)) File.Delete(file);
+    }
+});
+
 Run("Long expiry activates after twenty percent approach", () =>
 {
     var signal = new ServerSignal

@@ -33,6 +33,7 @@ public sealed class ServerSignal
     public decimal? ExecutedQuantity { get; set; }
     public DateTime? TargetReachedAtUtc { get; set; }
     public DateTime? RiskFreeReachedAtUtc { get; set; }
+    public DateTime? RiskFreeClosedAtUtc { get; set; }
     public string? StopLoss2OrderId { get; set; }
     public DateTime? StopLossReachedAtUtc { get; set; }
     public DateTime? ExpireAdjustedAtUtc { get; set; }
@@ -141,6 +142,23 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    public async Task<bool> TryClaimSubmissionAsync(Guid id, decimal price, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is null || signal.Status != "Pending") return false;
+            signal.Status = "Submitting";
+            signal.LastPrice = price;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
         CancellationToken token = default) => _history.GetAsync(days, limit, token);
 
@@ -184,6 +202,7 @@ public sealed class ServerOrderStore
         FilledAtUtc = signal.FilledAtUtc, AverageFillPrice = signal.AverageFillPrice,
         ExecutedQuantity = signal.ExecutedQuantity,
         TargetReachedAtUtc = signal.TargetReachedAtUtc, RiskFreeReachedAtUtc = signal.RiskFreeReachedAtUtc,
+        RiskFreeClosedAtUtc = signal.RiskFreeClosedAtUtc,
         StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
         ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc
     };

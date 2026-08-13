@@ -15,6 +15,7 @@ builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
 builder.Services.AddSingleton<StrategyCalculator>();
 builder.Services.AddHostedService<DemoOrderWorker>();
+builder.Services.AddHostedService<BybitEntryWebSocketWorker>();
 
 var app = builder.Build();
 app.Use(async (context, next) =>

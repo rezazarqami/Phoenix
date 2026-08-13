@@ -171,25 +171,74 @@ public sealed class DemoOrderWorker(
 
     private async Task TrackLevelsAsync(ServerSignal order, decimal price, CancellationToken token)
     {
+        BackfillStopLoss2Levels(order);
+        if (order.StopLossReachedAtUtc is null && !string.IsNullOrWhiteSpace(order.StopLoss2OrderId))
+        {
+            var sl2Status = await client.GetOrderStatusAsync(order.StopLoss2OrderId, token);
+            if (sl2Status?.Status == "Filled")
+            {
+                order.StopLossReachedAtUtc = sl2Status.UpdatedAtUtc ?? DateTime.UtcNow;
+                await telegram.StopLossReachedAsync(order, token);
+                await store.UpdateAsync(order, token);
+                return;
+            }
+        }
+
         if (order.TargetReachedAtUtc is null && TargetReached(order, price))
         {
             order.TargetReachedAtUtc = DateTime.UtcNow;
+            await CancelStopLoss2Async(order, token);
             await telegram.TargetReachedAsync(order, token);
         }
         else if (order.RiskFreeReachedAtUtc is null && order.RiskFreePrice is { } riskFree &&
-                 riskFree != order.TakeProfit && ProfitLevelReached(order, price, riskFree))
+                 order.StopLoss2 is { } stopLoss2 && ProfitLevelReached(order, price, riskFree))
         {
-            order.RiskFreeReachedAtUtc = DateTime.UtcNow;
-            await telegram.RiskFreeReachedAsync(order, token);
+            try
+            {
+                var rules = await client.GetInstrumentRulesAsync(order.Symbol, token);
+                var linkId = $"sl2-{order.Id:N}"[..36];
+                var result = await client.PlaceStopLimitAsync(
+                    order.Symbol, order.Direction, order.ExecutedQuantity ?? order.Quantity,
+                    stopLoss2, rules.TickSize, linkId, token);
+                order.StopLoss2 = result.Price;
+                order.StopLoss2OrderId = result.OrderId;
+                order.RiskFreeReachedAtUtc = DateTime.UtcNow;
+                await telegram.RiskFreeReachedAsync(order, token);
+            }
+            catch (Exception exception)
+            {
+                order.Error = $"SL2: {exception.Message}";
+                logger.LogError(exception, "SL2 stop-limit creation failed for {OrderLinkId}", order.OrderLinkId);
+            }
         }
 
         if (order.StopLossReachedAtUtc is null && StopLossReached(order, price))
         {
             order.StopLossReachedAtUtc = DateTime.UtcNow;
+            await CancelStopLoss2Async(order, token);
             await telegram.StopLossReachedAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);
+    }
+
+    private static void BackfillStopLoss2Levels(ServerSignal order)
+    {
+        if (order.RiskFreeReachedAtUtc is not null || order.StopLoss2OrderId is not null) return;
+        var distance = order.TakeProfit - order.EntryPrice;
+        if (distance == 0) return;
+        order.StopLoss2 = order.EntryPrice + distance * 0.25m;
+        order.RiskFreePrice = order.EntryPrice + distance * 0.75m;
+    }
+
+    private async Task CancelStopLoss2Async(ServerSignal order, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(order.StopLoss2OrderId)) return;
+        try { await client.CancelOrderAsync(order.Symbol, order.StopLoss2OrderId, token); }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Could not cancel remaining SL2 order {StopLoss2OrderId}", order.StopLoss2OrderId);
+        }
     }
 
     private static bool EntryReached(ServerSignal order, decimal price) => order.Direction switch

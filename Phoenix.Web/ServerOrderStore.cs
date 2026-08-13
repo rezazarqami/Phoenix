@@ -33,6 +33,7 @@ public sealed class ServerSignal
     public decimal? ExecutedQuantity { get; set; }
     public DateTime? TargetReachedAtUtc { get; set; }
     public DateTime? RiskFreeReachedAtUtc { get; set; }
+    public string? StopLoss2OrderId { get; set; }
     public DateTime? StopLossReachedAtUtc { get; set; }
     public DateTime? ExpireAdjustedAtUtc { get; set; }
     public DateTime? ExpiredAtUtc { get; set; }
@@ -177,6 +178,7 @@ public sealed class ServerOrderStore
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,
         ExpireStage = signal.ExpireStage,
         StopLoss2 = signal.StopLoss2, RiskFreePrice = signal.RiskFreePrice,
+        StopLoss2OrderId = signal.StopLoss2OrderId,
         OrderLinkId = signal.OrderLinkId, BybitOrderId = signal.BybitOrderId, Error = signal.Error,
         CreatedAtUtc = signal.CreatedAtUtc, SubmittedAtUtc = signal.SubmittedAtUtc,
         FilledAtUtc = signal.FilledAtUtc, AverageFillPrice = signal.AverageFillPrice,

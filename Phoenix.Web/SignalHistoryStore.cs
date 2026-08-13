@@ -156,6 +156,7 @@ public sealed class SignalHistoryStore
         if (before.ExpireStage != after.ExpireStage) return $"ExpireStage:{before.ExpireStage}->{after.ExpireStage}";
         if (before.TargetReachedAtUtc != after.TargetReachedAtUtc) return "TargetReached";
         if (before.RiskFreeReachedAtUtc != after.RiskFreeReachedAtUtc) return "RiskFreeReached";
+        if (before.RiskFreeClosedAtUtc != after.RiskFreeClosedAtUtc) return "RiskFreeClosed";
         if (before.StopLossReachedAtUtc != after.StopLossReachedAtUtc) return "StopLossReached";
         return null;
     }

@@ -35,6 +35,9 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
     public Task<bool> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🛡️ مرحله ریسک‌فری / SL2 فعال شد\n{Describe(signal)}\nSL2: {Format(signal.StopLoss2)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
 
+    public Task<bool> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
+        $"💚 معامله با ریسک‌فری بسته شد\n{Describe(signal)}\nقیمت خروج SL2: {Format(signal.StopLoss2)}", token);
+
     public Task<bool> StopLossReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🛑 قیمت به سطح استاپ‌لاس رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
 

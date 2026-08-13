@@ -71,6 +71,45 @@ public sealed class BybitDemoClient
             ReadDecimal(lotFilter, "minNotionalValue"));
     }
 
+    public async Task<IReadOnlyList<string>> GetTradableLinearSymbolsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var symbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? cursor = null;
+
+        do
+        {
+            var path = "/v5/market/instruments-info?category=linear&limit=1000";
+            if (!string.IsNullOrWhiteSpace(cursor))
+                path += $"&cursor={Uri.EscapeDataString(cursor)}";
+
+            using var response = await _httpClient.GetAsync(path, cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            using var document = JsonDocument.Parse(json);
+            EnsureSuccess(document.RootElement);
+            var result = document.RootElement.GetProperty("result");
+            foreach (var item in result.GetProperty("list").EnumerateArray())
+            {
+                var status = item.TryGetProperty("status", out var statusElement)
+                    ? statusElement.GetString()
+                    : null;
+                var symbol = item.TryGetProperty("symbol", out var symbolElement)
+                    ? symbolElement.GetString()
+                    : null;
+                if (status == "Trading" && !string.IsNullOrWhiteSpace(symbol))
+                    symbols.Add(symbol);
+            }
+
+            cursor = result.TryGetProperty("nextPageCursor", out var cursorElement)
+                ? cursorElement.GetString()
+                : null;
+        } while (!string.IsNullOrWhiteSpace(cursor));
+
+        return symbols.OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     public async Task<BybitDemoStatus> CheckConnectionAsync(CancellationToken cancellationToken = default)
     {
         using var publicResponse = await _httpClient.GetAsync("/v5/market/time", cancellationToken);
@@ -192,6 +231,40 @@ public sealed class BybitDemoClient
             result.GetProperty("orderLinkId").GetString() ?? string.Empty);
     }
 
+    public async Task<BybitOrderStatus?> GetOrderStatusAsync(
+        string orderId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+            throw new ArgumentException("Order ID is required.", nameof(orderId));
+
+        var query = $"category=linear&orderId={Uri.EscapeDataString(orderId)}";
+        using var request = CreateSignedGetRequest("/v5/order/realtime", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var list = document.RootElement.GetProperty("result").GetProperty("list");
+        if (list.GetArrayLength() == 0) return null;
+
+        var item = list[0];
+        var averagePrice = TryReadDecimal(item, "avgPrice");
+        var executedQuantity = TryReadDecimal(item, "cumExecQty") ?? 0m;
+        DateTime? updatedAtUtc = null;
+        var updatedText = item.TryGetProperty("updatedTime", out var updated) ? updated.GetString() : null;
+        if (long.TryParse(updatedText, NumberStyles.None, CultureInfo.InvariantCulture, out var milliseconds))
+            updatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime;
+
+        return new BybitOrderStatus(
+            item.GetProperty("orderId").GetString() ?? orderId,
+            item.GetProperty("symbol").GetString() ?? string.Empty,
+            item.GetProperty("orderStatus").GetString() ?? "Unknown",
+            averagePrice,
+            executedQuantity,
+            updatedAtUtc);
+    }
+
     public HttpRequestMessage CreateSignedPostRequest(string path, string jsonBody)
     {
         if (!_options.HasCredentials)
@@ -223,8 +296,8 @@ public sealed class BybitDemoClient
             throw new ArgumentException("Symbol is required.", nameof(symbol));
 
         var normalized = symbol.Trim().ToUpperInvariant();
-        if (normalized.Any(character => !char.IsAsciiLetterOrDigit(character)))
-            throw new ArgumentException("Symbol can only contain ASCII letters and digits.", nameof(symbol));
+        if (normalized.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
+            throw new ArgumentException("Symbol can only contain ASCII letters, digits, and hyphens.", nameof(symbol));
         return normalized;
     }
 
@@ -244,5 +317,12 @@ public sealed class BybitDemoClient
         if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
             throw new InvalidOperationException($"Bybit returned an invalid {propertyName}.");
         return value;
+    }
+
+    private static decimal? TryReadDecimal(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property)) return null;
+        var text = property.GetString();
+        return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
 }

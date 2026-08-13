@@ -3,30 +3,79 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#07111f">
+  <meta name="theme-color" content="#0b0e11">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css">
-  <title>Phoenix Mobile</title>
+  <link rel="stylesheet" href="/styles.css?v=3">
+  <link rel="stylesheet" href="/security.css?v=1">
+  <title>Phoenix Trading Panel</title>
 </head>
 <body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
   <main>
-    <header><div><h1>PHOENIX</h1><p>پنل ثبت سیگنال</p></div><span id="connection" class="badge">در حال بررسی…</span></header>
-    <section class="price"><small>قیمت لحظه‌ای BTCUSDT</small><strong id="price">—</strong><span id="updated">در حال اتصال به Bybit</span></section>
-    <section class="card">
-      <h2>سیگنال جدید</h2>
-      <form id="signalForm">
-        <label id="keyField">کلید ورود پنل<input name="panelKey" type="password" autocomplete="current-password" placeholder="کلید خصوصی پنل"></label>
-        <label>نماد<input name="symbol" value="BTCUSDT" autocomplete="off" required></label>
-        <label>جهت<select name="direction"><option>Long</option><option>Short</option></select></label>
-        <div class="row"><label>سقف<input name="ceiling" inputmode="decimal" required></label><label>کف<input name="floor" inputmode="decimal" required></label></div>
-        <label>سرمایه موقعیت (USDT)<input name="positionSizeUsdt" inputmode="decimal" required></label>
-        <button type="submit">ثبت در صف سفارش‌ها</button>
-        <small id="modeNote" class="safe">در حال بررسی وضعیت موتور سفارش…</small>
-        <p id="message" role="status"></p>
-      </form>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">P</span><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
+      <div class="header-actions"><button id="logoutButton" class="security-button" type="button">خروج</button><button id="securityButton" class="security-button" type="button">⚙ تنظیمات امنیتی</button><span id="connection" class="badge"><i></i>در حال بررسی</span></div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy"><span class="eyebrow">MARKET OVERVIEW</span><h2>مرکز مدیریت سیگنال</h2><p>ثبت و پایش سفارش‌های آزمایشی، دقیق و بدون خطای نماد</p></div>
+      <div class="ticker"><div><small>BTC / USDT</small><span>قیمت لحظه‌ای</span></div><strong id="price">—</strong><span id="updated">در حال اتصال به Bybit</span></div>
     </section>
-    <section class="card"><div class="title"><h2>سفارش‌ها</h2><span id="count">۰</span></div><div id="orders" class="orders"><p class="empty">هنوز سیگنالی ثبت نشده است.</p></div></section>
+
+    <div class="workspace">
+      <section class="card signal-card">
+        <div class="section-title"><div><span class="step">01</span><div><h2>سیگنال جدید</h2><p>پارامترهای معامله را وارد کنید</p></div></div><span class="demo-pill">DEMO</span></div>
+        <form id="signalForm" novalidate>
+          <label id="keyField">کلید ورود پنل<input name="panelKey" type="password" autocomplete="current-password" placeholder="کلید خصوصی پنل"></label>
+
+          <label class="symbol-label">نماد Bybit Futures
+            <div id="symbolPicker" class="symbol-picker">
+              <div class="symbol-input-wrap"><span class="search-icon">⌕</span><input id="symbolSearch" type="text" value="BTCUSDT" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="symbolMenu" aria-expanded="false" placeholder="جست‌وجو؛ مثال BTC"><span class="chevron">⌄</span></div>
+              <input name="symbol" type="hidden" value="BTCUSDT">
+              <div id="symbolMenu" class="symbol-menu" role="listbox" hidden>
+                <div class="menu-head"><span>قراردادهای فعال Bybit</span><small id="symbolCount">در حال دریافت…</small></div>
+                <div id="symbolOptions" class="symbol-options"></div>
+                <p id="symbolEmpty" class="symbol-empty" hidden>نمادی با این عبارت پیدا نشد.</p>
+              </div>
+            </div>
+            <small id="symbolHint" class="field-hint">فقط نمادهای فعال بازار خطی Bybit قابل انتخاب‌اند.</small>
+          </label>
+
+          <label>جهت معامله<div class="segmented"><input id="long" name="direction" type="radio" value="Long" checked><label for="long">Long <span>خرید</span></label><input id="short" name="direction" type="radio" value="Short"><label for="short">Short <span>فروش</span></label></div></label>
+          <div class="row"><label>سقف قیمت<div class="input-unit"><input name="ceiling" inputmode="decimal" required placeholder="0.00"><span>USDT</span></div></label><label>کف قیمت<div class="input-unit"><input name="floor" inputmode="decimal" required placeholder="0.00"><span>USDT</span></div></label></div>
+          <label>مقدار ورودی (USDT)<div class="input-unit"><input name="positionSizeUsdt" inputmode="decimal" required placeholder="مثلاً 25"><span>USDT</span></div></label>
+          <button class="primary" type="submit"><span>ثبت در صف سفارش‌ها</span><b>←</b></button>
+          <div id="modeNote" class="safe"><i>✓</i><span>در حال بررسی وضعیت موتور سفارش</span></div>
+          <p id="message" role="status"></p>
+        </form>
+      </section>
+
+      <section class="card orders-card">
+        <div class="section-title"><div><span class="step">02</span><div><h2>سیگنال‌های فعال</h2><p>سیگنال‌های در انتظار یا معامله‌های باز</p></div></div><span id="count" class="counter">۰</span></div>
+        <div id="orders" class="orders"><div class="empty"><span>◇</span><strong>هنوز سیگنالی ثبت نشده</strong><p>اولین سیگنال شما اینجا نمایش داده می‌شود.</p></div></div>
+      </section>
+    </div>
+    <section class="card history-card">
+      <div class="section-title"><div><span class="step">03</span><div><h2>تاریخچه نتایج</h2><p>سیگنال‌های پایان‌یافته در ۳۰ روز گذشته</p></div></div><span id="historyCount" class="counter">۰</span></div>
+      <div id="history" class="history-list"><div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div></div>
+    </section>
+    <footer><span>PHOENIX • BYBIT DEMO</span><span>اجرای امن، کنترل‌شده و آزمایشی</span></footer>
   </main>
-  <script src="/app.js"></script>
+  <dialog id="securityDialog" class="security-dialog">
+    <form id="securityForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">03</span><div><h2>تنظیمات امنیتی</h2><p>تغییر نام کاربری و رمز ورود پنل</p></div></div><button id="closeSecurity" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <div class="security-note"><i>!</i><span>بعد از ذخیره، اطلاعات ورود قبلی فوراً غیرفعال می‌شود و باید با اطلاعات جدید وارد شوید.</span></div>
+        <label>نام کاربری جدید<input name="username" dir="ltr" autocomplete="username" minlength="3" maxlength="32" required placeholder="new-username"></label>
+        <label>رمز عبور جدید<input name="password" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="حداقل ۶ کاراکتر"></label>
+        <label>تکرار رمز عبور<input name="confirmPassword" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="رمز را دوباره وارد کنید"></label>
+        <small class="password-rule">رمز عبور باید حداقل ۶ کاراکتر باشد.</small>
+        <button class="primary" type="submit">ذخیره اطلاعات ورود جدید</button>
+        <p id="securityMessage" role="status"></p>
+      </div>
+    </form>
+  </dialog>
+  <link rel="stylesheet" href="/history.css?v=1">
+  <script src="/app.js?v=4"></script>
 </body>
 </html>

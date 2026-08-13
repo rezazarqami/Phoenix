@@ -33,3 +33,11 @@ public sealed record BybitOrderResult(
     decimal Price);
 
 public sealed record BybitCancelResult(string OrderId, string OrderLinkId);
+
+public sealed record BybitOrderStatus(
+    string OrderId,
+    string Symbol,
+    string Status,
+    decimal? AveragePrice,
+    decimal ExecutedQuantity,
+    DateTime? UpdatedAtUtc);

@@ -16,13 +16,26 @@ public sealed class ServerSignal
     public decimal EntryPrice { get; set; }
     public decimal TakeProfit { get; set; }
     public decimal StopLoss { get; set; }
+    public decimal? StopLoss2 { get; set; }
+    public decimal? RiskFreePrice { get; set; }
     public decimal? LastPrice { get; set; }
+    public decimal ExpirePrice { get; set; }
+    public decimal ExpireActivationPrice { get; set; }
+    public string ExpireStage { get; set; } = "Initial";
     public string Status { get; set; } = "Pending";
     public string OrderLinkId { get; set; } = string.Empty;
     public string? BybitOrderId { get; set; }
     public string? Error { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? SubmittedAtUtc { get; set; }
+    public DateTime? FilledAtUtc { get; set; }
+    public decimal? AverageFillPrice { get; set; }
+    public decimal? ExecutedQuantity { get; set; }
+    public DateTime? TargetReachedAtUtc { get; set; }
+    public DateTime? RiskFreeReachedAtUtc { get; set; }
+    public DateTime? StopLossReachedAtUtc { get; set; }
+    public DateTime? ExpireAdjustedAtUtc { get; set; }
+    public DateTime? ExpiredAtUtc { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview)
     {
@@ -39,6 +52,10 @@ public sealed class ServerSignal
             EntryPrice = preview.Price,
             TakeProfit = preview.TakeProfit,
             StopLoss = preview.StopLoss,
+            StopLoss2 = signal.TradePlan?.StopLoss2,
+            RiskFreePrice = signal.TradePlan?.RiskFreePrice,
+            ExpirePrice = signal.Direction == Phoenix.Core.Entities.Direction.Long ? signal.High : signal.Low,
+            ExpireActivationPrice = preview.Price + 0.20m * (preview.TakeProfit - preview.Price),
             OrderLinkId = $"phoenix-{id:N}"[..36],
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -54,18 +71,26 @@ public sealed class ServerOrderStore
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _filePath;
+    private readonly SignalHistoryStore _history;
     private List<ServerSignal>? _signals;
+    private bool _historyMigrated;
 
     public ServerOrderStore()
     {
         _filePath = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
             ?? Path.Combine(AppContext.BaseDirectory, "data", "server-signals.json");
+        _history = new SignalHistoryStore(_filePath);
     }
 
     public async Task<IReadOnlyList<ServerSignal>> GetAllAsync(CancellationToken token = default)
     {
         await _gate.WaitAsync(token);
-        try { return (await LoadUnsafeAsync(token)).Select(Clone).ToList(); }
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            await MigrateHistoryUnsafeAsync(signals, token);
+            return signals.Select(Clone).ToList();
+        }
         finally { _gate.Release(); }
     }
 
@@ -77,6 +102,7 @@ public sealed class ServerOrderStore
             var signals = await LoadUnsafeAsync(token);
             signals.Add(Clone(signal));
             await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "SignalCreated", token);
         }
         finally { _gate.Release(); }
     }
@@ -91,6 +117,7 @@ public sealed class ServerOrderStore
             if (index < 0) throw new InvalidOperationException("سفارش در صف پیدا نشد.");
             signals[index] = Clone(signal);
             await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "SignalUpdated", token);
         }
         finally { _gate.Release(); }
     }
@@ -101,11 +128,27 @@ public sealed class ServerOrderStore
         try
         {
             var signals = await LoadUnsafeAsync(token);
-            var removed = signals.RemoveAll(x => x.Id == id) > 0;
-            if (removed) await SaveUnsafeAsync(signals, token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            var removed = signal is not null && signals.Remove(signal);
+            if (removed)
+            {
+                await SaveUnsafeAsync(signals, token);
+                await _history.MarkRemovedAsync(signal!, token);
+            }
             return removed;
         }
         finally { _gate.Release(); }
+    }
+
+    public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
+        CancellationToken token = default) => _history.GetAsync(days, limit, token);
+
+    private async Task MigrateHistoryUnsafeAsync(List<ServerSignal> signals, CancellationToken token)
+    {
+        if (_historyMigrated) return;
+        foreach (var signal in signals)
+            await _history.UpsertAsync(signal, "ImportedFromQueue", token);
+        _historyMigrated = true;
     }
 
     private async Task<List<ServerSignal>> LoadUnsafeAsync(CancellationToken token)
@@ -131,7 +174,15 @@ public sealed class ServerOrderStore
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,
         Quantity = signal.Quantity, EntryPrice = signal.EntryPrice, TakeProfit = signal.TakeProfit,
         StopLoss = signal.StopLoss, LastPrice = signal.LastPrice, Status = signal.Status,
+        ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,
+        ExpireStage = signal.ExpireStage,
+        StopLoss2 = signal.StopLoss2, RiskFreePrice = signal.RiskFreePrice,
         OrderLinkId = signal.OrderLinkId, BybitOrderId = signal.BybitOrderId, Error = signal.Error,
-        CreatedAtUtc = signal.CreatedAtUtc, SubmittedAtUtc = signal.SubmittedAtUtc
+        CreatedAtUtc = signal.CreatedAtUtc, SubmittedAtUtc = signal.SubmittedAtUtc,
+        FilledAtUtc = signal.FilledAtUtc, AverageFillPrice = signal.AverageFillPrice,
+        ExecutedQuantity = signal.ExecutedQuantity,
+        TargetReachedAtUtc = signal.TargetReachedAtUtc, RiskFreeReachedAtUtc = signal.RiskFreeReachedAtUtc,
+        StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
+        ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc
     };
 }

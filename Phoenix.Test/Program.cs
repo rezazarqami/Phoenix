@@ -185,10 +185,13 @@ Run("Order queue persists across application restarts", () =>
 Run("Server signal queue persists across application restarts", () =>
 {
     var path = Path.Combine(Path.GetTempPath(), $"phoenix-server-queue-{Guid.NewGuid():N}.json");
+    var historyPath = Path.ChangeExtension(path, ".db");
     var previous = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH");
+    var previousHistory = Environment.GetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH");
     try
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", path);
+        Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", historyPath);
         var signal = new ServerSignal
         {
             Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Quantity = 0.001m,
@@ -202,13 +205,66 @@ Run("Server signal queue persists across application restarts", () =>
         Equal("Pending", restored[0].Status);
         True(new ServerOrderStore().RemoveAsync(signal.Id).GetAwaiter().GetResult());
         Equal(0, new ServerOrderStore().GetAllAsync().GetAwaiter().GetResult().Count);
+        var history = new ServerOrderStore().GetHistoryAsync().GetAwaiter().GetResult();
+        Equal(1, history.Count);
+        Equal(signal.Id, history[0].Signal.Id);
+        True(history[0].RemovedAtUtc is not null);
     }
     finally
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
+        Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if (File.Exists(path)) File.Delete(path);
         if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
+        if (File.Exists(historyPath)) File.Delete(historyPath);
+        if (File.Exists(historyPath + "-wal")) File.Delete(historyPath + "-wal");
+        if (File.Exists(historyPath + "-shm")) File.Delete(historyPath + "-shm");
     }
+});
+
+Run("Server lifecycle levels respect Long direction", () =>
+{
+    var signal = new ServerSignal { Direction = "Long", TakeProfit = 110m, StopLoss = 90m };
+    True(DemoOrderWorker.TargetReached(signal, 110m));
+    False(DemoOrderWorker.TargetReached(signal, 109m));
+    True(DemoOrderWorker.StopLossReached(signal, 90m));
+    False(DemoOrderWorker.StopLossReached(signal, 91m));
+});
+
+Run("Server lifecycle levels respect Short direction", () =>
+{
+    var signal = new ServerSignal { Direction = "Short", TakeProfit = 90m, StopLoss = 110m };
+    True(DemoOrderWorker.TargetReached(signal, 90m));
+    False(DemoOrderWorker.TargetReached(signal, 91m));
+    True(DemoOrderWorker.StopLossReached(signal, 110m));
+    False(DemoOrderWorker.StopLossReached(signal, 109m));
+});
+
+Run("Long expiry activates after twenty percent approach", () =>
+{
+    var signal = new ServerSignal
+    {
+        Direction = "Long", EntryPrice = 100m, TakeProfit = 110m,
+        ExpireActivationPrice = 102m
+    };
+    False(DemoOrderWorker.ExpireActivationReached(signal, 102.01m));
+    True(DemoOrderWorker.ExpireActivationReached(signal, 102m));
+    False(DemoOrderWorker.TargetExpiryReached(signal, 109.99m));
+    True(DemoOrderWorker.TargetExpiryReached(signal, 110m));
+});
+
+Run("Short expiry activates after twenty percent approach", () =>
+{
+    var signal = new ServerSignal
+    {
+        Direction = "Short", EntryPrice = 110m, TakeProfit = 100m,
+        ExpireActivationPrice = 108m
+    };
+    False(DemoOrderWorker.ExpireActivationReached(signal, 107.99m));
+    True(DemoOrderWorker.ExpireActivationReached(signal, 108m));
+    False(DemoOrderWorker.TargetExpiryReached(signal, 100.01m));
+    True(DemoOrderWorker.TargetExpiryReached(signal, 100m));
 });
 
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");

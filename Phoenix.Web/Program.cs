@@ -81,15 +81,15 @@ app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, Telegram
 app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit, CancellationToken token) =>
 {
     var signals = await store.GetAllAsync(token);
-    foreach (var signal in signals.Where(x => x.Leverage is null or <= 0m))
+    foreach (var signal in signals.Where(x => x.Status == "Pending" && x.LeverageSource != "PhoenixFormula"))
     {
         try
         {
-            signal.Leverage = await bybit.GetLeverageAsync(signal.Symbol, token);
-            if (signal.Leverage is > 0m)
-                await store.UpdateAsync(signal, token);
+            var rules = await bybit.GetInstrumentRulesAsync(signal.Symbol, token);
+            signal.ApplyPhoenixLeverage(rules);
+            await store.UpdateAsync(signal, token);
         }
-        catch { /* A missing leverage must not make the signal panel unavailable. */ }
+        catch { /* A temporary Bybit failure must not make the signal panel unavailable. */ }
     }
     return Results.Ok(signals.OrderByDescending(x => x.CreatedAtUtc));
 });
@@ -143,14 +143,12 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
             Status = SignalStatus.WaitingEntry
         };
         signal.TradePlan = calculator.Calculate(signal);
+        var rules = await bybit.GetInstrumentRulesAsync(signal.Symbol, token);
+        signal.TradePlan.Leverage = BybitLeverageRules.Normalize(signal.TradePlan.Leverage, rules);
         var position = new ExecutionManager().PreparePosition(signal)
             ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
-        var rules = await bybit.GetInstrumentRulesAsync(signal.Symbol, token);
         var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
-        decimal? leverage = null;
-        try { leverage = await bybit.GetLeverageAsync(signal.Symbol, token); }
-        catch { /* Order processing remains available if leverage lookup is temporarily unavailable. */ }
-        var queued = ServerSignal.FromPreview(signal, preview, leverage);
+        var queued = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
         await store.AddAsync(queued, token);
         await telegram.SignalQueuedAsync(queued, token);
         return Results.Created($"/api/signals/{queued.Id}", queued);

@@ -41,8 +41,15 @@ Run("Position quantity is calculated from USDT value", () =>
 {
     var signal = Prepare(BuildSignal(Direction.Long));
     var position = new ExecutionManager().OpenPosition(signal)!;
-    Equal(signal.PositionSizeUsdt / signal.TradePlan!.EntryPrice, position.Quantity);
+    Equal(signal.PositionSizeUsdt * signal.TradePlan!.Leverage / signal.TradePlan.EntryPrice, position.Quantity);
     Equal(100m, position.PositionSizeUsdt);
+});
+
+Run("Leverage targets fifty percent return at take profit", () =>
+{
+    var plan = new StrategyCalculator().Calculate(BuildSignal(Direction.Long));
+    var targetMovePercent = Math.Abs(plan.EntryPrice - plan.TakeProfit) / plan.EntryPrice * 100m;
+    Equal(50m, plan.Leverage * targetMovePercent);
 });
 
 Run("Paper exchange records full protective order set", () =>
@@ -101,7 +108,7 @@ Run("Bybit order preview follows instrument precision", () =>
     var position = new ExecutionManager().OpenPosition(signal)!;
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     var preview = BybitOrderPreviewBuilder.Build("btcusdt", position, rules);
-    Equal(0.001m, preview.Quantity);
+    Equal(0.423m, preview.Quantity);
     Equal(118764.00m, preview.Price);
     Equal(119000.00m, preview.TakeProfit);
     Equal(118542.00m, preview.StopLoss);
@@ -111,7 +118,7 @@ Run("Bybit order preview follows instrument precision", () =>
 Run("Bybit order preview rejects orders below minimum", () =>
 {
     var signal = Prepare(BuildSignal(Direction.Long));
-    signal.PositionSizeUsdt = 1m;
+    signal.PositionSizeUsdt = 0.01m;
     var position = new ExecutionManager().OpenPosition(signal)!;
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     Throws<InvalidOperationException>(() => BybitOrderPreviewBuilder.Build("BTCUSDT", position, rules));
@@ -174,11 +181,35 @@ Run("Bybit instrument rules expose maximum leverage", () =>
 {
     var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
     {
-        Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"priceFilter\":{\"tickSize\":\"0.1\"},\"lotSizeFilter\":{\"qtyStep\":\"0.001\",\"minOrderQty\":\"0.001\",\"minNotionalValue\":\"5\"},\"leverageFilter\":{\"maxLeverage\":\"100\"}}]}}")
+        Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"priceFilter\":{\"tickSize\":\"0.1\"},\"lotSizeFilter\":{\"qtyStep\":\"0.001\",\"minOrderQty\":\"0.001\",\"minNotionalValue\":\"5\"},\"leverageFilter\":{\"maxLeverage\":\"100\",\"minLeverage\":\"1\",\"leverageStep\":\"0.01\"}}]}}")
     });
     var client = new BybitDemoClient(new BybitDemoOptions(null, null), new HttpClient(handler));
     var rules = client.GetInstrumentRulesAsync("BTCUSDT").GetAwaiter().GetResult();
     Equal(100m, rules.MaximumLeverage);
+});
+
+Run("Calculated leverage is capped and rounded down to Bybit rules", () =>
+{
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    Equal(100m, BybitLeverageRules.Normalize(120m, rules));
+    Equal(12.34m, BybitLeverageRules.Normalize(12.349m, rules));
+});
+
+Run("Phoenix sets both Bybit leverage sides before entry", () =>
+{
+    var handler = new StubHttpHandler(request =>
+    {
+        Equal("/v5/position/set-leverage", request.RequestUri!.AbsolutePath);
+        var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        True(body.Contains("\"buyLeverage\":\"12.34\"", StringComparison.Ordinal));
+        True(body.Contains("\"sellLeverage\":\"12.34\"", StringComparison.Ordinal));
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{}}")
+        };
+    });
+    var client = new BybitDemoClient(new BybitDemoOptions("key", "secret"), new HttpClient(handler));
+    client.SetLeverageAsync("BTCUSDT", 12.34m).GetAwaiter().GetResult();
 });
 
 Run("Queued order entry rules respect Buy and Sell direction", () =>

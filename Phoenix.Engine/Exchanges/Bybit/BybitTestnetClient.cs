@@ -70,7 +70,9 @@ public sealed class BybitDemoClient
             ReadDecimal(lotFilter, "qtyStep"),
             ReadDecimal(lotFilter, "minOrderQty"),
             ReadDecimal(lotFilter, "minNotionalValue"),
-            ReadDecimal(leverageFilter, "maxLeverage"));
+            ReadDecimal(leverageFilter, "maxLeverage"),
+            ReadDecimal(leverageFilter, "minLeverage"),
+            ReadDecimal(leverageFilter, "leverageStep"));
     }
 
     public async Task<IReadOnlyList<string>> GetTradableLinearSymbolsAsync(
@@ -159,6 +161,31 @@ public sealed class BybitDemoClient
                 return leverage;
         }
         return null;
+    }
+
+    public async Task SetLeverageAsync(
+        string symbol,
+        decimal leverage,
+        CancellationToken cancellationToken = default)
+    {
+        if (leverage <= 0m)
+            throw new ArgumentOutOfRangeException(nameof(leverage));
+        var value = FormatDecimal(leverage);
+        var body = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["category"] = "linear",
+            ["symbol"] = NormalizeSymbol(symbol),
+            ["buyLeverage"] = value,
+            ["sellLeverage"] = value
+        });
+        using var request = CreateSignedPostRequest("/v5/position/set-leverage", body);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        var code = document.RootElement.GetProperty("retCode").GetInt32();
+        if (code != 0 && code != 110043)
+            EnsureSuccess(document.RootElement);
     }
 
     public HttpRequestMessage CreateSignedGetRequest(string path, string queryString)

@@ -14,7 +14,9 @@ public sealed record BybitInstrumentRules(
     decimal QuantityStep,
     decimal MinimumOrderQuantity,
     decimal MinimumNotionalValue,
-    decimal MaximumLeverage = 0m);
+    decimal MaximumLeverage = 0m,
+    decimal MinimumLeverage = 1m,
+    decimal LeverageStep = 0.01m);
 
 public sealed record BybitOrderPreview(
     string Symbol,

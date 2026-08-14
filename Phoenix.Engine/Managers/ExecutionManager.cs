@@ -18,7 +18,8 @@ public class ExecutionManager
 
     public Position? PreparePosition(Signal signal)
     {
-        if (signal.TradePlan == null || signal.TradePlan.EntryPrice <= 0 || signal.PositionSizeUsdt <= 0)
+        if (signal.TradePlan == null || signal.TradePlan.EntryPrice <= 0 ||
+            signal.TradePlan.Leverage <= 0 || signal.PositionSizeUsdt <= 0)
             return null;
 
         Position position = new()
@@ -31,7 +32,7 @@ public class ExecutionManager
 
             EntryPrice = signal.TradePlan.EntryPrice,
 
-            Quantity = signal.PositionSizeUsdt / signal.TradePlan.EntryPrice,
+            Quantity = signal.PositionSizeUsdt * signal.TradePlan.Leverage / signal.TradePlan.EntryPrice,
 
             PositionSizeUsdt = signal.PositionSizeUsdt,
 

@@ -302,6 +302,23 @@ public sealed class BybitDemoClient
             updatedAtUtc);
     }
 
+    public async Task<BybitOrderStatus?> GetOrderStatusByLinkIdAsync(
+        string orderLinkId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(orderLinkId))
+            throw new ArgumentException("Order link ID is required.", nameof(orderLinkId));
+        var query = $"category=linear&orderLinkId={Uri.EscapeDataString(orderLinkId)}";
+        using var request = CreateSignedGetRequest("/v5/order/realtime", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var list = document.RootElement.GetProperty("result").GetProperty("list");
+        if (list.GetArrayLength() == 0) return null;
+        return ParseOrderStatus(list[0], orderLinkId);
+    }
+
     public HttpRequestMessage CreateSignedPostRequest(string path, string jsonBody)
     {
         if (!_options.HasCredentials)
@@ -361,5 +378,20 @@ public sealed class BybitDemoClient
         if (!element.TryGetProperty(propertyName, out var property)) return null;
         var text = property.GetString();
         return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
+
+    private static BybitOrderStatus ParseOrderStatus(JsonElement item, string fallbackId)
+    {
+        var averagePrice = TryReadDecimal(item, "avgPrice");
+        var executedQuantity = TryReadDecimal(item, "cumExecQty") ?? 0m;
+        DateTime? updatedAtUtc = null;
+        var updatedText = item.TryGetProperty("updatedTime", out var updated) ? updated.GetString() : null;
+        if (long.TryParse(updatedText, NumberStyles.None, CultureInfo.InvariantCulture, out var milliseconds))
+            updatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime;
+        return new BybitOrderStatus(
+            item.GetProperty("orderId").GetString() ?? fallbackId,
+            item.GetProperty("symbol").GetString() ?? string.Empty,
+            item.GetProperty("orderStatus").GetString() ?? "Unknown",
+            averagePrice, executedQuantity, updatedAtUtc);
     }
 }

@@ -78,8 +78,7 @@ public sealed class DemoOrderWorker(
 
         if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
         {
-            order.Status = "Expired";
-            order.ExpiredAtUtc = DateTime.UtcNow;
+            Complete(order, "Expired", DateTime.UtcNow, "InitialBoundary");
             await store.UpdateAsync(order, token);
             return;
         }
@@ -93,8 +92,7 @@ public sealed class DemoOrderWorker(
 
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
         {
-            order.Status = "Expired";
-            order.ExpiredAtUtc = DateTime.UtcNow;
+            Complete(order, "Expired", DateTime.UtcNow, "TargetAfterActivation");
         }
 
         await store.UpdateAsync(order, token);
@@ -162,23 +160,36 @@ public sealed class DemoOrderWorker(
         }
         catch (Exception exception)
         {
-            order.Status = "Error";
-            order.Error = exception.Message;
-            logger.LogError(exception, "Demo order {OrderLinkId} was not confirmed", order.OrderLinkId);
-            await telegram.OrderErrorAsync(order, token);
+            var recovered = exception.Message.Contains("110072", StringComparison.Ordinal) ||
+                            exception.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
+                ? await client.GetOrderStatusByLinkIdAsync(order.OrderLinkId, token) : null;
+            if (recovered is not null)
+            {
+                order.BybitOrderId = recovered.OrderId;
+                order.Status = recovered.Status == "Filled" ? "Filled" : "Submitted";
+                order.Error = null;
+            }
+            else
+            {
+                order.Status = "Error";
+                order.Error = exception.Message;
+                logger.LogError(exception, "Demo order {OrderLinkId} was not confirmed", order.OrderLinkId);
+                await telegram.OrderErrorAsync(order, token);
+            }
         }
         await store.UpdateAsync(order, token);
     }
 
     private async Task TrackLevelsAsync(ServerSignal order, decimal price, CancellationToken token)
     {
+        if (order.CompletedAtUtc is not null) return;
         BackfillStopLoss2Levels(order);
         if (order.StopLossReachedAtUtc is null && !string.IsNullOrWhiteSpace(order.StopLoss2OrderId))
         {
             var sl2Status = await client.GetOrderStatusAsync(order.StopLoss2OrderId, token);
             if (sl2Status?.Status == "Filled")
             {
-                order.RiskFreeClosedAtUtc = sl2Status.UpdatedAtUtc ?? DateTime.UtcNow;
+                Complete(order, "RiskFree", sl2Status.UpdatedAtUtc ?? DateTime.UtcNow);
                 await telegram.RiskFreeClosedAsync(order, token);
                 await store.UpdateAsync(order, token);
                 return;
@@ -187,7 +198,7 @@ public sealed class DemoOrderWorker(
 
         if (order.TargetReachedAtUtc is null && TargetReached(order, price))
         {
-            order.TargetReachedAtUtc = DateTime.UtcNow;
+            Complete(order, "Target", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.TargetReachedAsync(order, token);
         }
@@ -215,12 +226,25 @@ public sealed class DemoOrderWorker(
 
         if (order.StopLossReachedAtUtc is null && StopLossReached(order, price))
         {
-            order.StopLossReachedAtUtc = DateTime.UtcNow;
+            Complete(order, "StopLoss", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.StopLossReachedAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);
+    }
+
+    private static void Complete(ServerSignal order, string outcome, DateTime at, string? expireReason = null)
+    {
+        if (order.CompletedAtUtc is not null) return;
+        order.Outcome = outcome;
+        order.CompletedAtUtc = at;
+        order.Status = outcome == "Expired" ? "Expired" : "Completed";
+        order.ExpireReason = expireReason;
+        if (outcome == "Target") order.TargetReachedAtUtc = at;
+        else if (outcome == "RiskFree") order.RiskFreeClosedAtUtc = at;
+        else if (outcome == "StopLoss") order.StopLossReachedAtUtc = at;
+        else if (outcome == "Expired") order.ExpiredAtUtc = at;
     }
 
     private static void BackfillStopLoss2Levels(ServerSignal order)

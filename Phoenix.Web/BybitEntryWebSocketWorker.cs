@@ -129,10 +129,22 @@ public sealed class BybitEntryWebSocketWorker(
         }
         catch (Exception exception)
         {
-            order.Status = "Error";
-            order.Error = exception.Message;
-            logger.LogError(exception, "WebSocket-triggered order {OrderLinkId} failed", order.OrderLinkId);
-            await telegram.OrderErrorAsync(order, token);
+            var recovered = exception.Message.Contains("110072", StringComparison.Ordinal) ||
+                            exception.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
+                ? await client.GetOrderStatusByLinkIdAsync(order.OrderLinkId, token) : null;
+            if (recovered is not null)
+            {
+                order.BybitOrderId = recovered.OrderId;
+                order.Status = recovered.Status == "Filled" ? "Filled" : "Submitted";
+                order.Error = null;
+            }
+            else
+            {
+                order.Status = "Error";
+                order.Error = exception.Message;
+                logger.LogError(exception, "WebSocket-triggered order {OrderLinkId} failed", order.OrderLinkId);
+                await telegram.OrderErrorAsync(order, token);
+            }
         }
         await store.UpdateAsync(order, token);
     }

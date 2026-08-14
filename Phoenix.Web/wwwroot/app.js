@@ -159,11 +159,15 @@ async function refreshSignals() {
 }
 
 function isFinished(signal) {
-  return Boolean(signal.targetReachedAtUtc || signal.riskFreeClosedAtUtc || signal.stopLossReachedAtUtc || signal.removedAtUtc) ||
+  return Boolean(signal.completedAtUtc || signal.targetReachedAtUtc || signal.riskFreeClosedAtUtc || signal.stopLossReachedAtUtc || signal.removedAtUtc) ||
     ['Expired', 'Cancelled', 'Rejected', 'Deactivated', 'Error'].includes(signal.status);
 }
 
 function resultLabel(signal) {
+  if (signal.outcome === 'Target') return 'تارگت خورده';
+  if (signal.outcome === 'RiskFree') return 'ریسک‌فری';
+  if (signal.outcome === 'StopLoss') return 'استاپ خورده';
+  if (signal.outcome === 'Expired') return signal.expireReason === 'InitialBoundary' ? 'اکسپایر ـ حالت اول' : 'اکسپایر ـ حالت دوم';
   if (signal.targetReachedAtUtc) return 'تارگت خورده';
   if (signal.riskFreeClosedAtUtc) return 'ریسک‌فری';
   if (signal.stopLossReachedAtUtc) return 'استاپ خورده';
@@ -182,8 +186,9 @@ async function refreshHistory() {
     document.querySelector('#historyCount').textContent = fa.format(finished.length);
     document.querySelector('#history').innerHTML = finished.length ? finished.map(item => {
       const s = item.signal;
-      const ended = s.targetReachedAtUtc || s.riskFreeClosedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
-      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.targetReachedAtUtc || s.riskFreeClosedAtUtc ? 'win' : s.stopLossReachedAtUtc ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT</small><time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
+      const ended = s.completedAtUtc || s.targetReachedAtUtc || s.riskFreeClosedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
+      const reason = s.outcome === 'Expired' ? `<em class="expire-reason">${s.expireReason === 'InitialBoundary' ? 'عبور از مرز اولیه سقف/کف' : 'بازگشت به تارگت بعد از فعال‌شدن اکسپایر'}</em>` : '';
+      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
     }).join('') : '<div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div>';
   } catch { /* history remains unchanged until the next refresh */ }
 }

@@ -12,6 +12,7 @@ public sealed class ServerSignal
     public decimal Ceiling { get; set; }
     public decimal Floor { get; set; }
     public decimal PositionSizeUsdt { get; set; }
+    public decimal? Leverage { get; set; }
     public decimal Quantity { get; set; }
     public decimal EntryPrice { get; set; }
     public decimal TakeProfit { get; set; }
@@ -42,7 +43,7 @@ public sealed class ServerSignal
     public DateTime? CompletedAtUtc { get; set; }
     public string? ExpireReason { get; set; }
 
-    public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview)
+    public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {
         var id = Guid.NewGuid();
         return new ServerSignal
@@ -53,6 +54,7 @@ public sealed class ServerSignal
             Ceiling = signal.High,
             Floor = signal.Low,
             PositionSizeUsdt = signal.PositionSizeUsdt,
+            Leverage = leverage,
             Quantity = preview.Quantity,
             EntryPrice = preview.Price,
             TakeProfit = preview.TakeProfit,
@@ -218,6 +220,7 @@ public sealed class ServerOrderStore
     {
         Id = signal.Id, Symbol = signal.Symbol, Direction = signal.Direction,
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,
+        Leverage = signal.Leverage,
         Quantity = signal.Quantity, EntryPrice = signal.EntryPrice, TakeProfit = signal.TakeProfit,
         StopLoss = signal.StopLoss, LastPrice = signal.LastPrice, Status = signal.Status,
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,

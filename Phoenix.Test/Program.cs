@@ -152,6 +152,24 @@ Run("Bybit Demo limit orders include protection and return an order ID", () =>
     Equal("demo-123", result.OrderId);
 });
 
+Run("Bybit leverage is read from the Demo position setting", () =>
+{
+    var handler = new StubHttpHandler(request =>
+    {
+        Equal("/v5/position/list", request.RequestUri!.AbsolutePath);
+        Equal("category=linear&symbol=BTCUSDT", request.RequestUri.Query.TrimStart('?'));
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"leverage\":\"12\"}]}}")
+        };
+    });
+    var client = new BybitDemoClient(
+        new BybitDemoOptions("test-key", "test-secret"),
+        new HttpClient(handler),
+        () => 1_700_000_000_000);
+    Equal(12m, client.GetLeverageAsync("btcusdt").GetAwaiter().GetResult()!.Value);
+});
+
 Run("Queued order entry rules respect Buy and Sell direction", () =>
 {
     var buy = new QueuedOrder { Side = "Buy", EntryPrice = 100m };
@@ -225,7 +243,7 @@ Run("Server signal queue persists across application restarts", () =>
         var signal = new ServerSignal
         {
             Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Quantity = 0.001m,
-            EntryPrice = 100m, TakeProfit = 110m, StopLoss = 90m,
+            EntryPrice = 100m, TakeProfit = 110m, StopLoss = 90m, Leverage = 12m,
             OrderLinkId = "phoenix-server-test", CreatedAtUtc = DateTime.UtcNow
         };
         new ServerOrderStore().AddAsync(signal).GetAwaiter().GetResult();
@@ -233,6 +251,7 @@ Run("Server signal queue persists across application restarts", () =>
         Equal(1, restored.Count);
         Equal("phoenix-server-test", restored[0].OrderLinkId);
         Equal("Pending", restored[0].Status);
+        Equal(12m, restored[0].Leverage!.Value);
         True(new ServerOrderStore().RemoveAsync(signal.Id).GetAwaiter().GetResult());
         Equal(0, new ServerOrderStore().GetAllAsync().GetAwaiter().GetResult().Count);
         var history = new ServerOrderStore().GetHistoryAsync().GetAwaiter().GetResult();

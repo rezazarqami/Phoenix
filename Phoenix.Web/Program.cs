@@ -78,8 +78,21 @@ app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, Telegram
     telegramConfigured = telegram.IsConfigured
 }));
 
-app.MapGet("/api/signals", async (ServerOrderStore store, CancellationToken token) =>
-    Results.Ok((await store.GetAllAsync(token)).OrderByDescending(x => x.CreatedAtUtc)));
+app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit, CancellationToken token) =>
+{
+    var signals = await store.GetAllAsync(token);
+    foreach (var signal in signals.Where(x => x.Leverage is null or <= 0m))
+    {
+        try
+        {
+            signal.Leverage = await bybit.GetLeverageAsync(signal.Symbol, token);
+            if (signal.Leverage is > 0m)
+                await store.UpdateAsync(signal, token);
+        }
+        catch { /* A missing leverage must not make the signal panel unavailable. */ }
+    }
+    return Results.Ok(signals.OrderByDescending(x => x.CreatedAtUtc));
+});
 
 app.MapGet("/api/history", async (int? days, int? limit, ServerOrderStore store, CancellationToken token) =>
     Results.Ok(await store.GetHistoryAsync(days ?? 30, limit ?? 1000, token)));
@@ -121,7 +134,10 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
             ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
         var rules = await bybit.GetInstrumentRulesAsync(signal.Symbol, token);
         var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
-        var queued = ServerSignal.FromPreview(signal, preview);
+        decimal? leverage = null;
+        try { leverage = await bybit.GetLeverageAsync(signal.Symbol, token); }
+        catch { /* Order processing remains available if leverage lookup is temporarily unavailable. */ }
+        var queued = ServerSignal.FromPreview(signal, preview, leverage);
         await store.AddAsync(queued, token);
         await telegram.SignalQueuedAsync(queued, token);
         return Results.Created($"/api/signals/{queued.Id}", queued);

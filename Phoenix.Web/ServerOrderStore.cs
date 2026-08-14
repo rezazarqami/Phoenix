@@ -38,6 +38,9 @@ public sealed class ServerSignal
     public DateTime? StopLossReachedAtUtc { get; set; }
     public DateTime? ExpireAdjustedAtUtc { get; set; }
     public DateTime? ExpiredAtUtc { get; set; }
+    public string? Outcome { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public string? ExpireReason { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview)
     {
@@ -90,6 +93,8 @@ public sealed class ServerOrderStore
         try
         {
             var signals = await LoadUnsafeAsync(token);
+            if (signals.Aggregate(false, (changed, signal) => NormalizeTerminalState(signal) || changed))
+                await SaveUnsafeAsync(signals, token);
             await MigrateHistoryUnsafeAsync(signals, token);
             return signals.Select(Clone).ToList();
         }
@@ -170,6 +175,28 @@ public sealed class ServerOrderStore
         _historyMigrated = true;
     }
 
+    public static bool NormalizeTerminalState(ServerSignal signal)
+    {
+        if (signal.CompletedAtUtc is not null && !string.IsNullOrWhiteSpace(signal.Outcome)) return false;
+        var candidates = new List<(DateTime At, string Outcome)>();
+        if (signal.TargetReachedAtUtc is { } target) candidates.Add((target, "Target"));
+        if (signal.RiskFreeClosedAtUtc is { } riskFree) candidates.Add((riskFree, "RiskFree"));
+        if (signal.StopLossReachedAtUtc is { } stop) candidates.Add((stop, "StopLoss"));
+        if (signal.ExpiredAtUtc is { } expired) candidates.Add((expired, "Expired"));
+        if (candidates.Count == 0) return false;
+        var first = candidates.MinBy(x => x.At);
+        signal.CompletedAtUtc = first.At;
+        signal.Outcome = first.Outcome;
+        if (first.Outcome == "Expired" && string.IsNullOrWhiteSpace(signal.ExpireReason))
+            signal.ExpireReason = signal.ExpireStage == "Target" ? "TargetAfterActivation" : "InitialBoundary";
+        signal.TargetReachedAtUtc = first.Outcome == "Target" ? first.At : null;
+        signal.RiskFreeClosedAtUtc = first.Outcome == "RiskFree" ? first.At : null;
+        signal.StopLossReachedAtUtc = first.Outcome == "StopLoss" ? first.At : null;
+        signal.ExpiredAtUtc = first.Outcome == "Expired" ? first.At : null;
+        signal.Status = first.Outcome == "Expired" ? "Expired" : "Completed";
+        return true;
+    }
+
     private async Task<List<ServerSignal>> LoadUnsafeAsync(CancellationToken token)
     {
         if (_signals is not null) return _signals;
@@ -204,6 +231,7 @@ public sealed class ServerOrderStore
         TargetReachedAtUtc = signal.TargetReachedAtUtc, RiskFreeReachedAtUtc = signal.RiskFreeReachedAtUtc,
         RiskFreeClosedAtUtc = signal.RiskFreeClosedAtUtc,
         StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
-        ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc
+        ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc,
+        Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason
     };
 }

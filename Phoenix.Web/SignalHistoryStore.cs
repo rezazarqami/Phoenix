@@ -158,6 +158,7 @@ public sealed class SignalHistoryStore
         if (before.RiskFreeReachedAtUtc != after.RiskFreeReachedAtUtc) return "RiskFreeReached";
         if (before.RiskFreeClosedAtUtc != after.RiskFreeClosedAtUtc) return "RiskFreeClosed";
         if (before.StopLossReachedAtUtc != after.StopLossReachedAtUtc) return "StopLossReached";
+        if (before.Outcome != after.Outcome) return $"Completed:{after.Outcome}";
         return null;
     }
 

@@ -326,6 +326,33 @@ Run("Short expiry activates after twenty percent approach", () =>
     True(DemoOrderWorker.TargetExpiryReached(signal, 100m));
 });
 
+Run("First terminal result is normalized and locked", () =>
+{
+    var targetAt = DateTime.UtcNow.AddMinutes(-10);
+    var signal = new ServerSignal
+    {
+        Status = "Filled", TargetReachedAtUtc = targetAt,
+        StopLossReachedAtUtc = targetAt.AddMinutes(5)
+    };
+    True(ServerOrderStore.NormalizeTerminalState(signal));
+    Equal("Target", signal.Outcome!);
+    Equal("Completed", signal.Status);
+    Equal(targetAt, signal.CompletedAtUtc!.Value);
+    True(signal.StopLossReachedAtUtc is null);
+    False(ServerOrderStore.NormalizeTerminalState(signal));
+});
+
+Run("Expired result preserves its reason", () =>
+{
+    var signal = new ServerSignal
+    {
+        Status = "Expired", ExpireStage = "Target", ExpiredAtUtc = DateTime.UtcNow
+    };
+    True(ServerOrderStore.NormalizeTerminalState(signal));
+    Equal("Expired", signal.Outcome!);
+    Equal("TargetAfterActivation", signal.ExpireReason!);
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

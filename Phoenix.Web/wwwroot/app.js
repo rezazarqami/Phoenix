@@ -12,6 +12,7 @@ const symbolMenu = document.querySelector('#symbolMenu');
 const symbolOptions = document.querySelector('#symbolOptions');
 const symbolEmpty = document.querySelector('#symbolEmpty');
 const symbolCount = document.querySelector('#symbolCount');
+const maximumLeverage = document.querySelector('#maximumLeverage');
 const securityDialog = document.querySelector('#securityDialog');
 const securityForm = document.querySelector('#securityForm');
 const securityMessage = document.querySelector('#securityMessage');
@@ -81,7 +82,22 @@ function selectSymbol(symbol, close = true) {
   symbolValue.value = symbol;
   symbolSearch.value = symbol;
   symbolPicker.classList.remove('invalid');
+  loadMaximumLeverage(symbol);
   if (close) closeSymbolMenu();
+}
+
+async function loadMaximumLeverage(symbol) {
+  maximumLeverage.textContent = 'حداکثر Leverage مجاز Bybit: در حال دریافت…';
+  try {
+    const response = await fetch(`/api/instruments/${encodeURIComponent(symbol)}/limits`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || !data.maximumLeverage) throw new Error();
+    if (symbolValue.value !== symbol) return;
+    maximumLeverage.textContent = `حداکثر Leverage مجاز Bybit: ${fa.format(data.maximumLeverage)}×`;
+  } catch {
+    if (symbolValue.value === symbol)
+      maximumLeverage.textContent = 'حداکثر Leverage مجاز Bybit: نامشخص';
+  }
 }
 
 symbolSearch.addEventListener('focus', openSymbolMenu);
@@ -153,7 +169,7 @@ async function refreshSignals() {
     document.querySelector('#count').textContent = fa.format(active.length);
     document.querySelector('#orders').innerHTML = active.length ? active.map(s => `
       <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
-      <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · LEVERAGE ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
+      <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
       <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش Demo' : 'حذف از صف'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
   } catch { /* status indicator already reports connectivity */ }
 }
@@ -188,7 +204,7 @@ async function refreshHistory() {
       const s = item.signal;
       const ended = s.completedAtUtc || s.targetReachedAtUtc || s.riskFreeClosedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
       const reason = s.outcome === 'Expired' ? `<em class="expire-reason">${s.expireReason === 'InitialBoundary' ? 'عبور از مرز اولیه سقف/کف' : 'بازگشت به تارگت بعد از فعال‌شدن اکسپایر'}</em>` : '';
-      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · LEVERAGE ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
+      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
     }).join('') : '<div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div>';
   } catch { /* history remains unchanged until the next refresh */ }
 }

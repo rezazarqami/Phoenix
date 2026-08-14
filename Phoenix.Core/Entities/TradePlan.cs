@@ -8,6 +8,8 @@ public class TradePlan
 
     public decimal StopLoss1 { get; set; }
 
+    public decimal Leverage { get; set; }
+
     public decimal? StopLoss2 { get; set; }
 
     // نقطه‌ای که با رسیدن قیمت به آن

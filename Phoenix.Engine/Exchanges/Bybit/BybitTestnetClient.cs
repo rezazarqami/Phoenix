@@ -62,13 +62,17 @@ public sealed class BybitDemoClient
         var item = document.RootElement.GetProperty("result").GetProperty("list")[0];
         var priceFilter = item.GetProperty("priceFilter");
         var lotFilter = item.GetProperty("lotSizeFilter");
+        var leverageFilter = item.GetProperty("leverageFilter");
 
         return new BybitInstrumentRules(
             item.GetProperty("symbol").GetString() ?? symbol,
             ReadDecimal(priceFilter, "tickSize"),
             ReadDecimal(lotFilter, "qtyStep"),
             ReadDecimal(lotFilter, "minOrderQty"),
-            ReadDecimal(lotFilter, "minNotionalValue"));
+            ReadDecimal(lotFilter, "minNotionalValue"),
+            ReadDecimal(leverageFilter, "maxLeverage"),
+            ReadDecimal(leverageFilter, "minLeverage"),
+            ReadDecimal(leverageFilter, "leverageStep"));
     }
 
     public async Task<IReadOnlyList<string>> GetTradableLinearSymbolsAsync(
@@ -157,6 +161,31 @@ public sealed class BybitDemoClient
                 return leverage;
         }
         return null;
+    }
+
+    public async Task SetLeverageAsync(
+        string symbol,
+        decimal leverage,
+        CancellationToken cancellationToken = default)
+    {
+        if (leverage <= 0m)
+            throw new ArgumentOutOfRangeException(nameof(leverage));
+        var value = FormatDecimal(leverage);
+        var body = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["category"] = "linear",
+            ["symbol"] = NormalizeSymbol(symbol),
+            ["buyLeverage"] = value,
+            ["sellLeverage"] = value
+        });
+        using var request = CreateSignedPostRequest("/v5/position/set-leverage", body);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        var code = document.RootElement.GetProperty("retCode").GetInt32();
+        if (code != 0 && code != 110043)
+            EnsureSuccess(document.RootElement);
     }
 
     public HttpRequestMessage CreateSignedGetRequest(string path, string queryString)

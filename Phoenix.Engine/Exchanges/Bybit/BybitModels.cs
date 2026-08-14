@@ -13,7 +13,10 @@ public sealed record BybitInstrumentRules(
     decimal TickSize,
     decimal QuantityStep,
     decimal MinimumOrderQuantity,
-    decimal MinimumNotionalValue);
+    decimal MinimumNotionalValue,
+    decimal MaximumLeverage = 0m,
+    decimal MinimumLeverage = 1m,
+    decimal LeverageStep = 0.01m);
 
 public sealed record BybitOrderPreview(
     string Symbol,

@@ -46,6 +46,18 @@ public class StrategyCalculator : IStrategyCalculator
             plan.RiskFreePrice = plan.EntryPrice + profitDistance * 0.75m;
         }
 
+        plan.Leverage = CalculateLeverage(plan.EntryPrice, plan.TakeProfit);
+
         return plan;
+    }
+
+    public static decimal CalculateLeverage(decimal entryPrice, decimal takeProfit)
+    {
+        if (entryPrice <= 0m)
+            throw new ArgumentOutOfRangeException(nameof(entryPrice));
+        var targetDistancePercent = Math.Abs(entryPrice - takeProfit) / entryPrice * 100m;
+        if (targetDistancePercent <= 0m)
+            throw new InvalidOperationException("Entry-to-target distance must be greater than zero.");
+        return 50m / targetDistancePercent;
     }
 }

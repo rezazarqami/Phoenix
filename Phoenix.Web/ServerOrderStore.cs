@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Phoenix.Core.Entities;
 using Phoenix.Engine.Exchanges.Bybit;
+using Phoenix.Engine.Services;
 
 namespace Phoenix.Web;
 
@@ -13,6 +14,7 @@ public sealed class ServerSignal
     public decimal Floor { get; set; }
     public decimal PositionSizeUsdt { get; set; }
     public decimal? Leverage { get; set; }
+    public string? LeverageSource { get; set; }
     public decimal Quantity { get; set; }
     public decimal EntryPrice { get; set; }
     public decimal TakeProfit { get; set; }
@@ -55,6 +57,7 @@ public sealed class ServerSignal
             Floor = signal.Low,
             PositionSizeUsdt = signal.PositionSizeUsdt,
             Leverage = leverage,
+            LeverageSource = leverage is > 0m ? "PhoenixFormula" : null,
             Quantity = preview.Quantity,
             EntryPrice = preview.Price,
             TakeProfit = preview.TakeProfit,
@@ -71,6 +74,15 @@ public sealed class ServerSignal
     public BybitOrderPreview ToPreview() => new(
         Symbol, Direction == "Long" ? "Buy" : "Sell", Quantity,
         EntryPrice, TakeProfit, StopLoss, Quantity * EntryPrice);
+
+    public void ApplyPhoenixLeverage(BybitInstrumentRules rules)
+    {
+        Leverage = BybitLeverageRules.Normalize(
+            StrategyCalculator.CalculateLeverage(EntryPrice, TakeProfit), rules);
+        Quantity = BybitOrderPreviewBuilder.RoundToStep(
+            PositionSizeUsdt * Leverage.Value / EntryPrice, rules.QuantityStep);
+        LeverageSource = "PhoenixFormula";
+    }
 }
 
 public sealed class ServerOrderStore
@@ -221,6 +233,7 @@ public sealed class ServerOrderStore
         Id = signal.Id, Symbol = signal.Symbol, Direction = signal.Direction,
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,
         Leverage = signal.Leverage,
+        LeverageSource = signal.LeverageSource,
         Quantity = signal.Quantity, EntryPrice = signal.EntryPrice, TakeProfit = signal.TakeProfit,
         StopLoss = signal.StopLoss, LastPrice = signal.LastPrice, Status = signal.Status,
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,

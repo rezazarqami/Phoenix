@@ -152,6 +152,13 @@ public sealed class DemoOrderWorker(
         await telegram.EntryReachedAsync(order, token);
         try
         {
+            if (order.LeverageSource != "PhoenixFormula")
+            {
+                order.ApplyPhoenixLeverage(await client.GetInstrumentRulesAsync(order.Symbol, token));
+                await store.UpdateAsync(order, token);
+            }
+            await client.SetLeverageAsync(order.Symbol, order.Leverage
+                ?? throw new InvalidOperationException("Signal leverage is missing."), token);
             var result = await client.PlaceLimitOrderAsync(order.ToPreview(), order.OrderLinkId, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";

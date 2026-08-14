@@ -100,6 +100,19 @@ app.MapGet("/api/history", async (int? days, int? limit, ServerOrderStore store,
 app.MapGet("/api/instruments", async (BybitInstrumentCatalog catalog, CancellationToken token) =>
     Results.Ok(new { symbols = await catalog.GetAsync(token) }));
 
+app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoClient bybit, CancellationToken token) =>
+{
+    try
+    {
+        var rules = await bybit.GetInstrumentRulesAsync(symbol, token);
+        return Results.Ok(new { symbol = rules.Symbol, maximumLeverage = rules.MaximumLeverage });
+    }
+    catch (Exception exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
 app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpRequest, ServerOrderStore store,
     StrategyCalculator calculator, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
     TelegramNotifier telegram, CancellationToken token) =>

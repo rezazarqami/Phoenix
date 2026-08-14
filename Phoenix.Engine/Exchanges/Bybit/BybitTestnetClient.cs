@@ -62,13 +62,15 @@ public sealed class BybitDemoClient
         var item = document.RootElement.GetProperty("result").GetProperty("list")[0];
         var priceFilter = item.GetProperty("priceFilter");
         var lotFilter = item.GetProperty("lotSizeFilter");
+        var leverageFilter = item.GetProperty("leverageFilter");
 
         return new BybitInstrumentRules(
             item.GetProperty("symbol").GetString() ?? symbol,
             ReadDecimal(priceFilter, "tickSize"),
             ReadDecimal(lotFilter, "qtyStep"),
             ReadDecimal(lotFilter, "minOrderQty"),
-            ReadDecimal(lotFilter, "minNotionalValue"));
+            ReadDecimal(lotFilter, "minNotionalValue"),
+            ReadDecimal(leverageFilter, "maxLeverage"));
     }
 
     public async Task<IReadOnlyList<string>> GetTradableLinearSymbolsAsync(

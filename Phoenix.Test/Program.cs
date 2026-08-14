@@ -170,6 +170,17 @@ Run("Bybit leverage is read from the Demo position setting", () =>
     Equal(12m, client.GetLeverageAsync("btcusdt").GetAwaiter().GetResult()!.Value);
 });
 
+Run("Bybit instrument rules expose maximum leverage", () =>
+{
+    var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+    {
+        Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"priceFilter\":{\"tickSize\":\"0.1\"},\"lotSizeFilter\":{\"qtyStep\":\"0.001\",\"minOrderQty\":\"0.001\",\"minNotionalValue\":\"5\"},\"leverageFilter\":{\"maxLeverage\":\"100\"}}]}}")
+    });
+    var client = new BybitDemoClient(new BybitDemoOptions(null, null), new HttpClient(handler));
+    var rules = client.GetInstrumentRulesAsync("BTCUSDT").GetAwaiter().GetResult();
+    Equal(100m, rules.MaximumLeverage);
+});
+
 Run("Queued order entry rules respect Buy and Sell direction", () =>
 {
     var buy = new QueuedOrder { Side = "Buy", EntryPrice = 100m };

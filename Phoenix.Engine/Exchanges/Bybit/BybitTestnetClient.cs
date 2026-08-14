@@ -137,6 +137,28 @@ public sealed class BybitDemoClient
         return new BybitDemoStatus(true, true, equity, "Bybit Demo authentication succeeded.");
     }
 
+    public async Task<decimal?> GetLeverageAsync(
+        string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        var query = $"category=linear&symbol={Uri.EscapeDataString(NormalizeSymbol(symbol))}";
+        using var request = CreateSignedGetRequest("/v5/position/list", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var positions = document.RootElement.GetProperty("result").GetProperty("list");
+        foreach (var position in positions.EnumerateArray())
+        {
+            var leverage = TryReadDecimal(position, "leverage");
+            if (leverage is > 0m)
+                return leverage;
+        }
+        return null;
+    }
+
     public HttpRequestMessage CreateSignedGetRequest(string path, string queryString)
     {
         if (!_options.HasCredentials)

@@ -136,6 +136,8 @@ public sealed class ServerOrderStore
             var signals = await LoadUnsafeAsync(token);
             var index = signals.FindIndex(x => x.Id == signal.Id);
             if (index < 0) throw new InvalidOperationException("سفارش در صف پیدا نشد.");
+            if (signal.Status == "Pending" && signals[index].Status != "Pending")
+                return; // Never let a stale polling snapshot undo an atomic entry claim.
             signals[index] = Clone(signal);
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "SignalUpdated", token);

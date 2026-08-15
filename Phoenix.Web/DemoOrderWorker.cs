@@ -37,11 +37,15 @@ public sealed class DemoOrderWorker(
                         order.LastPrice = ticker.LastPrice;
                         if (order.Status == "Pending")
                         {
-                            if (EntryReached(order, ticker.LastPrice) && IsTradingEnabled(options) &&
-                                await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken))
-                                await SubmitAsync(order, stoppingToken);
-                            else
-                                await TrackPendingExpiryAsync(order, ticker.LastPrice, stoppingToken);
+                            var entryReached = EntryReached(order, ticker.LastPrice);
+                            if (entryReached && IsTradingEnabled(options))
+                            {
+                                if (await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken))
+                                    await SubmitAsync(order, stoppingToken);
+                                // Another entry worker already claimed it. Never write this stale Pending copy back.
+                                continue;
+                            }
+                            await TrackPendingExpiryAsync(order, ticker.LastPrice, stoppingToken);
                         }
                         else if (order.Status == "Submitted")
                             await SynchronizeOrderAsync(order, ticker.LastPrice, stoppingToken);

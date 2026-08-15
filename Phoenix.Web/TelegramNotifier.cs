@@ -20,6 +20,9 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
 
     public bool IsConfigured => options.HasToken;
 
+    public bool IsAuthorizedChat(string chatId) =>
+        !string.IsNullOrWhiteSpace(_chatId) && string.Equals(_chatId, chatId, StringComparison.Ordinal);
+
     public Task<bool> SignalQueuedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🆕 سیگنال جدید وارد Phoenix شد\n{Describe(signal)}\nزمان: {FormatTime(signal.CreatedAtUtc)}", token);
 
@@ -52,6 +55,74 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
     public async Task<bool> SendTestAsync(CancellationToken token) =>
         await SendAsync("✅ اتصال اعلان‌های Telegram به Phoenix برقرار شد.", token);
 
+    public Task<bool> SendCommandReplyAsync(string chatId, string text, CancellationToken token) =>
+        IsAuthorizedChat(chatId) ? SendToChatAsync(chatId, text, token) : Task.FromResult(false);
+
+    public async Task ConfigureMenuAsync(CancellationToken token)
+    {
+        if (!options.HasToken) return;
+        var commands = JsonSerializer.Serialize(new
+        {
+            commands = new[]
+            {
+                new { command = "status", description = "وضعیت اتصال و موتور Phoenix" },
+                new { command = "active", description = "سیگنال‌های فعال و در انتظار" },
+                new { command = "results", description = "۵ نتیجه آخر" },
+                new { command = "help", description = "راهنمای ربات" }
+            }
+        });
+        await PostJsonAsync("setMyCommands", commands, token);
+        await PostJsonAsync("setChatMenuButton", JsonSerializer.Serialize(new
+        {
+            menu_button = new { type = "commands" }
+        }), token);
+        await PostJsonAsync("setMyDescription", JsonSerializer.Serialize(new
+        {
+            description = "دستیار خصوصی Phoenix برای اعلان مراحل سیگنال‌ها، مشاهده وضعیت موتور و نتایج معاملات Demo."
+        }), token);
+        await PostJsonAsync("setMyShortDescription", JsonSerializer.Serialize(new
+        {
+            short_description = "اعلان و پایش سیگنال‌های Phoenix"
+        }), token);
+    }
+
+    public async Task<IReadOnlyList<TelegramCommand>> GetCommandsAsync(long offset, CancellationToken token)
+    {
+        if (!options.HasToken) return Array.Empty<TelegramCommand>();
+        using var response = await _httpClient.GetAsync(
+            $"https://api.telegram.org/bot{options.BotToken}/getUpdates?offset={offset}&timeout=25&allowed_updates=%5B%22message%22%5D", token);
+        var json = await response.Content.ReadAsStringAsync(token);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.GetProperty("ok").GetBoolean()) return Array.Empty<TelegramCommand>();
+        var result = new List<TelegramCommand>();
+        foreach (var update in document.RootElement.GetProperty("result").EnumerateArray())
+        {
+            if (!update.TryGetProperty("message", out var message) ||
+                !message.TryGetProperty("text", out var textElement) ||
+                !message.TryGetProperty("chat", out var chat)) continue;
+            var text = textElement.GetString();
+            if (string.IsNullOrWhiteSpace(text) || !text.StartsWith('/')) continue;
+            result.Add(new TelegramCommand(
+                update.GetProperty("update_id").GetInt64(),
+                chat.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture),
+                text.Split('@', 2)[0].Split(' ', 2)[0].ToLowerInvariant()));
+        }
+        return result;
+    }
+
+    public async Task<long> GetInitialUpdateOffsetAsync(CancellationToken token)
+    {
+        if (!options.HasToken) return 0;
+        using var response = await _httpClient.GetAsync(
+            $"https://api.telegram.org/bot{options.BotToken}/getUpdates?offset=-1&limit=1&timeout=0", token);
+        var json = await response.Content.ReadAsStringAsync(token);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        var updates = document.RootElement.GetProperty("result");
+        return updates.GetArrayLength() == 0 ? 0 : updates[0].GetProperty("update_id").GetInt64() + 1;
+    }
+
     private async Task<bool> SendAsync(string text, CancellationToken token)
     {
         if (!options.HasToken)
@@ -65,20 +136,7 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
                 logger.LogWarning("Telegram bot has no destination. Send /start to the bot first.");
                 return false;
             }
-            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["chat_id"] = chatId,
-                ["text"] = text,
-                ["disable_web_page_preview"] = "true"
-            });
-            using var response = await _httpClient.PostAsync(
-                $"https://api.telegram.org/bot{options.BotToken}/sendMessage", content, token);
-            var json = await response.Content.ReadAsStringAsync(token);
-            response.EnsureSuccessStatusCode();
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean())
-                return true;
-            throw new InvalidOperationException("Telegram Bot API did not confirm the message.");
+            return await SendToChatAsync(chatId, text, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -89,6 +147,30 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
             logger.LogWarning(exception, "Telegram notification failed");
             return false;
         }
+    }
+
+    private async Task<bool> SendToChatAsync(string chatId, string text, CancellationToken token)
+    {
+        using var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["chat_id"] = chatId,
+            ["text"] = text,
+            ["disable_web_page_preview"] = "true"
+        });
+        using var response = await _httpClient.PostAsync(
+            $"https://api.telegram.org/bot{options.BotToken}/sendMessage", content, token);
+        var json = await response.Content.ReadAsStringAsync(token);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean();
+    }
+
+    private async Task PostJsonAsync(string method, string json, CancellationToken token)
+    {
+        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync(
+            $"https://api.telegram.org/bot{options.BotToken}/{method}", content, token);
+        response.EnsureSuccessStatusCode();
     }
 
     private async Task<string?> ResolveChatIdAsync(CancellationToken token)
@@ -135,3 +217,5 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
     private static string Format(decimal? value) => value?.ToString("0.################", CultureInfo.InvariantCulture) ?? "—";
     private static string FormatTime(DateTime value) => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
 }
+
+public sealed record TelegramCommand(long UpdateId, string ChatId, string Command);

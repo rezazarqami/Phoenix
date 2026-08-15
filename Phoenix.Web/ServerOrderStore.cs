@@ -44,6 +44,8 @@ public sealed class ServerSignal
     public string? Outcome { get; set; }
     public DateTime? CompletedAtUtc { get; set; }
     public string? ExpireReason { get; set; }
+    public int? PublicSignalNumber { get; set; }
+    public int? PublicTelegramMessageId { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {
@@ -180,6 +182,22 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    public async Task<int> ReservePublicSignalNumberAsync(Guid id, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.Single(x => x.Id == id);
+            if (signal.PublicSignalNumber is { } existing) return existing;
+            signal.PublicSignalNumber = signals.Max(x => x.PublicSignalNumber ?? 0) + 1;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "PublicSignalReserved", token);
+            return signal.PublicSignalNumber.Value;
+        }
+        finally { _gate.Release(); }
+    }
+
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
         CancellationToken token = default) => _history.GetAsync(days, limit, token);
 
@@ -251,5 +269,7 @@ public sealed class ServerOrderStore
         StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
         ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc,
         Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason
+        , PublicSignalNumber = signal.PublicSignalNumber,
+        PublicTelegramMessageId = signal.PublicTelegramMessageId
     };
 }

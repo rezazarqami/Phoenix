@@ -8,6 +8,7 @@ public sealed class DemoOrderWorker(
     ServerState state,
     ServerOrderStore store,
     TelegramNotifier telegram,
+    PublicSignalNotifier publicSignals,
     ILogger<DemoOrderWorker> logger) : BackgroundService
 {
     public static bool IsTradingEnabled(BybitDemoOptions options) =>
@@ -92,6 +93,8 @@ public sealed class DemoOrderWorker(
             order.ExpireStage = "Target";
             order.ExpirePrice = order.TakeProfit;
             order.ExpireAdjustedAtUtc = DateTime.UtcNow;
+            order.PublicSignalNumber = await store.ReservePublicSignalNumberAsync(order.Id, token);
+            order.PublicTelegramMessageId = await publicSignals.PublishAsync(order, token);
         }
 
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
@@ -227,6 +230,8 @@ public sealed class DemoOrderWorker(
                 order.StopLoss2OrderId = result.OrderId;
                 order.RiskFreeReachedAtUtc = DateTime.UtcNow;
                 await telegram.RiskFreeReachedAsync(order, token);
+                if (order.PublicTelegramMessageId is not null)
+                    await publicSignals.RiskFreeReachedAsync(order, token);
             }
             catch (Exception exception)
             {

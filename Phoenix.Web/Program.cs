@@ -13,6 +13,8 @@ builder.Services.AddSingleton<BybitInstrumentCatalog>();
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
+builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
+builder.Services.AddSingleton<PublicSignalNotifier>();
 builder.Services.AddSingleton<StrategyCalculator>();
 builder.Services.AddHostedService<DemoOrderWorker>();
 builder.Services.AddHostedService<BybitEntryWebSocketWorker>();

@@ -20,7 +20,7 @@ public sealed class BybitDemoClient
         _httpClient = httpClient ?? new HttpClient();
         _timestampProvider = timestampProvider ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-        _httpClient.BaseAddress = new Uri(BybitDemoOptions.BaseUrl, UriKind.Absolute);
+        _httpClient.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
         _httpClient.Timeout = TimeSpan.FromSeconds(10);
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
@@ -123,7 +123,8 @@ public sealed class BybitDemoClient
             EnsureSuccess(publicDocument.RootElement);
 
         if (!_options.HasCredentials)
-            return new BybitDemoStatus(true, false, null, "Public API connected; Demo API keys are not configured.");
+            return new BybitDemoStatus(true, false, null,
+                $"Public API connected; {_options.EnvironmentName} API keys are not configured.");
 
         const string query = "accountType=UNIFIED&coin=USDT";
         using var request = CreateSignedGetRequest("/v5/account/wallet-balance", query);
@@ -138,7 +139,25 @@ public sealed class BybitDemoClient
         decimal? equity = decimal.TryParse(equityText, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
             ? value : null;
 
-        return new BybitDemoStatus(true, true, equity, "Bybit Demo authentication succeeded.");
+        return new BybitDemoStatus(true, true, equity,
+            $"Bybit {_options.EnvironmentName} authentication succeeded.");
+    }
+
+    public async Task<decimal> GetAvailableBalanceAsync(CancellationToken cancellationToken = default)
+    {
+        const string query = "accountType=UNIFIED&coin=USDT";
+        using var request = CreateSignedGetRequest("/v5/account/wallet-balance", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var account = document.RootElement.GetProperty("result").GetProperty("list")[0];
+        var available = account.TryGetProperty("totalAvailableBalance", out var value)
+            ? value.GetString() : null;
+        if (!decimal.TryParse(available, NumberStyles.Number, CultureInfo.InvariantCulture, out var balance))
+            throw new InvalidOperationException("Bybit returned an invalid available balance.");
+        return balance;
     }
 
     public async Task<decimal?> GetLeverageAsync(
@@ -161,6 +180,26 @@ public sealed class BybitDemoClient
                 return leverage;
         }
         return null;
+    }
+
+    public async Task<int> GetPositionIndexAsync(
+        string symbol,
+        string side,
+        CancellationToken cancellationToken = default)
+    {
+        var query = $"category=linear&symbol={Uri.EscapeDataString(NormalizeSymbol(symbol))}";
+        using var request = CreateSignedGetRequest("/v5/position/list", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var positions = document.RootElement.GetProperty("result").GetProperty("list");
+        var hedgeMode = positions.EnumerateArray().Any(position =>
+            position.TryGetProperty("positionIdx", out var index) && index.GetInt32() is 1 or 2);
+        if (!hedgeMode) return 0;
+        return string.Equals(side, "Buy", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
     }
 
     public async Task SetLeverageAsync(
@@ -191,7 +230,7 @@ public sealed class BybitDemoClient
     public HttpRequestMessage CreateSignedGetRequest(string path, string queryString)
     {
         if (!_options.HasCredentials)
-            throw new InvalidOperationException("Bybit Demo API credentials are not configured.");
+            throw new InvalidOperationException($"Bybit {_options.EnvironmentName} API credentials are not configured.");
 
         if (!path.StartsWith("/v5/", StringComparison.Ordinal))
             throw new InvalidOperationException("Only Bybit V5 endpoints are allowed.");
@@ -211,6 +250,7 @@ public sealed class BybitDemoClient
     public async Task<BybitOrderResult> PlaceLimitOrderAsync(
         BybitOrderPreview preview,
         string? orderLinkId = null,
+        int positionIndex = 0,
         CancellationToken cancellationToken = default)
     {
         orderLinkId ??= $"phoenix-{Guid.NewGuid():N}"[..36];
@@ -226,7 +266,7 @@ public sealed class BybitDemoClient
             ["qty"] = FormatDecimal(preview.Quantity),
             ["price"] = FormatDecimal(preview.Price),
             ["timeInForce"] = "GTC",
-            ["positionIdx"] = 0,
+            ["positionIdx"] = positionIndex,
             ["orderLinkId"] = orderLinkId,
             ["reduceOnly"] = false,
             ["takeProfit"] = FormatDecimal(preview.TakeProfit),
@@ -284,7 +324,8 @@ public sealed class BybitDemoClient
 
     public async Task<BybitOrderResult> PlaceStopLimitAsync(
         string symbol, string direction, decimal quantity, decimal stopPrice,
-        decimal tickSize, string orderLinkId, CancellationToken cancellationToken = default)
+        decimal tickSize, string orderLinkId, int positionIndex = 0,
+        CancellationToken cancellationToken = default)
     {
         var price = BybitOrderPreviewBuilder.RoundToStep(stopPrice, tickSize);
         var isLong = string.Equals(direction, "Long", StringComparison.OrdinalIgnoreCase);
@@ -301,7 +342,7 @@ public sealed class BybitDemoClient
             ["triggerDirection"] = isLong ? 2 : 1,
             ["triggerBy"] = "MarkPrice",
             ["timeInForce"] = "GTC",
-            ["positionIdx"] = 0,
+            ["positionIdx"] = positionIndex,
             ["orderLinkId"] = orderLinkId,
             ["reduceOnly"] = true,
             ["closeOnTrigger"] = true
@@ -373,7 +414,7 @@ public sealed class BybitDemoClient
     public HttpRequestMessage CreateSignedPostRequest(string path, string jsonBody)
     {
         if (!_options.HasCredentials)
-            throw new InvalidOperationException("Bybit Demo API credentials are not configured.");
+            throw new InvalidOperationException($"Bybit {_options.EnvironmentName} API credentials are not configured.");
         if (!path.StartsWith("/v5/", StringComparison.Ordinal))
             throw new InvalidOperationException("Only Bybit V5 endpoints are allowed.");
 

@@ -44,6 +44,8 @@ public sealed class ServerSignal
     public string? Outcome { get; set; }
     public DateTime? CompletedAtUtc { get; set; }
     public string? ExpireReason { get; set; }
+    public int? PublicSignalNumber { get; set; }
+    public int? PublicTelegramMessageId { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {
@@ -94,11 +96,11 @@ public sealed class ServerOrderStore
     private List<ServerSignal>? _signals;
     private bool _historyMigrated;
 
-    public ServerOrderStore()
+    public ServerOrderStore(string? filePath = null, string? historyPath = null)
     {
-        _filePath = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
+        _filePath = filePath ?? Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
             ?? Path.Combine(AppContext.BaseDirectory, "data", "server-signals.json");
-        _history = new SignalHistoryStore(_filePath);
+        _history = new SignalHistoryStore(_filePath, historyPath);
     }
 
     public async Task<IReadOnlyList<ServerSignal>> GetAllAsync(CancellationToken token = default)
@@ -180,6 +182,42 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    public async Task<ExclusiveClaimResult> TryClaimExclusiveSubmissionAsync(
+        Guid id, decimal price, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is null || signal.Status != "Pending") return ExclusiveClaimResult.Unavailable;
+            if (signals.Any(x => x.Id != id && x.Status is "Submitting" or "Submitted" or "Filled"))
+                return ExclusiveClaimResult.PositionBusy;
+            signal.Status = "Submitting";
+            signal.LastPrice = price;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
+            return ExclusiveClaimResult.Claimed;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<int> ReservePublicSignalNumberAsync(Guid id, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.Single(x => x.Id == id);
+            if (signal.PublicSignalNumber is { } existing) return existing;
+            signal.PublicSignalNumber = signals.Max(x => x.PublicSignalNumber ?? 0) + 1;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "PublicSignalReserved", token);
+            return signal.PublicSignalNumber.Value;
+        }
+        finally { _gate.Release(); }
+    }
+
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
         CancellationToken token = default) => _history.GetAsync(days, limit, token);
 
@@ -251,5 +289,9 @@ public sealed class ServerOrderStore
         StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
         ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc,
         Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason
+        , PublicSignalNumber = signal.PublicSignalNumber,
+        PublicTelegramMessageId = signal.PublicTelegramMessageId
     };
 }
+
+public enum ExclusiveClaimResult { Unavailable, PositionBusy, Claimed }

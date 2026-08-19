@@ -177,6 +177,18 @@ Run("Bybit leverage is read from the Demo position setting", () =>
     Equal(12m, client.GetLeverageAsync("btcusdt").GetAwaiter().GetResult()!.Value);
 });
 
+Run("Bybit position index follows account position mode", () =>
+{
+    var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+    {
+        Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"positionIdx\":1},{\"positionIdx\":2}]}}")
+    });
+    var client = new BybitDemoClient(
+        new BybitDemoOptions("test-key", "test-secret"), new HttpClient(handler));
+    Equal(1, client.GetPositionIndexAsync("BTCUSDT", "Buy").GetAwaiter().GetResult());
+    Equal(2, client.GetPositionIndexAsync("BTCUSDT", "Sell").GetAwaiter().GetResult());
+});
+
 Run("Bybit instrument rules expose maximum leverage", () =>
 {
     var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
@@ -384,6 +396,32 @@ Run("Stale pending snapshot cannot undo an entry claim", () =>
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
+            if (File.Exists(file)) File.Delete(file);
+    }
+});
+
+Run("Strategy 2 allows only one simultaneous entry claim", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-exclusive-{Guid.NewGuid():N}.json");
+    var historyPath = Path.ChangeExtension(path, ".db");
+    try
+    {
+        var store = new ServerOrderStore(path, historyPath);
+        var first = new ServerSignal { Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long",
+            EntryPrice = 100m, Status = "Pending", CreatedAtUtc = DateTime.UtcNow };
+        var second = new ServerSignal { Id = Guid.NewGuid(), Symbol = "ETHUSDT", Direction = "Short",
+            EntryPrice = 100m, Status = "Pending", CreatedAtUtc = DateTime.UtcNow };
+        store.AddAsync(first).GetAwaiter().GetResult();
+        store.AddAsync(second).GetAwaiter().GetResult();
+        Equal(ExclusiveClaimResult.Claimed,
+            store.TryClaimExclusiveSubmissionAsync(first.Id, 100m).GetAwaiter().GetResult());
+        Equal(ExclusiveClaimResult.PositionBusy,
+            store.TryClaimExclusiveSubmissionAsync(second.Id, 100m).GetAwaiter().GetResult());
+    }
+    finally
+    {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);

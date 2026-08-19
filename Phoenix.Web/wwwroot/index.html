@@ -14,17 +14,17 @@
   <main>
     <header class="topbar">
       <div class="brand"><span class="brand-mark">P</span><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
-      <div class="header-actions"><button id="logoutButton" class="security-button" type="button">خروج</button><button id="securityButton" class="security-button" type="button">⚙ تنظیمات امنیتی</button><span id="connection" class="badge"><i></i>در حال بررسی</span></div>
+      <div class="header-actions"><a class="security-button page-link" href="/strategy2.html">Strategy 2 Demo</a><button id="logoutButton" class="security-button" type="button">خروج</button><button id="securityButton" class="security-button" type="button">⚙ تنظیمات امنیتی</button><span id="connection" class="badge"><i></i>در حال بررسی</span></div>
     </header>
 
     <section class="hero">
-      <div class="hero-copy"><span class="eyebrow">MARKET OVERVIEW</span><h2>مرکز مدیریت سیگنال</h2><p>ثبت و پایش سفارش‌های آزمایشی، دقیق و بدون خطای نماد</p></div>
+      <div class="hero-copy"><span class="eyebrow">REAL STRATEGY</span><h2>مرکز مدیریت سیگنال</h2><p>ثبت و پایش استراتژی اصلی روی حساب واقعی</p></div>
       <div class="ticker"><div><small>BTC / USDT</small><span>قیمت لحظه‌ای</span></div><strong id="price">—</strong><span id="updated">در حال اتصال به Bybit</span></div>
     </section>
 
     <div class="workspace">
       <section class="card signal-card">
-        <div class="section-title"><div><span class="step">01</span><div><h2>سیگنال جدید</h2><p>پارامترهای معامله را وارد کنید</p></div></div><span class="demo-pill">DEMO</span></div>
+        <div class="section-title"><div><span class="step">01</span><div><h2>سیگنال جدید</h2><p>پارامترهای معامله را وارد کنید</p></div></div><span class="demo-pill">REAL</span></div>
         <form id="signalForm" novalidate>
           <label id="keyField">کلید ورود پنل<input name="panelKey" type="password" autocomplete="current-password" placeholder="کلید خصوصی پنل"></label>
 
@@ -60,7 +60,7 @@
       <div class="section-title"><div><span class="step">03</span><div><h2>تاریخچه نتایج</h2><p>سیگنال‌های پایان‌یافته در ۳۰ روز گذشته</p></div></div><span id="historyCount" class="counter">۰</span></div>
       <div id="history" class="history-list"><div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div></div>
     </section>
-    <footer><span>PHOENIX • BYBIT DEMO</span><span>اجرای امن، کنترل‌شده و آزمایشی</span></footer>
+    <footer><span>PHOENIX • BYBIT REAL</span><span>استراتژی اصلی حساب واقعی</span></footer>
   </main>
   <dialog id="securityDialog" class="security-dialog">
     <form id="securityForm" method="dialog" novalidate>
@@ -77,6 +77,6 @@
     </form>
   </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
-  <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Phoenix.Engine.Exchanges.Bybit;
 
 namespace Phoenix.Web;
 
@@ -12,7 +13,8 @@ public sealed record TelegramOptions(string? BotToken, string? ChatId)
         Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID"));
 }
 
-public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNotifier> logger)
+public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions bybitOptions,
+    ILogger<TelegramNotifier> logger)
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _chatGate = new(1, 1);
@@ -30,7 +32,7 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
         $"🎯 قیمت به نقطه ورود رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
 
     public Task<bool> OrderSubmittedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
-        $"✅ سفارش در Bybit Demo پذیرفته شد\n{Describe(signal)}\nشناسه سفارش: {signal.BybitOrderId}", token);
+        $"✅ سفارش در Bybit {bybitOptions.EnvironmentName} پذیرفته شد\n{Describe(signal)}\nشناسه سفارش: {signal.BybitOrderId}", token);
 
     public Task<bool> TargetReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🏆 قیمت به تارگت رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
@@ -45,11 +47,11 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
         $"🛑 قیمت به سطح استاپ‌لاس رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
 
     public Task<bool> OrderErrorAsync(ServerSignal signal, CancellationToken token) => SendAsync(
-        $"⚠️ خطای ارسال سفارش Demo\n{Describe(signal)}\nخطا: {signal.Error}", token);
+        $"⚠️ خطای ارسال سفارش {bybitOptions.EnvironmentName}\n{Describe(signal)}\nخطا: {signal.Error}", token);
 
     public Task<bool> RemovedAsync(ServerSignal signal, bool cancelledAtBybit, CancellationToken token) => SendAsync(
         cancelledAtBybit
-            ? $"🚫 سفارش Demo لغو شد\n{Describe(signal)}"
+            ? $"🚫 سفارش {bybitOptions.EnvironmentName} لغو شد\n{Describe(signal)}"
             : $"🗑️ سیگنال از صف حذف شد\n{Describe(signal)}", token);
 
     public async Task<bool> SendTestAsync(CancellationToken token) =>
@@ -78,7 +80,7 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
         }), token);
         await PostJsonAsync("setMyDescription", JsonSerializer.Serialize(new
         {
-            description = "دستیار خصوصی Phoenix برای اعلان مراحل سیگنال‌ها، مشاهده وضعیت موتور و نتایج معاملات Demo."
+            description = $"دستیار خصوصی Phoenix برای اعلان مراحل سیگنال‌ها، مشاهده وضعیت موتور و نتایج معاملات {bybitOptions.EnvironmentName}."
         }), token);
         await PostJsonAsync("setMyShortDescription", JsonSerializer.Serialize(new
         {
@@ -212,7 +214,7 @@ public sealed class TelegramNotifier(TelegramOptions options, ILogger<TelegramNo
     }
 
     private static string Describe(ServerSignal signal) =>
-        $"نماد: {signal.Symbol}\nجهت: {signal.Direction}\nورود: {Format(signal.EntryPrice)}\nتارگت: {Format(signal.TakeProfit)}\nاستاپ: {Format(signal.StopLoss)}\nسرمایه دمو: {Format(signal.PositionSizeUsdt)} USDT";
+        $"نماد: {signal.Symbol}\nجهت: {signal.Direction}\nورود: {Format(signal.EntryPrice)}\nتارگت: {Format(signal.TakeProfit)}\nاستاپ: {Format(signal.StopLoss)}\nمقدار ورودی: {Format(signal.PositionSizeUsdt)} USDT";
 
     private static string Format(decimal? value) => value?.ToString("0.################", CultureInfo.InvariantCulture) ?? "—";
     private static string FormatTime(DateTime value) => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);

@@ -10,9 +10,9 @@ public sealed class SignalHistoryStore
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _initialized;
 
-    public SignalHistoryStore(string queuePath)
+    public SignalHistoryStore(string queuePath, string? databasePath = null)
     {
-        var databasePath = Environment.GetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH")
+        databasePath ??= Environment.GetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH")
             ?? Path.Combine(Path.GetDirectoryName(queuePath)!, "phoenix-history.db");
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
         _connectionString = new SqliteConnectionStringBuilder

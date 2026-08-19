@@ -8,11 +8,14 @@ public sealed class DemoOrderWorker(
     ServerState state,
     ServerOrderStore store,
     TelegramNotifier telegram,
+    PublicSignalNotifier publicSignals,
     ILogger<DemoOrderWorker> logger) : BackgroundService
 {
     public static bool IsTradingEnabled(BybitDemoOptions options) =>
         options.HasCredentials && string.Equals(
-            Environment.GetEnvironmentVariable("PHOENIX_DEMO_TRADING_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+            Environment.GetEnvironmentVariable(options.IsReal
+                ? "PHOENIX_REAL_TRADING_ENABLED"
+                : "PHOENIX_DEMO_TRADING_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -67,7 +70,7 @@ public sealed class DemoOrderWorker(
                 state.PublicApiConnected = false;
                 state.DemoAuthenticated = false;
                 state.Error = exception.Message;
-                logger.LogWarning(exception, "Phoenix Demo worker cycle failed");
+                logger.LogWarning(exception, "Phoenix {Environment} worker cycle failed", options.EnvironmentName);
             }
             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
@@ -83,6 +86,7 @@ public sealed class DemoOrderWorker(
         if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
         {
             Complete(order, "Expired", DateTime.UtcNow, "InitialBoundary");
+            await publicSignals.ExpiredAsync(order, token);
             await store.UpdateAsync(order, token);
             return;
         }
@@ -92,11 +96,14 @@ public sealed class DemoOrderWorker(
             order.ExpireStage = "Target";
             order.ExpirePrice = order.TakeProfit;
             order.ExpireAdjustedAtUtc = DateTime.UtcNow;
+            order.PublicSignalNumber = await store.ReservePublicSignalNumberAsync(order.Id, token);
+            order.PublicTelegramMessageId = await publicSignals.PublishAsync(order, token);
         }
 
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
         {
             Complete(order, "Expired", DateTime.UtcNow, "TargetAfterActivation");
+            await publicSignals.ExpiredAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);
@@ -163,7 +170,10 @@ public sealed class DemoOrderWorker(
             }
             await client.SetLeverageAsync(order.Symbol, order.Leverage
                 ?? throw new InvalidOperationException("Signal leverage is missing."), token);
-            var result = await client.PlaceLimitOrderAsync(order.ToPreview(), order.OrderLinkId, token);
+            var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
+                order.Direction == "Long" ? "Buy" : "Sell", token);
+            var result = await client.PlaceLimitOrderAsync(
+                order.ToPreview(), order.OrderLinkId, positionIndex, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;
@@ -184,7 +194,8 @@ public sealed class DemoOrderWorker(
             {
                 order.Status = "Error";
                 order.Error = exception.Message;
-                logger.LogError(exception, "Demo order {OrderLinkId} was not confirmed", order.OrderLinkId);
+                logger.LogError(exception, "{Environment} order {OrderLinkId} was not confirmed",
+                    options.EnvironmentName, order.OrderLinkId);
                 await telegram.OrderErrorAsync(order, token);
             }
         }
@@ -212,6 +223,7 @@ public sealed class DemoOrderWorker(
             Complete(order, "Target", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.TargetReachedAsync(order, token);
+            await publicSignals.TargetReachedAsync(order, token);
         }
         else if (order.RiskFreeReachedAtUtc is null && order.RiskFreePrice is { } riskFree &&
                  order.StopLoss2 is { } stopLoss2 && ProfitLevelReached(order, price, riskFree))
@@ -220,13 +232,17 @@ public sealed class DemoOrderWorker(
             {
                 var rules = await client.GetInstrumentRulesAsync(order.Symbol, token);
                 var linkId = $"sl2-{order.Id:N}"[..36];
+                var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
+                    order.Direction == "Long" ? "Buy" : "Sell", token);
                 var result = await client.PlaceStopLimitAsync(
                     order.Symbol, order.Direction, order.ExecutedQuantity ?? order.Quantity,
-                    stopLoss2, rules.TickSize, linkId, token);
+                    stopLoss2, rules.TickSize, linkId, positionIndex, token);
                 order.StopLoss2 = result.Price;
                 order.StopLoss2OrderId = result.OrderId;
                 order.RiskFreeReachedAtUtc = DateTime.UtcNow;
                 await telegram.RiskFreeReachedAsync(order, token);
+                if (order.PublicTelegramMessageId is not null)
+                    await publicSignals.RiskFreeReachedAsync(order, token);
             }
             catch (Exception exception)
             {
@@ -240,6 +256,7 @@ public sealed class DemoOrderWorker(
             Complete(order, "StopLoss", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.StopLossReachedAsync(order, token);
+            await publicSignals.StopLossReachedAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);

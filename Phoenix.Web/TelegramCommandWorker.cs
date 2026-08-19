@@ -63,7 +63,7 @@ public sealed class TelegramCommandWorker(
     {
         var active = signals.Count(x => x.Status is "Pending" or "Submitting" or "Submitted" or "Filled");
         return $"📡 وضعیت Phoenix\nاتصال عمومی Bybit: {(state.PublicApiConnected ? "متصل ✅" : "قطع ❌")}\n" +
-               $"حساب Demo: {(state.DemoAuthenticated ? "متصل ✅" : "قطع ❌")}\n" +
+               $"حساب {options.EnvironmentName}: {(state.DemoAuthenticated ? "متصل ✅" : "قطع ❌")}\n" +
                $"موتور سفارش: {(DemoOrderWorker.IsTradingEnabled(options) ? "فعال ✅" : "خاموش ⏸")}\n" +
                $"سیگنال فعال: {active}\nآخرین به‌روزرسانی: {FormatTime(state.LastUpdatedUtc)}";
     }

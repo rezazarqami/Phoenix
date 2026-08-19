@@ -72,6 +72,7 @@ app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, Telegram
 {
     publicApiConnected = state.PublicApiConnected,
     demoAuthenticated = state.DemoAuthenticated,
+    tradingEnvironment = options.EnvironmentName,
     credentialsConfigured = options.HasCredentials,
     lastPrice = state.LastPrice,
     lastUpdatedUtc = state.LastUpdatedUtc,

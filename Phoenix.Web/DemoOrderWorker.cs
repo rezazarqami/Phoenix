@@ -13,7 +13,9 @@ public sealed class DemoOrderWorker(
 {
     public static bool IsTradingEnabled(BybitDemoOptions options) =>
         options.HasCredentials && string.Equals(
-            Environment.GetEnvironmentVariable("PHOENIX_DEMO_TRADING_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+            Environment.GetEnvironmentVariable(options.IsReal
+                ? "PHOENIX_REAL_TRADING_ENABLED"
+                : "PHOENIX_DEMO_TRADING_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -68,7 +70,7 @@ public sealed class DemoOrderWorker(
                 state.PublicApiConnected = false;
                 state.DemoAuthenticated = false;
                 state.Error = exception.Message;
-                logger.LogWarning(exception, "Phoenix Demo worker cycle failed");
+                logger.LogWarning(exception, "Phoenix {Environment} worker cycle failed", options.EnvironmentName);
             }
             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
@@ -187,7 +189,8 @@ public sealed class DemoOrderWorker(
             {
                 order.Status = "Error";
                 order.Error = exception.Message;
-                logger.LogError(exception, "Demo order {OrderLinkId} was not confirmed", order.OrderLinkId);
+                logger.LogError(exception, "{Environment} order {OrderLinkId} was not confirmed",
+                    options.EnvironmentName, order.OrderLinkId);
                 await telegram.OrderErrorAsync(order, token);
             }
         }

@@ -20,7 +20,7 @@ public sealed class BybitDemoClient
         _httpClient = httpClient ?? new HttpClient();
         _timestampProvider = timestampProvider ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-        _httpClient.BaseAddress = new Uri(BybitDemoOptions.BaseUrl, UriKind.Absolute);
+        _httpClient.BaseAddress = new Uri(options.BaseUrl, UriKind.Absolute);
         _httpClient.Timeout = TimeSpan.FromSeconds(10);
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
@@ -123,7 +123,8 @@ public sealed class BybitDemoClient
             EnsureSuccess(publicDocument.RootElement);
 
         if (!_options.HasCredentials)
-            return new BybitDemoStatus(true, false, null, "Public API connected; Demo API keys are not configured.");
+            return new BybitDemoStatus(true, false, null,
+                $"Public API connected; {_options.EnvironmentName} API keys are not configured.");
 
         const string query = "accountType=UNIFIED&coin=USDT";
         using var request = CreateSignedGetRequest("/v5/account/wallet-balance", query);
@@ -138,7 +139,8 @@ public sealed class BybitDemoClient
         decimal? equity = decimal.TryParse(equityText, NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
             ? value : null;
 
-        return new BybitDemoStatus(true, true, equity, "Bybit Demo authentication succeeded.");
+        return new BybitDemoStatus(true, true, equity,
+            $"Bybit {_options.EnvironmentName} authentication succeeded.");
     }
 
     public async Task<decimal?> GetLeverageAsync(
@@ -191,7 +193,7 @@ public sealed class BybitDemoClient
     public HttpRequestMessage CreateSignedGetRequest(string path, string queryString)
     {
         if (!_options.HasCredentials)
-            throw new InvalidOperationException("Bybit Demo API credentials are not configured.");
+            throw new InvalidOperationException($"Bybit {_options.EnvironmentName} API credentials are not configured.");
 
         if (!path.StartsWith("/v5/", StringComparison.Ordinal))
             throw new InvalidOperationException("Only Bybit V5 endpoints are allowed.");
@@ -373,7 +375,7 @@ public sealed class BybitDemoClient
     public HttpRequestMessage CreateSignedPostRequest(string path, string jsonBody)
     {
         if (!_options.HasCredentials)
-            throw new InvalidOperationException("Bybit Demo API credentials are not configured.");
+            throw new InvalidOperationException($"Bybit {_options.EnvironmentName} API credentials are not configured.");
         if (!path.StartsWith("/v5/", StringComparison.Ordinal))
             throw new InvalidOperationException("Only Bybit V5 endpoints are allowed.");
 

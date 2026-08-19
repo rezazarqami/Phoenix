@@ -177,6 +177,18 @@ Run("Bybit leverage is read from the Demo position setting", () =>
     Equal(12m, client.GetLeverageAsync("btcusdt").GetAwaiter().GetResult()!.Value);
 });
 
+Run("Bybit position index follows account position mode", () =>
+{
+    var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+    {
+        Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"positionIdx\":1},{\"positionIdx\":2}]}}")
+    });
+    var client = new BybitDemoClient(
+        new BybitDemoOptions("test-key", "test-secret"), new HttpClient(handler));
+    Equal(1, client.GetPositionIndexAsync("BTCUSDT", "Buy").GetAwaiter().GetResult());
+    Equal(2, client.GetPositionIndexAsync("BTCUSDT", "Sell").GetAwaiter().GetResult());
+});
+
 Run("Bybit instrument rules expose maximum leverage", () =>
 {
     var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)

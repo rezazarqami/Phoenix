@@ -100,12 +100,17 @@ public sealed class Strategy2Worker(
         {
             var available = await runtime.Client.GetAvailableBalanceAsync(token);
             var rules = await runtime.Client.GetInstrumentRulesAsync(order.Symbol, token);
-            order.PositionSizeUsdt = available * runtime.Options.BalanceUsageRatio;
+            // Keep a small exchange reserve for entry/exit fees and initial-margin
+            // fluctuations; otherwise a nominal 99.5% allocation can exceed AB.
+            order.PositionSizeUsdt = available * runtime.Options.BalanceUsageRatio * 0.97m;
             order.ApplyPhoenixLeverage(rules);
             if (order.PositionSizeUsdt <= 0 || order.Quantity < rules.MinimumOrderQuantity)
                 throw new InvalidOperationException("Demo available balance is not sufficient for Strategy 2.");
             await runtime.Client.SetLeverageAsync(order.Symbol, order.Leverage!.Value, token);
-            var result = await runtime.Client.PlaceLimitOrderAsync(order.ToPreview(), order.OrderLinkId, token);
+            var positionIndex = await runtime.Client.GetPositionIndexAsync(
+                order.Symbol, order.Direction == "Long" ? "Buy" : "Sell", token);
+            var result = await runtime.Client.PlaceLimitOrderAsync(
+                order.ToPreview(), order.OrderLinkId, positionIndex, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;
@@ -168,9 +173,11 @@ public sealed class Strategy2Worker(
             try
             {
                 var rules = await runtime.Client.GetInstrumentRulesAsync(order.Symbol, token);
+                var positionIndex = await runtime.Client.GetPositionIndexAsync(order.Symbol,
+                    order.Direction == "Long" ? "Buy" : "Sell", token);
                 var result = await runtime.Client.PlaceStopLimitAsync(order.Symbol, order.Direction,
                     order.ExecutedQuantity ?? order.Quantity, sl2, rules.TickSize,
-                    $"s2sl-{order.Id:N}"[..36], token);
+                    $"s2sl-{order.Id:N}"[..36], positionIndex, token);
                 order.StopLoss2 = result.Price;
                 order.StopLoss2OrderId = result.OrderId;
                 order.RiskFreeReachedAtUtc = DateTime.UtcNow;

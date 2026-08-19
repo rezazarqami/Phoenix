@@ -182,6 +182,26 @@ public sealed class BybitDemoClient
         return null;
     }
 
+    public async Task<int> GetPositionIndexAsync(
+        string symbol,
+        string side,
+        CancellationToken cancellationToken = default)
+    {
+        var query = $"category=linear&symbol={Uri.EscapeDataString(NormalizeSymbol(symbol))}";
+        using var request = CreateSignedGetRequest("/v5/position/list", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var positions = document.RootElement.GetProperty("result").GetProperty("list");
+        var hedgeMode = positions.EnumerateArray().Any(position =>
+            position.TryGetProperty("positionIdx", out var index) && index.GetInt32() is 1 or 2);
+        if (!hedgeMode) return 0;
+        return string.Equals(side, "Buy", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
+    }
+
     public async Task SetLeverageAsync(
         string symbol,
         decimal leverage,
@@ -230,6 +250,7 @@ public sealed class BybitDemoClient
     public async Task<BybitOrderResult> PlaceLimitOrderAsync(
         BybitOrderPreview preview,
         string? orderLinkId = null,
+        int positionIndex = 0,
         CancellationToken cancellationToken = default)
     {
         orderLinkId ??= $"phoenix-{Guid.NewGuid():N}"[..36];
@@ -245,7 +266,7 @@ public sealed class BybitDemoClient
             ["qty"] = FormatDecimal(preview.Quantity),
             ["price"] = FormatDecimal(preview.Price),
             ["timeInForce"] = "GTC",
-            ["positionIdx"] = 0,
+            ["positionIdx"] = positionIndex,
             ["orderLinkId"] = orderLinkId,
             ["reduceOnly"] = false,
             ["takeProfit"] = FormatDecimal(preview.TakeProfit),
@@ -303,7 +324,8 @@ public sealed class BybitDemoClient
 
     public async Task<BybitOrderResult> PlaceStopLimitAsync(
         string symbol, string direction, decimal quantity, decimal stopPrice,
-        decimal tickSize, string orderLinkId, CancellationToken cancellationToken = default)
+        decimal tickSize, string orderLinkId, int positionIndex = 0,
+        CancellationToken cancellationToken = default)
     {
         var price = BybitOrderPreviewBuilder.RoundToStep(stopPrice, tickSize);
         var isLong = string.Equals(direction, "Long", StringComparison.OrdinalIgnoreCase);
@@ -320,7 +342,7 @@ public sealed class BybitDemoClient
             ["triggerDirection"] = isLong ? 2 : 1,
             ["triggerBy"] = "MarkPrice",
             ["timeInForce"] = "GTC",
-            ["positionIdx"] = 0,
+            ["positionIdx"] = positionIndex,
             ["orderLinkId"] = orderLinkId,
             ["reduceOnly"] = true,
             ["closeOnTrigger"] = true

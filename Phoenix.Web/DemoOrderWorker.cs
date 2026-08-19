@@ -170,7 +170,10 @@ public sealed class DemoOrderWorker(
             }
             await client.SetLeverageAsync(order.Symbol, order.Leverage
                 ?? throw new InvalidOperationException("Signal leverage is missing."), token);
-            var result = await client.PlaceLimitOrderAsync(order.ToPreview(), order.OrderLinkId, token);
+            var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
+                order.Direction == "Long" ? "Buy" : "Sell", token);
+            var result = await client.PlaceLimitOrderAsync(
+                order.ToPreview(), order.OrderLinkId, positionIndex, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;
@@ -229,9 +232,11 @@ public sealed class DemoOrderWorker(
             {
                 var rules = await client.GetInstrumentRulesAsync(order.Symbol, token);
                 var linkId = $"sl2-{order.Id:N}"[..36];
+                var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
+                    order.Direction == "Long" ? "Buy" : "Sell", token);
                 var result = await client.PlaceStopLimitAsync(
                     order.Symbol, order.Direction, order.ExecutedQuantity ?? order.Quantity,
-                    stopLoss2, rules.TickSize, linkId, token);
+                    stopLoss2, rules.TickSize, linkId, positionIndex, token);
                 order.StopLoss2 = result.Price;
                 order.StopLoss2OrderId = result.OrderId;
                 order.RiskFreeReachedAtUtc = DateTime.UtcNow;

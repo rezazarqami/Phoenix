@@ -86,6 +86,7 @@ public sealed class DemoOrderWorker(
         if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
         {
             Complete(order, "Expired", DateTime.UtcNow, "InitialBoundary");
+            await publicSignals.ExpiredAsync(order, token);
             await store.UpdateAsync(order, token);
             return;
         }
@@ -102,6 +103,7 @@ public sealed class DemoOrderWorker(
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
         {
             Complete(order, "Expired", DateTime.UtcNow, "TargetAfterActivation");
+            await publicSignals.ExpiredAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);
@@ -218,6 +220,7 @@ public sealed class DemoOrderWorker(
             Complete(order, "Target", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.TargetReachedAsync(order, token);
+            await publicSignals.TargetReachedAsync(order, token);
         }
         else if (order.RiskFreeReachedAtUtc is null && order.RiskFreePrice is { } riskFree &&
                  order.StopLoss2 is { } stopLoss2 && ProfitLevelReached(order, price, riskFree))
@@ -248,6 +251,7 @@ public sealed class DemoOrderWorker(
             Complete(order, "StopLoss", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.StopLossReachedAsync(order, token);
+            await publicSignals.StopLossReachedAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);

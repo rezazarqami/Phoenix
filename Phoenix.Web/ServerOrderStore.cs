@@ -96,11 +96,11 @@ public sealed class ServerOrderStore
     private List<ServerSignal>? _signals;
     private bool _historyMigrated;
 
-    public ServerOrderStore()
+    public ServerOrderStore(string? filePath = null, string? historyPath = null)
     {
-        _filePath = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
+        _filePath = filePath ?? Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
             ?? Path.Combine(AppContext.BaseDirectory, "data", "server-signals.json");
-        _history = new SignalHistoryStore(_filePath);
+        _history = new SignalHistoryStore(_filePath, historyPath);
     }
 
     public async Task<IReadOnlyList<ServerSignal>> GetAllAsync(CancellationToken token = default)
@@ -178,6 +178,26 @@ public sealed class ServerOrderStore
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
             return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<ExclusiveClaimResult> TryClaimExclusiveSubmissionAsync(
+        Guid id, decimal price, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is null || signal.Status != "Pending") return ExclusiveClaimResult.Unavailable;
+            if (signals.Any(x => x.Id != id && x.Status is "Submitting" or "Submitted" or "Filled"))
+                return ExclusiveClaimResult.PositionBusy;
+            signal.Status = "Submitting";
+            signal.LastPrice = price;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
+            return ExclusiveClaimResult.Claimed;
         }
         finally { _gate.Release(); }
     }
@@ -273,3 +293,5 @@ public sealed class ServerOrderStore
         PublicTelegramMessageId = signal.PublicTelegramMessageId
     };
 }
+
+public enum ExclusiveClaimResult { Unavailable, PositionBusy, Claimed }

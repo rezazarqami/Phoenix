@@ -51,6 +51,15 @@ public sealed class PublicSignalNotifier(
     public Task<int?> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) =>
         SendAsync("✅ این سیگنال به منطقه Risk Free رسید.", signal.PublicTelegramMessageId, token);
 
+    public Task<int?> TargetReachedAsync(ServerSignal signal, CancellationToken token) =>
+        SendAsync($"🏆 سیگنال {signal.Symbol} به تارگت رسید.", signal.PublicTelegramMessageId, token);
+
+    public Task<int?> StopLossReachedAsync(ServerSignal signal, CancellationToken token) =>
+        SendAsync($"🛑 سیگنال {signal.Symbol} به استاپ‌لاس رسید.", signal.PublicTelegramMessageId, token);
+
+    public Task<int?> ExpiredAsync(ServerSignal signal, CancellationToken token) =>
+        SendAsync($"⌛ سیگنال {signal.Symbol} اکسپایر شد.", signal.PublicTelegramMessageId, token);
+
     private async Task<int?> SendAsync(string text, int? replyToMessageId, CancellationToken token)
     {
         if (!options.IsConfigured) return null;

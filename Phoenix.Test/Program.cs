@@ -390,6 +390,32 @@ Run("Stale pending snapshot cannot undo an entry claim", () =>
     }
 });
 
+Run("Strategy 2 allows only one simultaneous entry claim", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-exclusive-{Guid.NewGuid():N}.json");
+    var historyPath = Path.ChangeExtension(path, ".db");
+    try
+    {
+        var store = new ServerOrderStore(path, historyPath);
+        var first = new ServerSignal { Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long",
+            EntryPrice = 100m, Status = "Pending", CreatedAtUtc = DateTime.UtcNow };
+        var second = new ServerSignal { Id = Guid.NewGuid(), Symbol = "ETHUSDT", Direction = "Short",
+            EntryPrice = 100m, Status = "Pending", CreatedAtUtc = DateTime.UtcNow };
+        store.AddAsync(first).GetAwaiter().GetResult();
+        store.AddAsync(second).GetAwaiter().GetResult();
+        Equal(ExclusiveClaimResult.Claimed,
+            store.TryClaimExclusiveSubmissionAsync(first.Id, 100m).GetAwaiter().GetResult());
+        Equal(ExclusiveClaimResult.PositionBusy,
+            store.TryClaimExclusiveSubmissionAsync(second.Id, 100m).GetAwaiter().GetResult());
+    }
+    finally
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
+            if (File.Exists(file)) File.Delete(file);
+    }
+});
+
 Run("Long expiry activates after twenty percent approach", () =>
 {
     var signal = new ServerSignal

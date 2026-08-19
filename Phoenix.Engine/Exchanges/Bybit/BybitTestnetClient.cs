@@ -143,6 +143,23 @@ public sealed class BybitDemoClient
             $"Bybit {_options.EnvironmentName} authentication succeeded.");
     }
 
+    public async Task<decimal> GetAvailableBalanceAsync(CancellationToken cancellationToken = default)
+    {
+        const string query = "accountType=UNIFIED&coin=USDT";
+        using var request = CreateSignedGetRequest("/v5/account/wallet-balance", query);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var account = document.RootElement.GetProperty("result").GetProperty("list")[0];
+        var available = account.TryGetProperty("totalAvailableBalance", out var value)
+            ? value.GetString() : null;
+        if (!decimal.TryParse(available, NumberStyles.Number, CultureInfo.InvariantCulture, out var balance))
+            throw new InvalidOperationException("Bybit returned an invalid available balance.");
+        return balance;
+    }
+
     public async Task<decimal?> GetLeverageAsync(
         string symbol,
         CancellationToken cancellationToken = default)

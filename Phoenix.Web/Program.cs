@@ -15,10 +15,17 @@ builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
 builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<PublicSignalNotifier>();
+builder.Services.AddSingleton(Strategy2Options.FromEnvironment());
+builder.Services.AddSingleton<Strategy2Runtime>();
+builder.Services.AddSingleton(Strategy2TelegramOptions.FromEnvironment());
+builder.Services.AddSingleton<Strategy2TelegramNotifier>();
 builder.Services.AddSingleton<StrategyCalculator>();
 builder.Services.AddHostedService<DemoOrderWorker>();
 builder.Services.AddHostedService<BybitEntryWebSocketWorker>();
 builder.Services.AddHostedService<TelegramCommandWorker>();
+builder.Services.AddSingleton<Strategy2Worker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<Strategy2Worker>());
+builder.Services.AddHostedService<Strategy2EntryWebSocketWorker>();
 
 var app = builder.Build();
 app.Use(async (context, next) =>
@@ -101,6 +108,29 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
 app.MapGet("/api/history", async (int? days, int? limit, ServerOrderStore store, CancellationToken token) =>
     Results.Ok(await store.GetHistoryAsync(days ?? 30, limit ?? 1000, token)));
 
+app.MapGet("/api/strategy2/status", async (Strategy2Runtime strategy2, CancellationToken token) =>
+{
+    if (!strategy2.Options.Enabled)
+        return Results.Ok(new { enabled = false, authenticated = false, availableBalance = (decimal?)null });
+    try
+    {
+        var status = await strategy2.Client.CheckConnectionAsync(token);
+        decimal? balance = status.Authenticated ? await strategy2.Client.GetAvailableBalanceAsync(token) : null;
+        return Results.Ok(new { enabled = true, authenticated = status.Authenticated, availableBalance = balance });
+    }
+    catch (Exception exception)
+    {
+        return Results.Ok(new { enabled = true, authenticated = false, error = exception.Message });
+    }
+});
+
+app.MapGet("/api/strategy2/signals", async (Strategy2Runtime strategy2, CancellationToken token) =>
+    Results.Ok((await strategy2.Store.GetAllAsync(token)).OrderByDescending(x => x.CreatedAtUtc)));
+
+app.MapGet("/api/strategy2/history", async (int? days, int? limit, Strategy2Runtime strategy2,
+    CancellationToken token) =>
+    Results.Ok(await strategy2.Store.GetHistoryAsync(days ?? 30, limit ?? 1000, token)));
+
 app.MapGet("/api/instruments", async (BybitInstrumentCatalog catalog, CancellationToken token) =>
     Results.Ok(new { symbols = await catalog.GetAsync(token) }));
 
@@ -119,7 +149,8 @@ app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoCl
 
 app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpRequest, ServerOrderStore store,
     StrategyCalculator calculator, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
-    TelegramNotifier telegram, CancellationToken token) =>
+    TelegramNotifier telegram, Strategy2Runtime strategy2, Strategy2TelegramNotifier strategy2Telegram,
+    CancellationToken token) =>
 {
     var panelKey = Environment.GetEnvironmentVariable("PHOENIX_PANEL_KEY");
     if (!string.IsNullOrWhiteSpace(panelKey) && httpRequest.Headers["X-Phoenix-Key"] != panelKey)
@@ -155,6 +186,15 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
         var queued = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
         await store.AddAsync(queued, token);
         await telegram.SignalQueuedAsync(queued, token);
+        if (strategy2.Options.Enabled)
+        {
+            var strategy2Signal = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
+            strategy2Signal.PositionSizeUsdt = 0m;
+            strategy2Signal.Quantity = 0m;
+            strategy2Signal.OrderLinkId = $"s2-{strategy2Signal.Id:N}"[..35];
+            await strategy2.Store.AddAsync(strategy2Signal, token);
+            await strategy2Telegram.QueuedAsync(strategy2Signal, token);
+        }
         return Results.Created($"/api/signals/{queued.Id}", queued);
     }
     catch (Exception exception)

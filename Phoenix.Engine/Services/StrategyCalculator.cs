@@ -13,21 +13,13 @@ public class StrategyCalculator : IStrategyCalculator
         if (signal.PositionSizeUsdt <= 0)
             throw new ArgumentException("Position size must be greater than zero.", nameof(signal));
 
-        decimal range = signal.High - signal.Low;
-
-        decimal x = range * 0.618m;
-        decimal y = range * 0.500m;
-        decimal z = range * 0.729m;
-
         TradePlan plan = new();
 
         if (signal.Direction == Direction.Long)
         {
-            plan.EntryPrice = signal.High - x;
-
-            plan.TakeProfit = signal.High - y;
-
-            plan.StopLoss1 = signal.High - z;
+            plan.EntryPrice = LogarithmicLevel(signal.Low, signal.High, 1m - 0.618m);
+            plan.TakeProfit = LogarithmicLevel(signal.Low, signal.High, 1m - 0.500m);
+            plan.StopLoss1 = LogarithmicLevel(signal.Low, signal.High, 1m - 0.729m);
 
             var profitDistance = plan.TakeProfit - plan.EntryPrice;
             plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
@@ -35,11 +27,9 @@ public class StrategyCalculator : IStrategyCalculator
         }
         else
         {
-            plan.EntryPrice = signal.Low + x;
-
-            plan.TakeProfit = signal.Low + y;
-
-            plan.StopLoss1 = signal.Low + z;
+            plan.EntryPrice = LogarithmicLevel(signal.Low, signal.High, 0.618m);
+            plan.TakeProfit = LogarithmicLevel(signal.Low, signal.High, 0.500m);
+            plan.StopLoss1 = LogarithmicLevel(signal.Low, signal.High, 0.729m);
 
             var profitDistance = plan.TakeProfit - plan.EntryPrice;
             plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
@@ -49,6 +39,18 @@ public class StrategyCalculator : IStrategyCalculator
         plan.Leverage = CalculateLeverage(plan.EntryPrice, plan.TakeProfit);
 
         return plan;
+    }
+
+    public static decimal LogarithmicLevel(decimal low, decimal high, decimal fractionFromLow)
+    {
+        if (low <= 0m || high <= low)
+            throw new ArgumentOutOfRangeException(nameof(low), "Logarithmic levels require 0 < low < high.");
+        if (fractionFromLow is < 0m or > 1m)
+            throw new ArgumentOutOfRangeException(nameof(fractionFromLow));
+
+        var logLow = Math.Log((double)low);
+        var logHigh = Math.Log((double)high);
+        return (decimal)Math.Exp(logLow + (double)fractionFromLow * (logHigh - logLow));
     }
 
     public static decimal CalculateLeverage(decimal entryPrice, decimal takeProfit)

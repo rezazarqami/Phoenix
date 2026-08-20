@@ -51,7 +51,7 @@ public sealed class Strategy2Worker(
     {
         if (order.ExpirePrice == 0) order.ExpirePrice = order.Direction == "Long" ? order.Ceiling : order.Floor;
         if (order.ExpireActivationPrice == 0)
-            order.ExpireActivationPrice = order.EntryPrice + 0.20m * (order.TakeProfit - order.EntryPrice);
+            order.ExpireActivationPrice = order.EntryPrice + 0.25m * (order.TakeProfit - order.EntryPrice);
 
         if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
         {

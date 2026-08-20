@@ -12,22 +12,22 @@ Run("Long strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Long);
     var plan = new StrategyCalculator().Calculate(signal);
-    Equal(118764m, plan.EntryPrice);
-    Equal(119000m, plan.TakeProfit);
-    Equal(118542m, plan.StopLoss1);
-    Equal(118823m, plan.StopLoss2!.Value);
-    Equal(118941m, plan.RiskFreePrice);
+    Near(118760.03488777m, plan.EntryPrice);
+    Near(118995.798245148m, plan.TakeProfit);
+    Near(118538.683877804m, plan.StopLoss1);
+    Near(118818.975727114m, plan.StopLoss2!.Value);
+    Near(118936.857405803m, plan.RiskFreePrice);
 });
 
 Run("Short strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Short);
     var plan = new StrategyCalculator().Calculate(signal);
-    Equal(119236m, plan.EntryPrice);
-    Equal(119000m, plan.TakeProfit);
-    Equal(119458m, plan.StopLoss1);
-    Equal(119177m, plan.StopLoss2!.Value);
-    Equal(119059m, plan.RiskFreePrice);
+    Near(119232.029641802m, plan.EntryPrice);
+    Near(118995.798245148m, plan.TakeProfit);
+    Near(119454.675358104m, plan.StopLoss1);
+    Near(119172.971792639m, plan.StopLoss2!.Value);
+    Near(119054.856094312m, plan.RiskFreePrice);
 });
 
 Run("Invalid range is rejected", () =>
@@ -108,10 +108,10 @@ Run("Bybit order preview follows instrument precision", () =>
     var position = new ExecutionManager().OpenPosition(signal)!;
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     var preview = BybitOrderPreviewBuilder.Build("btcusdt", position, rules);
-    Equal(0.423m, preview.Quantity);
-    Equal(118764.00m, preview.Price);
-    Equal(119000.00m, preview.TakeProfit);
-    Equal(118542.00m, preview.StopLoss);
+    Equal(0.424m, preview.Quantity);
+    Equal(118760.00m, preview.Price);
+    Equal(118995.80m, preview.TakeProfit);
+    Equal(118538.70m, preview.StopLoss);
     Equal("Buy", preview.Side);
 });
 
@@ -428,28 +428,28 @@ Run("Strategy 2 allows only one simultaneous entry claim", () =>
     }
 });
 
-Run("Long expiry activates after twenty percent approach", () =>
+Run("Long expiry activates after twenty-five percent approach", () =>
 {
     var signal = new ServerSignal
     {
         Direction = "Long", EntryPrice = 100m, TakeProfit = 110m,
-        ExpireActivationPrice = 102m
+        ExpireActivationPrice = 102.5m
     };
-    False(DemoOrderWorker.ExpireActivationReached(signal, 102.01m));
-    True(DemoOrderWorker.ExpireActivationReached(signal, 102m));
+    False(DemoOrderWorker.ExpireActivationReached(signal, 102.51m));
+    True(DemoOrderWorker.ExpireActivationReached(signal, 102.5m));
     False(DemoOrderWorker.TargetExpiryReached(signal, 109.99m));
     True(DemoOrderWorker.TargetExpiryReached(signal, 110m));
 });
 
-Run("Short expiry activates after twenty percent approach", () =>
+Run("Short expiry activates after twenty-five percent approach", () =>
 {
     var signal = new ServerSignal
     {
         Direction = "Short", EntryPrice = 110m, TakeProfit = 100m,
-        ExpireActivationPrice = 108m
+        ExpireActivationPrice = 107.5m
     };
-    False(DemoOrderWorker.ExpireActivationReached(signal, 107.99m));
-    True(DemoOrderWorker.ExpireActivationReached(signal, 108m));
+    False(DemoOrderWorker.ExpireActivationReached(signal, 107.49m));
+    True(DemoOrderWorker.ExpireActivationReached(signal, 107.5m));
     False(DemoOrderWorker.TargetExpiryReached(signal, 100.01m));
     True(DemoOrderWorker.TargetExpiryReached(signal, 100m));
 });
@@ -509,6 +509,11 @@ static void Equal<T>(T expected, T actual) where T : notnull
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
         throw new Exception($"Expected {expected}, got {actual}.");
+}
+static void Near(decimal expected, decimal actual, decimal tolerance = 0.000001m)
+{
+    if (Math.Abs(expected - actual) > tolerance)
+        throw new Exception($"Expected {expected} ± {tolerance}, got {actual}.");
 }
 static void Throws<T>(Action action) where T : Exception
 {

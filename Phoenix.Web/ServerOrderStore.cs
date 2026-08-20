@@ -67,7 +67,7 @@ public sealed class ServerSignal
             StopLoss2 = signal.TradePlan?.StopLoss2,
             RiskFreePrice = signal.TradePlan?.RiskFreePrice,
             ExpirePrice = signal.Direction == Phoenix.Core.Entities.Direction.Long ? signal.High : signal.Low,
-            ExpireActivationPrice = preview.Price + 0.20m * (preview.TakeProfit - preview.Price),
+            ExpireActivationPrice = preview.Price + 0.25m * (preview.TakeProfit - preview.Price),
             OrderLinkId = $"phoenix-{id:N}"[..36],
             CreatedAtUtc = DateTime.UtcNow
         };

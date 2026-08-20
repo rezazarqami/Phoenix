@@ -52,6 +52,15 @@ Run("Leverage targets fifty percent return at take profit", () =>
     Equal(50m, plan.Leverage * targetMovePercent);
 });
 
+Run("Strategy 2 leverage targets twenty percent return at take profit", () =>
+{
+    var plan = new StrategyCalculator().Calculate(BuildSignal(Direction.Long));
+    var leverage = StrategyCalculator.CalculateLeverage(
+        plan.EntryPrice, plan.TakeProfit, 20m);
+    var targetMovePercent = Math.Abs(plan.EntryPrice - plan.TakeProfit) / plan.EntryPrice * 100m;
+    Near(20m, leverage * targetMovePercent);
+});
+
 Run("Paper exchange records full protective order set", () =>
 {
     var signal = Prepare(BuildSignal(Direction.Long));

@@ -77,10 +77,12 @@ public sealed class ServerSignal
         Symbol, Direction == "Long" ? "Buy" : "Sell", Quantity,
         EntryPrice, TakeProfit, StopLoss, Quantity * EntryPrice);
 
-    public void ApplyPhoenixLeverage(BybitInstrumentRules rules)
+    public void ApplyPhoenixLeverage(
+        BybitInstrumentRules rules, decimal targetReturnPercent = 50m)
     {
         Leverage = BybitLeverageRules.Normalize(
-            StrategyCalculator.CalculateLeverage(EntryPrice, TakeProfit), rules);
+            StrategyCalculator.CalculateLeverage(
+                EntryPrice, TakeProfit, targetReturnPercent), rules);
         Quantity = BybitOrderPreviewBuilder.RoundToStep(
             PositionSizeUsdt * Leverage.Value / EntryPrice, rules.QuantityStep);
         LeverageSource = "PhoenixFormula";

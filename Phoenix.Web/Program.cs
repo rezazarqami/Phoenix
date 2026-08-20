@@ -188,7 +188,10 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
         await telegram.SignalQueuedAsync(queued, token);
         if (strategy2.Options.Enabled)
         {
-            var strategy2Signal = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
+            var strategy2Leverage = BybitLeverageRules.Normalize(
+                StrategyCalculator.CalculateLeverage(
+                    signal.TradePlan.EntryPrice, signal.TradePlan.TakeProfit, 20m), rules);
+            var strategy2Signal = ServerSignal.FromPreview(signal, preview, strategy2Leverage);
             strategy2Signal.PositionSizeUsdt = 0m;
             strategy2Signal.Quantity = 0m;
             strategy2Signal.OrderLinkId = $"s2-{strategy2Signal.Id:N}"[..35];

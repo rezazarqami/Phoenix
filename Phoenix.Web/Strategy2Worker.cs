@@ -103,7 +103,7 @@ public sealed class Strategy2Worker(
             // Keep a small exchange reserve for entry/exit fees and initial-margin
             // fluctuations; otherwise a nominal 99.5% allocation can exceed AB.
             order.PositionSizeUsdt = available * runtime.Options.BalanceUsageRatio * 0.97m;
-            order.ApplyPhoenixLeverage(rules);
+            order.ApplyPhoenixLeverage(rules, 20m);
             if (order.PositionSizeUsdt <= 0 || order.Quantity < rules.MinimumOrderQuantity)
                 throw new InvalidOperationException("Demo available balance is not sufficient for Strategy 2.");
             await runtime.Client.SetLeverageAsync(order.Symbol, order.Leverage!.Value, token);

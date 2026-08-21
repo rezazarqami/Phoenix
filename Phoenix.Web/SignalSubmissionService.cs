@@ -16,10 +16,18 @@ public sealed class SignalSubmissionService(
 {
     public async Task<IResult> SubmitAsync(SignalRequest request, CancellationToken token)
     {
+        var outcome = await QueueAsync(request, token);
+        return outcome.Signal is not null
+            ? Results.Created($"/api/signals/{outcome.Signal.Id}", outcome.Signal)
+            : Results.BadRequest(new { error = outcome.Error });
+    }
+
+    public async Task<SignalSubmissionOutcome> QueueAsync(SignalRequest request, CancellationToken token)
+    {
         var error = request.Validate();
-        if (error is not null) return Results.BadRequest(new { error });
+        if (error is not null) return new(null, error);
         if (!await catalog.ContainsAsync(request.Symbol, token))
-            return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
+            return new(null, "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد.");
 
         try
         {
@@ -51,8 +59,10 @@ public sealed class SignalSubmissionService(
                 await strategy2.Store.AddAsync(strategy2Signal, token);
                 await strategy2Telegram.QueuedAsync(strategy2Signal, token);
             }
-            return Results.Created($"/api/signals/{queued.Id}", queued);
+            return new(queued, null);
         }
-        catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+        catch (Exception exception) { return new(null, exception.Message); }
     }
 }
+
+public sealed record SignalSubmissionOutcome(ServerSignal? Signal, string? Error);

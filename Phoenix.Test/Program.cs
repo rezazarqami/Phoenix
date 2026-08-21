@@ -545,6 +545,9 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     var lineCandidate = new SignalCandidateFinder(new StrategyCalculator())
         .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
     Equal(126m, lineCandidate.Ceiling);
+    var snapshot = SignalChartRenderer.Render(candles, candidate, false);
+    True(snapshot.Length > 1000);
+    True(snapshot.Take(8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }));
 });
 
 Run("Signal Lab moves Long floor after an intermediate 62.8 percent entry was touched", () =>

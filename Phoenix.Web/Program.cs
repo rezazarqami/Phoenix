@@ -20,6 +20,7 @@ builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<SignalSubmissionService>();
 builder.Services.AddSingleton<SignalPlanPreviewer>();
+builder.Services.AddSingleton<SignalBatchService>();
 builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
 builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
@@ -206,6 +207,16 @@ app.MapGet("/api/analysis/coins", async (MarketCapCatalog catalog, CancellationT
 {
     try { return Results.Ok(new { assets = await catalog.GetAsync(token) }); }
     catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
+
+app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
+app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, SignalBatchService batches) =>
+{
+    if (request.Count is < 1 or > 200) return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
+    if (request.PositionSizeUsdt <= 0) return Results.BadRequest(new { error = "مقدار ورودی باید بیشتر از صفر باشد." });
+    return batches.Start(request.Count, request.PositionSizeUsdt, out var error)
+        ? Results.Accepted(value: batches.Status)
+        : Results.Conflict(new { error });
 });
 
 app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int? limit, int? depth,

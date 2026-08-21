@@ -8,6 +8,7 @@ public sealed class TelegramCommandWorker(
     ServerOrderStore store,
     ServerState state,
     BybitDemoOptions options,
+    SignalBatchService batches,
     ILogger<TelegramCommandWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -32,6 +33,11 @@ public sealed class TelegramCommandWorker(
                 {
                     offset = Math.Max(offset, command.UpdateId + 1);
                     if (!telegram.IsAuthorizedChat(command.ChatId)) continue;
+                    if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
+                    {
+                        await batches.HandleCallbackAsync(command.Command, command.CallbackId, stoppingToken);
+                        continue;
+                    }
                     await telegram.SendCommandReplyAsync(command.ChatId,
                         await BuildReplyAsync(command.Command, stoppingToken), stoppingToken);
                 }

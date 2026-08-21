@@ -39,5 +39,23 @@ async function loadMarket() {
 document.querySelector('#marketSearch').addEventListener('input', renderMarket);
 document.querySelector('#marketFilter').addEventListener('change', renderMarket);
 document.querySelector('#marketRefresh').addEventListener('click', loadMarket);
+document.querySelector('#batchSize').value = localStorage.getItem('phoenix.signal.positionSizeUsdt') || '10';
+document.querySelector('#startBatch').addEventListener('click', async () => {
+  const button = document.querySelector('#startBatch'); button.disabled = true;
+  try {
+    const response = await fetch('/api/analysis/signal-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: Number(document.querySelector('#batchCount').value), positionSizeUsdt: Number(document.querySelector('#batchSize').value) }) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.error || 'شروع صف ناموفق بود.');
+    localStorage.setItem('phoenix.signal.positionSizeUsdt', document.querySelector('#batchSize').value); renderBatch(data);
+  } catch (error) { document.querySelector('#marketMessage').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+function renderBatch(state) {
+  const status = document.querySelector('#batchStatus');
+  status.classList.toggle('running', state.running);
+  status.textContent = state.running ? `${state.message} · تأیید ${faMarket.format(state.approved)} از ${faMarket.format(state.target)} · بررسی‌شده ${faMarket.format(state.checked)} · ردشده ${faMarket.format(state.rejected)}` : state.message;
+  document.querySelector('#startBatch').disabled = state.running;
+}
+async function pollBatch() { try { const response = await fetch('/api/analysis/signal-batch', { cache: 'no-store' }); if (response.ok) renderBatch(await response.json()); } catch {} }
+setInterval(pollBatch, 4000); pollBatch();
 document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); location.replace('/analysis/login'); });
 loadMarket();

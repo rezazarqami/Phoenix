@@ -1,0 +1,3 @@
+.signal-chart-card.loading-chart #signalChart { opacity: .48; }
+.signal-chart-card.loading-chart { position: relative; }
+.signal-chart-card.loading-chart::after { content: 'در حال دریافت و تحلیل نمودار جدید…'; position: absolute; z-index: 15; top: 145px; left: 50%; transform: translateX(-50%); padding: 10px 16px; border: 1px solid #38d39f66; border-radius: 8px; background: #081310e8; color: #38d39f; font-size: 11px; white-space: nowrap; }

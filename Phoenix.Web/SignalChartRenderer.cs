@@ -18,7 +18,7 @@ public static class SignalChartRenderer
         var viewEnd = Math.Min(candles.Count - 1, secondAnchor + padding);
         candles = candles.Skip(viewStart).Take(viewEnd - viewStart + 1).ToArray();
         var pixels = new byte[width * height * 3];
-        Fill(pixels, 9, 22, 19);
+        Fill(pixels, 255, 255, 255);
         var min = candles.Min(x => lineMode ? x.Close : x.Low);
         var max = candles.Max(x => lineMode ? x.Close : x.High);
         min = Math.Min(min, Math.Min(candidate.Floor, Math.Min(candidate.TakeProfit, candidate.StopLoss)));
@@ -26,14 +26,14 @@ public static class SignalChartRenderer
         var span = Math.Max(max - min, 0.00000001m);
         int X(int index) => left + (int)Math.Round(index * (width - left - right - 1d) / Math.Max(1, candles.Count - 1));
         int Y(decimal price) => top + (int)Math.Round((double)((max - price) / span) * (height - top - bottom - 1));
-        for (var grid = 1; grid < 6; grid++) DrawLine(pixels, width, height, left, top + grid * (height - top - bottom) / 6, width - right, top + grid * (height - top - bottom) / 6, 22, 40, 35);
+        for (var grid = 1; grid < 6; grid++) DrawLine(pixels, width, height, left, top + grid * (height - top - bottom) / 6, width - right, top + grid * (height - top - bottom) / 6, 235, 239, 237);
         if (lineMode)
-            for (var i = 1; i < candles.Count; i++) DrawLine(pixels, width, height, X(i - 1), Y(candles[i - 1].Close), X(i), Y(candles[i].Close), 36, 190, 148, 2);
+            for (var i = 1; i < candles.Count; i++) DrawLine(pixels, width, height, X(i - 1), Y(candles[i - 1].Close), X(i), Y(candles[i].Close), 14, 125, 96, 2);
         else
             for (var i = 0; i < candles.Count; i++)
             {
                 var candle = candles[i]; var up = candle.Close >= candle.Open;
-                var color = up ? (R: (byte)38, G: (byte)211, B: (byte)159) : (R: (byte)238, G: (byte)83, B: (byte)111);
+                var color = up ? (R: (byte)16, G: (byte)155, B: (byte)112) : (R: (byte)220, G: (byte)55, B: (byte)82);
                 var x = X(i); DrawLine(pixels, width, height, x, Y(candle.High), x, Y(candle.Low), color.R, color.G, color.B);
                 FillRect(pixels, width, height, x - 1, Math.Min(Y(candle.Open), Y(candle.Close)), 3, Math.Max(2, Math.Abs(Y(candle.Open) - Y(candle.Close))), color.R, color.G, color.B);
             }

@@ -23,17 +23,30 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             if (Enumerable.Range(i - depth, depth * 2 + 1).Where(j => j != i).All(j => LowAt(i) < LowAt(j)))
                 lows.Add((i, LowAt(i), candles[i].OpenTime));
         }
-        // The visible chart window defines the range. Its true extrema are the
-        // anchors: candle shadows in candlestick mode and closes in line mode.
-        // Confirmed pivots are still used below only to detect completed 61.8%
-        // cycles and move the opposite anchor forward when necessary.
+        if (highs.Count == 0 || lows.Count == 0)
+            throw new InvalidOperationException("سقف و کف تأییدشده کافی پیدا نشد.");
+
+        // First determine the move from its confirmed major anchors. Only the
+        // second anchor is then extended to the true visible-range extreme:
+        // the maximum for Long and the minimum for Short. The first anchor is
+        // kept on the 61.8%-cycle logic below so it represents the beginning
+        // of the latest uninterrupted impulse, not merely a range extreme.
         var points = Enumerable.Range(0, candles.Count)
             .Select(index => (Index: index, High: HighAt(index), Low: LowAt(index), Time: candles[index].OpenTime))
             .ToArray();
-        var highPoint = points.MaxBy(x => x.High);
-        var lowPoint = points.MinBy(x => x.Low);
-        var recentHigh = (highPoint.Index, Price: highPoint.High, highPoint.Time);
-        var recentLow = (lowPoint.Index, Price: lowPoint.Low, lowPoint.Time);
+        var recentHigh = highs.MaxBy(x => x.Price);
+        var recentLow = lows.MinBy(x => x.Price);
+        var initialDirection = recentLow.Time < recentHigh.Time ? Direction.Long : Direction.Short;
+        if (initialDirection == Direction.Long)
+        {
+            var highPoint = points.Where(x => x.Index > recentLow.Index).MaxBy(x => x.High);
+            recentHigh = (highPoint.Index, Price: highPoint.High, highPoint.Time);
+        }
+        else
+        {
+            var lowPoint = points.Where(x => x.Index > recentHigh.Index).MinBy(x => x.Low);
+            recentLow = (lowPoint.Index, Price: lowPoint.Low, lowPoint.Time);
+        }
         if (recentHigh.Price <= recentLow.Price)
             throw new InvalidOperationException("دامنه قیمت کافی برای ساخت سیگنال پیدا نشد.");
         var resetCount = 0;

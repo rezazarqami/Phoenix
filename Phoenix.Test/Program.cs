@@ -645,6 +645,37 @@ Run("Signal Lab Long ceiling uses the highest shadow or close in the visible ran
     Equal(130m, lineCandidate.Ceiling);
 });
 
+Run("Signal Lab applies the absolute extreme only to the second anchor", () =>
+{
+    var longPrices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        longPrices[20 + offset] = 60m + Math.Abs(offset);
+        longPrices[60 + offset] = 130m - Math.Abs(offset);
+    }
+    var longCandles = longPrices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, index == 68 ? 160m : price + 0.1m, index == 1 ? 30m : price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var longCandidate = finder.Find("BTCUSDT", "60", longCandles, rules, 25m, 3);
+    Equal("Long", longCandidate.Direction);
+    Equal(59.9m, longCandidate.Floor);
+    Equal(160m, longCandidate.Ceiling);
+
+    var shortPrices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        shortPrices[20 + offset] = 140m - Math.Abs(offset);
+        shortPrices[60 + offset] = 70m + Math.Abs(offset);
+    }
+    var shortCandles = shortPrices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, index == 1 ? 180m : price + 0.1m, index == 68 ? 50m : price - 0.1m, price, 1m)).ToArray();
+    var shortCandidate = finder.Find("BTCUSDT", "60", shortCandles, rules, 25m, 3);
+    Equal("Short", shortCandidate.Direction);
+    Equal(140.1m, shortCandidate.Ceiling);
+    Equal(50m, shortCandidate.Floor);
+});
+
 Run("Signal Lab moves Short ceiling after an intermediate 61.8 percent entry was touched", () =>
 {
     var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();

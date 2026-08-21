@@ -35,7 +35,6 @@ public sealed class SignalSubmissionService(
             signal.TradePlan.Leverage = BybitLeverageRules.Normalize(signal.TradePlan.Leverage, rules);
             var position = new ExecutionManager().PreparePosition(signal)
                 ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
-            SignalPlanPreviewer.ApplyRequestedQuantity(position, request.Quantity);
             var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
             var queued = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
             await store.AddAsync(queued, token);

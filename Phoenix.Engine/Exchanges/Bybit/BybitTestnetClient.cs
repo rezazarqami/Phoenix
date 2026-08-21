@@ -47,6 +47,48 @@ public sealed class BybitDemoClient
         return new BybitTicker(returnedSymbol, lastPrice, DateTime.UtcNow);
     }
 
+    public async Task<IReadOnlyList<BybitKline>> GetKlinesAsync(
+        string symbol,
+        string interval,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        symbol = NormalizeSymbol(symbol);
+        var allowedIntervals = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "1", "3", "5", "15", "30", "60", "120", "240", "360", "720", "D", "W", "M"
+        };
+        interval = interval.Trim().ToUpperInvariant();
+        if (!allowedIntervals.Contains(interval))
+            throw new ArgumentException("Bybit candle interval is not supported.", nameof(interval));
+        if (limit is < 50 or > 1000)
+            throw new ArgumentOutOfRangeException(nameof(limit), "Candle limit must be between 50 and 1000.");
+
+        var path = $"/v5/market/kline?category=linear&symbol={Uri.EscapeDataString(symbol)}" +
+                   $"&interval={Uri.EscapeDataString(interval)}&limit={limit.ToString(CultureInfo.InvariantCulture)}";
+        using var response = await _httpClient.GetAsync(path, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+
+        var result = new List<BybitKline>();
+        foreach (var item in document.RootElement.GetProperty("result").GetProperty("list").EnumerateArray())
+        {
+            if (!long.TryParse(item[0].GetString(), NumberStyles.None, CultureInfo.InvariantCulture, out var openTime))
+                continue;
+            result.Add(new BybitKline(
+                openTime,
+                ParseDecimal(item[1]),
+                ParseDecimal(item[2]),
+                ParseDecimal(item[3]),
+                ParseDecimal(item[4]),
+                ParseDecimal(item[5])));
+        }
+        result.Reverse();
+        return result;
+    }
+
     public async Task<BybitInstrumentRules> GetInstrumentRulesAsync(
         string symbol,
         CancellationToken cancellationToken = default)
@@ -445,6 +487,13 @@ public sealed class BybitDemoClient
         if (normalized.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
             throw new ArgumentException("Symbol can only contain ASCII letters, digits, and hyphens.", nameof(symbol));
         return normalized;
+    }
+
+    private static decimal ParseDecimal(JsonElement element)
+    {
+        if (decimal.TryParse(element.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+            return value;
+        throw new InvalidOperationException("Bybit returned an invalid candle value.");
     }
 
     private static void EnsureSuccess(JsonElement root)

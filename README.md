@@ -76,3 +76,19 @@ Bybit or its network provider may reject requests based on the originating regio
 3. Add configurable account-level risk limits and emergency stop.
 4. Integrate Demo order submission with secrets stored outside source control.
 5. Run replay and Demo validation before considering any live mode.
+
+## Elliott Wave Lab
+
+Phoenix Web includes a separately authenticated market-analysis workspace at
+`/analysis`. The main login page links to its own `/analysis/login` screen.
+Configure its credentials outside source control:
+
+```text
+PHOENIX_ANALYSIS_USERNAME=<analysis username>
+PHOENIX_ANALYSIS_PASSWORD=<strong analysis password>
+```
+
+The first analysis ruleset reads public Bybit linear-market candles, detects
+configurable swing pivots, validates five-wave impulses, ranks up to three
+scenarios, and reports Fibonacci ratios and invalidation levels. It does not
+place orders and does not use exchange API credentials.

@@ -10,6 +10,11 @@ builder.Services.AddSingleton<BybitDemoClient>();
 builder.Services.AddSingleton<ServerState>();
 builder.Services.AddSingleton<ServerOrderStore>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
+builder.Services.AddHttpClient<MarketCapCatalog>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Phoenix-Signal-Lab/1.0");
+});
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
@@ -35,7 +40,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/crypto-market.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -97,6 +102,7 @@ app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath
 app.MapGet("/analysis/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis-login.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis/signals", () => Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8"));
+app.MapGet("/analysis/coins", () => Results.File(Path.Combine(app.Environment.WebRootPath, "crypto-market.html"), "text/html; charset=utf-8"));
 app.MapPost("/api/auth/login", (LoginRequest request, HttpResponse response) =>
 {
     if (!PhoenixSessionAuth.CredentialsMatch(request.Username, request.Password))
@@ -195,6 +201,12 @@ app.MapGet("/api/instruments", async (BybitInstrumentCatalog catalog, Cancellati
 
 app.MapGet("/api/analysis/instruments", async (BybitInstrumentCatalog catalog, CancellationToken token) =>
     Results.Ok(new { symbols = await catalog.GetAsync(token) }));
+
+app.MapGet("/api/analysis/coins", async (MarketCapCatalog catalog, CancellationToken token) =>
+{
+    try { return Results.Ok(new { assets = await catalog.GetAsync(token) }); }
+    catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
 
 app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int? limit, int? depth,
     decimal? deviation, BybitDemoClient bybit, BybitInstrumentCatalog catalog,

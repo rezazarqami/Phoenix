@@ -298,4 +298,6 @@ $('#analysisLogout').addEventListener('click', async () => {
 localStorage.removeItem('phoenix.signal.quantity');
 const savedPositionSize = localStorage.getItem('phoenix.signal.positionSizeUsdt') || ui.size.value;
 ui.size.value = savedPositionSize; ui.quantity.value = savedPositionSize;
+const requestedSymbol = new URLSearchParams(location.search).get('symbol');
+if (requestedSymbol) ui.symbol.value = requestedSymbol.toUpperCase().replace(/[^A-Z0-9-]/g, '');
 loadInstruments().then(() => findCandidate(false));

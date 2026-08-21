@@ -547,7 +547,7 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     Equal(126m, lineCandidate.Ceiling);
 });
 
-Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was touched", () =>
+Run("Signal Lab moves Long floor after an intermediate 62.8 percent entry was touched", () =>
 {
     var prices = Enumerable.Range(0, 120).Select(_ => 100m).ToArray();
     void Pivot(int center, decimal price, bool high)
@@ -568,6 +568,26 @@ Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was to
     Equal(90m, candidate.Floor);
     Equal(150m, candidate.Ceiling);
     True(candidate.IsBurned);
+});
+
+Run("Signal Lab checks every small peak sequentially for a 62.8 percent reset", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -5; offset <= 5; offset++)
+    {
+        prices[12 + offset] = 80m + Math.Abs(offset);
+        prices[72 + offset] = 130m - Math.Abs(offset);
+    }
+    prices[23] = 96m; prices[24] = 98m; prices[25] = 100m; prices[26] = 94m;
+    prices[27] = 85m; prices[28] = 96m; prices[29] = 105m; prices[30] = 101m;
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price, price, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 5, useClosePrices: true);
+    Equal("Long", candidate.Direction);
+    Equal(85m, candidate.Floor);
+    Equal(130m, candidate.Ceiling);
 });
 
 Run("Signal Lab keeps a candidate active while entry has not been touched", () =>
@@ -676,7 +696,7 @@ Run("Signal Lab applies the absolute extreme only to the second anchor", () =>
     Equal(50m, shortCandidate.Floor);
 });
 
-Run("Signal Lab moves Short ceiling after an intermediate 61.8 percent entry was touched", () =>
+Run("Signal Lab moves Short ceiling after an intermediate 62.8 percent entry was touched", () =>
 {
     var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();
     void Pivot(int center, decimal price, bool high)

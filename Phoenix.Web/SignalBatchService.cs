@@ -15,15 +15,15 @@ public sealed class SignalBatchService(
 
     public BatchState Status { get { lock (_sync) return _state; } }
 
-    public bool Start(int target, decimal positionSizeUsdt, out string? error)
+    public bool Start(int target, decimal positionSizeUsdt, string directionFilter, out string? error)
     {
         lock (_sync)
         {
             if (_state.Running) { error = "یک صف بررسی در حال اجراست؛ ابتدا همان صف را در تلگرام کامل کنید."; return false; }
             if (!telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
-            _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null);
+            _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null, directionFilter);
             error = null;
-            _ = Task.Run(() => RunAsync(target, positionSizeUsdt, lifetime.ApplicationStopping));
+            _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, lifetime.ApplicationStopping));
             return true;
         }
     }
@@ -45,7 +45,7 @@ public sealed class SignalBatchService(
         return true;
     }
 
-    private async Task RunAsync(int target, decimal positionSizeUsdt, CancellationToken token)
+    private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter, CancellationToken token)
     {
         try
         {
@@ -66,7 +66,9 @@ public sealed class SignalBatchService(
                         SignalCandidate candidate;
                         try { candidate = finder.Find(asset.Symbol, interval, candles, rules, positionSizeUsdt, 5, lineMode); }
                         catch { continue; }
-                        if (candidate.IsBurned || active.Any(x => x.Direction.Equals(candidate.Direction, StringComparison.OrdinalIgnoreCase))) continue;
+                        if (candidate.IsBurned ||
+                            (directionFilter != "All" && !candidate.Direction.Equals(directionFilter, StringComparison.OrdinalIgnoreCase)) ||
+                            active.Any(x => x.Direction.Equals(candidate.Direction, StringComparison.OrdinalIgnoreCase))) continue;
                         selected = candidate; selectedCandles = candles; selectedInterval = interval; selectedLineMode = lineMode; break;
                     }
                     if (selected is not null) break;
@@ -102,10 +104,10 @@ public sealed class SignalBatchService(
 }
 
 public sealed record BatchState(bool Running, int Target, int Approved, int Rejected, int Checked,
-    string? CurrentSymbol, string Message, string? Error)
+    string? CurrentSymbol, string Message, string? Error, string DirectionFilter)
 {
     public int Proposed { get; init; }
-    public static BatchState Idle => new(false, 0, 0, 0, 0, null, "صفی فعال نیست.", null);
+    public static BatchState Idle => new(false, 0, 0, 0, 0, null, "صفی فعال نیست.", null, "All");
 }
 
-public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt);
+public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt, string? DirectionFilter);

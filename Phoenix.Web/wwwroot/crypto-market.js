@@ -43,7 +43,7 @@ document.querySelector('#batchSize').value = localStorage.getItem('phoenix.signa
 document.querySelector('#startBatch').addEventListener('click', async () => {
   const button = document.querySelector('#startBatch'); button.disabled = true;
   try {
-    const response = await fetch('/api/analysis/signal-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: Number(document.querySelector('#batchCount').value), positionSizeUsdt: Number(document.querySelector('#batchSize').value) }) });
+    const response = await fetch('/api/analysis/signal-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: Number(document.querySelector('#batchCount').value), positionSizeUsdt: Number(document.querySelector('#batchSize').value), directionFilter: document.querySelector('#batchDirection').value }) });
     const data = await response.json(); if (!response.ok) throw new Error(data.error || 'شروع صف ناموفق بود.');
     localStorage.setItem('phoenix.signal.positionSizeUsdt', document.querySelector('#batchSize').value); renderBatch(data);
   } catch (error) { document.querySelector('#marketMessage').textContent = error.message; }

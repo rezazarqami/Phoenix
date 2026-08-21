@@ -8,6 +8,15 @@ public static class SignalChartRenderer
     public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode)
     {
         const int width = 1000, height = 600, left = 30, right = 25, top = 25, bottom = 35;
+        var ceilingIndex = FindNearestIndex(candles, candidate.CeilingTime);
+        var floorIndex = FindNearestIndex(candles, candidate.FloorTime);
+        var firstAnchor = Math.Min(ceilingIndex, floorIndex);
+        var secondAnchor = Math.Max(ceilingIndex, floorIndex);
+        var anchorSpan = Math.Max(1, secondAnchor - firstAnchor + 1);
+        var padding = Math.Clamp(anchorSpan / 2, 60, 220);
+        var viewStart = Math.Max(0, firstAnchor - padding);
+        var viewEnd = Math.Min(candles.Count - 1, secondAnchor + padding);
+        candles = candles.Skip(viewStart).Take(viewEnd - viewStart + 1).ToArray();
         var pixels = new byte[width * height * 3];
         Fill(pixels, 9, 22, 19);
         var min = candles.Min(x => lineMode ? x.Close : x.Low);
@@ -33,6 +42,13 @@ public static class SignalChartRenderer
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);
+    }
+
+    private static int FindNearestIndex(IReadOnlyList<BybitKline> candles, long time)
+    {
+        var best = 0; var distance = long.MaxValue;
+        for (var i = 0; i < candles.Count; i++) { var current = Math.Abs(candles[i].OpenTime - time); if (current >= distance) continue; best = i; distance = current; }
+        return best;
     }
 
     private static void Fill(byte[] pixels, byte r, byte g, byte b) { for (var i = 0; i < pixels.Length; i += 3) { pixels[i] = r; pixels[i + 1] = g; pixels[i + 2] = b; } }

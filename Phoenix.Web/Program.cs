@@ -214,7 +214,9 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
 {
     if (request.Count is < 1 or > 200) return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
     if (request.PositionSizeUsdt <= 0) return Results.BadRequest(new { error = "مقدار ورودی باید بیشتر از صفر باشد." });
-    return batches.Start(request.Count, request.PositionSizeUsdt, out var error)
+    var directionFilter = string.IsNullOrWhiteSpace(request.DirectionFilter) ? "All" : request.DirectionFilter;
+    if (directionFilter is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "فیلتر جهت معتبر نیست." });
+    return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, out var error)
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });

@@ -2,6 +2,14 @@ namespace Phoenix.Engine.Exchanges.Bybit;
 
 public sealed record BybitTicker(string Symbol, decimal LastPrice, DateTime ReceivedAtUtc);
 
+public sealed record BybitKline(
+    long OpenTime,
+    decimal Open,
+    decimal High,
+    decimal Low,
+    decimal Close,
+    decimal Volume);
+
 public sealed record BybitDemoStatus(
     bool PublicApiAvailable,
     bool Authenticated,

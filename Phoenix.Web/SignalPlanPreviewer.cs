@@ -26,10 +26,16 @@ public sealed class SignalPlanPreviewer(StrategyCalculator calculator, BybitDemo
         signal.TradePlan.Leverage = BybitLeverageRules.Normalize(signal.TradePlan.Leverage, rules);
         var position = new ExecutionManager().PreparePosition(signal)
             ?? throw new InvalidOperationException("پیش‌نمایش موقعیت ساخته نشد.");
+        ApplyRequestedQuantity(position, request.Quantity);
         var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
         return new SignalPlanPreview(preview.Price, preview.TakeProfit, preview.StopLoss,
             signal.TradePlan.StopLoss2, signal.TradePlan.RiskFreePrice,
             signal.TradePlan.Leverage, preview.Quantity);
+    }
+
+    public static void ApplyRequestedQuantity(Position position, decimal? quantity)
+    {
+        if (quantity.HasValue) position.Quantity = quantity.Value;
     }
 }
 

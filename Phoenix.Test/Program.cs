@@ -523,6 +523,16 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
     True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3").Passed);
 });
 
+Run("Signal Lab uses the manually requested quantity", () =>
+{
+    var signal = Prepare(BuildSignal(Direction.Long));
+    var position = new ExecutionManager().PreparePosition(signal)!;
+    SignalPlanPreviewer.ApplyRequestedQuantity(position, 4.321m);
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.01m, 0.01m, 5m);
+    var preview = BybitOrderPreviewBuilder.Build("BTCUSDT", position, rules);
+    Equal(4.32m, preview.Quantity);
+});
+
 Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
 {
     var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.08m).ToArray();

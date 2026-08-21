@@ -331,7 +331,8 @@ namespace Phoenix.Web
         public string? Error { get; set; }
     }
 
-    public sealed record SignalRequest(string Symbol, string Direction, decimal Ceiling, decimal Floor, decimal PositionSizeUsdt)
+    public sealed record SignalRequest(string Symbol, string Direction, decimal Ceiling, decimal Floor,
+        decimal PositionSizeUsdt, decimal? Quantity = null)
     {
         public string? Validate()
         {
@@ -343,6 +344,8 @@ namespace Phoenix.Web
                 return "سقف باید بزرگ‌تر از کف باشد.";
             if (PositionSizeUsdt <= 0)
                 return "سرمایه باید بیشتر از صفر باشد.";
+            if (Quantity is <= 0)
+                return "Quantity باید بیشتر از صفر باشد.";
             return null;
         }
     }

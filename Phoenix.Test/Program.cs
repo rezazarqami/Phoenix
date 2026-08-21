@@ -605,6 +605,46 @@ Run("Signal Lab direction is Short when major high comes before major low", () =
     True(candidate.CeilingTime < candidate.FloorTime);
 });
 
+Run("Signal Lab Short floor uses the lowest shadow or close in the visible range", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[20 + offset] = 140m - Math.Abs(offset);
+        prices[60 + offset] = 70m + Math.Abs(offset);
+    }
+    prices[68] = 75m;
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, index == 68 ? 50m : price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var candleCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    var lineCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Short", candleCandidate.Direction);
+    Equal(50m, candleCandidate.Floor);
+    Equal(70m, lineCandidate.Floor);
+});
+
+Run("Signal Lab Long ceiling uses the highest shadow or close in the visible range", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[20 + offset] = 60m + Math.Abs(offset);
+        prices[60 + offset] = 130m - Math.Abs(offset);
+    }
+    prices[68] = 125m;
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, index == 68 ? 160m : price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var candleCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    var lineCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Long", candleCandidate.Direction);
+    Equal(160m, candleCandidate.Ceiling);
+    Equal(130m, lineCandidate.Ceiling);
+});
+
 Run("Signal Lab moves Short ceiling after an intermediate 61.8 percent entry was touched", () =>
 {
     var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();

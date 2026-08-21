@@ -23,18 +23,26 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             if (Enumerable.Range(i - depth, depth * 2 + 1).Where(j => j != i).All(j => LowAt(i) < LowAt(j)))
                 lows.Add((i, LowAt(i), candles[i].OpenTime));
         }
-        if (highs.Count == 0 || lows.Count == 0) throw new InvalidOperationException("سقف و کف تأییدشده کافی پیدا نشد.");
-
-        // The visible chart window defines context. Pick the most prominent
-        // confirmed high and low inside that window as its major anchors.
-        var recentHigh = highs.MaxBy(x => x.Price);
-        var recentLow = lows.MinBy(x => x.Price);
+        // The visible chart window defines the range. Its true extrema are the
+        // anchors: candle shadows in candlestick mode and closes in line mode.
+        // Confirmed pivots are still used below only to detect completed 61.8%
+        // cycles and move the opposite anchor forward when necessary.
+        var points = Enumerable.Range(0, candles.Count)
+            .Select(index => (Index: index, High: HighAt(index), Low: LowAt(index), Time: candles[index].OpenTime))
+            .ToArray();
+        var highPoint = points.MaxBy(x => x.High);
+        var lowPoint = points.MinBy(x => x.Low);
+        var recentHigh = (highPoint.Index, Price: highPoint.High, highPoint.Time);
+        var recentLow = (lowPoint.Index, Price: lowPoint.Low, lowPoint.Time);
+        if (recentHigh.Price <= recentLow.Price)
+            throw new InvalidOperationException("دامنه قیمت کافی برای ساخت سیگنال پیدا نشد.");
         var resetCount = 0;
 
         if (recentLow.Time < recentHigh.Time)
         {
             var activeLow = recentLow;
-            var risingHighs = highs.Where(x => x.Index > activeLow.Index && x.Index <= recentHigh.Index)
+            var risingHighs = highs.Append(recentHigh).GroupBy(x => x.Index).Select(group => group.First())
+                .Where(x => x.Index > activeLow.Index && x.Index <= recentHigh.Index)
                 .OrderBy(x => x.Index).ToArray();
             for (var i = 0; i < risingHighs.Length - 1; i++)
             {
@@ -56,7 +64,8 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
         else
         {
             var activeHigh = recentHigh;
-            var fallingLows = lows.Where(x => x.Index > activeHigh.Index && x.Index <= recentLow.Index)
+            var fallingLows = lows.Append(recentLow).GroupBy(x => x.Index).Select(group => group.First())
+                .Where(x => x.Index > activeHigh.Index && x.Index <= recentLow.Index)
                 .OrderBy(x => x.Index).ToArray();
             for (var i = 0; i < fallingLows.Length - 1; i++)
             {

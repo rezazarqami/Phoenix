@@ -30,7 +30,9 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
 
         var latest = candles[^1].Close;
         var momentumBase = candles[^Math.Min(21, candles.Count)].Close;
-        var direction = latest >= momentumBase ? Direction.Long : Direction.Short;
+        // Direction follows the chronological move between the selected major
+        // anchors: low then high is an upward range; high then low is downward.
+        var direction = recentLow.Time < recentHigh.Time ? Direction.Long : Direction.Short;
         var signal = new Signal
         {
             Id = Guid.NewGuid(), Symbol = symbol, Direction = direction,
@@ -55,8 +57,8 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             Math.Round(confidence, 1), recentHigh.Time, recentLow.Time,
             candles[0].OpenTime, candles[^1].OpenTime, candles.Count,
             direction == Direction.Long
-                ? "مومنتوم ۲۰ کندل اخیر صعودی است؛ ورود روی اصلاح محدوده پیشنهاد شده است."
-                : "مومنتوم ۲۰ کندل اخیر نزولی است؛ ورود روی بازگشت محدوده پیشنهاد شده است.");
+                ? "کف ماژور زودتر از سقف ماژور تشکیل شده است؛ جهت محدوده صعودی و پیشنهاد Long است."
+                : "سقف ماژور زودتر از کف ماژور تشکیل شده است؛ جهت محدوده نزولی و پیشنهاد Short است.");
     }
 }
 

@@ -538,9 +538,27 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     var candidate = new SignalCandidateFinder(new StrategyCalculator())
         .Find("BTCUSDT", "60", candles, rules, 25m, 3);
     True(candidate.Ceiling > candidate.Floor);
+    Equal("Long", candidate.Direction);
     True(candidate.EntryPrice > candidate.Floor && candidate.EntryPrice < candidate.Ceiling);
     True(candidate.Leverage >= 1m && candidate.Leverage <= 100m);
     True(candidate.Confidence is >= 35m and <= 92m);
+});
+
+Run("Signal Lab direction is Short when major high comes before major low", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[25 + offset] = 140m - Math.Abs(offset);
+        prices[70 + offset] = 60m + Math.Abs(offset);
+    }
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    Equal("Short", candidate.Direction);
+    True(candidate.CeilingTime < candidate.FloorTime);
 });
 
 Run("Signal Lab major floor follows the visible chart range", () =>

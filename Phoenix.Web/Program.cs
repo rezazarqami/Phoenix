@@ -35,7 +35,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/signal-lab.css" or "/signal-lab.js" or
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/signal-lab.css" or "/signal-range.css" or "/signal-lab.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -215,7 +215,7 @@ app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int?
     }
 });
 
-app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? interval, int? depth,
+app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? interval, int? depth, long? from, long? to,
     decimal? positionSizeUsdt, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
     SignalCandidateFinder finder, CancellationToken token) =>
 {
@@ -226,8 +226,13 @@ app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? inter
             return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
         var selectedInterval = interval ?? "60";
         var candles = await bybit.GetKlinesAsync(symbol, selectedInterval, 300, token);
+        var selectedCandles = candles.Where(candle =>
+            (!from.HasValue || candle.OpenTime >= from.Value * 1000L) &&
+            (!to.HasValue || candle.OpenTime <= to.Value * 1000L)).ToArray();
+        if (selectedCandles.Length < 30)
+            return Results.BadRequest(new { error = "محدوده نمودار خیلی کوچک است؛ حداقل ۳۰ کندل را نمایش دهید." });
         var rules = await bybit.GetInstrumentRulesAsync(symbol, token);
-        var candidate = finder.Find(symbol, selectedInterval, candles, rules,
+        var candidate = finder.Find(symbol, selectedInterval, selectedCandles, rules,
             Math.Clamp(positionSizeUsdt ?? 25m, 1m, 1_000_000m), depth ?? 5);
         return Results.Ok(new { candidate, candles });
     }

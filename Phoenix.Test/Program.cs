@@ -543,6 +543,27 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     True(candidate.Confidence is >= 35m and <= 92m);
 });
 
+Run("Signal Lab major floor follows the visible chart range", () =>
+{
+    var prices = Enumerable.Range(0, 140).Select(i => 110m + i * 0.03m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(20, 80m, false); Pivot(38, 130m, true); // old wide-range anchors
+    Pivot(75, 105m, false); Pivot(96, 130m, true); Pivot(116, 111m, false);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var full = finder.Find("BTCUSDT", "240", candles, rules, 25m, 3);
+    var visible = finder.Find("BTCUSDT", "240", candles.Skip(60).ToArray(), rules, 25m, 3);
+    True(visible.Floor > full.Floor);
+    Equal(full.Ceiling, visible.Ceiling);
+    Equal(80, visible.RangeCandleCount);
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

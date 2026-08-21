@@ -567,6 +567,25 @@ Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was to
     Equal("Long", candidate.Direction);
     Equal(90m, candidate.Floor);
     Equal(150m, candidate.Ceiling);
+    True(candidate.IsBurned);
+});
+
+Run("Signal Lab keeps a candidate active while entry has not been touched", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(i => i < 60 ? 120m : 145m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[20 + offset] = 80m + Math.Abs(offset);
+        prices[60 + offset] = 150m - Math.Abs(offset);
+    }
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Long", candidate.Direction);
+    False(candidate.IsBurned);
+    True(candidate.EntryTouchedTime is null);
 });
 
 Run("Signal Lab direction is Short when major high comes before major low", () =>
@@ -606,6 +625,7 @@ Run("Signal Lab moves Short ceiling after an intermediate 61.8 percent entry was
     Equal("Short", candidate.Direction);
     Equal(140m, candidate.Ceiling);
     Equal(80m, candidate.Floor);
+    True(candidate.IsBurned);
 });
 
 Run("Signal Lab major floor follows the visible chart range", () =>

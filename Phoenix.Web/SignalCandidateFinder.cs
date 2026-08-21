@@ -92,6 +92,16 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
         var position = new ExecutionManager().PreparePosition(signal)
             ?? throw new InvalidOperationException("پیش‌نمایش موقعیت ساخته نشد.");
         var preview = BybitOrderPreviewBuilder.Build(symbol, position, rules);
+        var formedAtIndex = Math.Max(recentHigh.Index, recentLow.Index);
+        var touchedCandle = candles.Skip(formedAtIndex + 1).Select((candle, offset) => new
+            {
+                Candle = candle,
+                Index = formedAtIndex + 1 + offset
+            })
+            .FirstOrDefault(item => direction == Direction.Long
+                ? LowAt(item.Index) <= preview.Price
+                : HighAt(item.Index) >= preview.Price);
+        var isBurned = touchedCandle is not null;
 
         var rangePercent = (recentHigh.Price - recentLow.Price) / recentLow.Price * 100m;
         var momentumPercent = Math.Abs(latest - momentumBase) / momentumBase * 100m;
@@ -104,13 +114,16 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             signal.TradePlan.RiskFreePrice, signal.TradePlan.Leverage, preview.Quantity,
             Math.Round(confidence, 1), recentHigh.Time, recentLow.Time,
             candles[0].OpenTime, candles[^1].OpenTime, candles.Count,
-            direction == Direction.Long
+            (direction == Direction.Long
                 ? $"کف پیش از سقف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و کف فعال به‌روزرسانی شد. پیشنهاد Long است."
-                : $"سقف پیش از کف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و سقف فعال به‌روزرسانی شد. پیشنهاد Short است.");
+                : $"سقف پیش از کف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و سقف فعال به‌روزرسانی شد. پیشنهاد Short است.") +
+            (isBurned ? " نقطه ورود پس از تشکیل محدوده لمس شده و این سیگنال سوخته است." : " نقطه ورود هنوز لمس نشده و سیگنال فعال است."),
+            isBurned, touchedCandle?.Candle.OpenTime);
     }
 }
 
 public sealed record SignalCandidate(string Symbol, string Interval, string Direction, decimal Ceiling, decimal Floor,
     decimal LastPrice, decimal EntryPrice, decimal TakeProfit, decimal StopLoss, decimal? StopLoss2,
     decimal? RiskFreePrice, decimal Leverage, decimal Quantity, decimal Confidence,
-    long CeilingTime, long FloorTime, long RangeStartTime, long RangeEndTime, int RangeCandleCount, string Rationale);
+    long CeilingTime, long FloorTime, long RangeStartTime, long RangeEndTime, int RangeCandleCount, string Rationale,
+    bool IsBurned, long? EntryTouchedTime);

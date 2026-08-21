@@ -225,7 +225,7 @@ app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? inter
         if (!await catalog.ContainsAsync(symbol, token))
             return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
         var selectedInterval = interval ?? "60";
-        var candles = await bybit.GetKlinesAsync(symbol, selectedInterval, 300, token);
+        var candles = await bybit.GetKlinesAsync(symbol, selectedInterval, 1000, token);
         var selectedCandles = candles.Where(candle =>
             (!from.HasValue || candle.OpenTime >= from.Value * 1000L) &&
             (!to.HasValue || candle.OpenTime <= to.Value * 1000L)).ToArray();

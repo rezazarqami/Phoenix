@@ -15,15 +15,15 @@ public sealed class SignalBatchService(
 
     public BatchState Status { get { lock (_sync) return _state; } }
 
-    public bool Start(int target, decimal positionSizeUsdt, string directionFilter, out string? error)
+    public bool Start(int target, decimal positionSizeUsdt, string directionFilter, string chartFilter, out string? error)
     {
         lock (_sync)
         {
             if (_state.Running) { error = "یک صف بررسی در حال اجراست؛ ابتدا همان صف را در تلگرام کامل کنید."; return false; }
             if (!telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
-            _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null, directionFilter);
+            _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null, directionFilter, chartFilter);
             error = null;
-            _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, lifetime.ApplicationStopping));
+            _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, chartFilter, lifetime.ApplicationStopping));
             return true;
         }
     }
@@ -45,7 +45,7 @@ public sealed class SignalBatchService(
         return true;
     }
 
-    private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter, CancellationToken token)
+    private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter, string chartFilter, CancellationToken token)
     {
         try
         {
@@ -61,7 +61,13 @@ public sealed class SignalBatchService(
                 {
                     var candles = await bybit.GetKlinesAsync(asset.Symbol, interval, 1000, token);
                     var rules = await bybit.GetInstrumentRulesAsync(asset.Symbol, token);
-                    foreach (var lineMode in new[] { false, true })
+                    var chartModes = chartFilter switch
+                    {
+                        "Candles" => new[] { false },
+                        "Line" => new[] { true },
+                        _ => new[] { false, true }
+                    };
+                    foreach (var lineMode in chartModes)
                     {
                         SignalCandidate candidate;
                         try { candidate = finder.Find(asset.Symbol, interval, candles, rules, positionSizeUsdt, 5, lineMode); }
@@ -104,10 +110,10 @@ public sealed class SignalBatchService(
 }
 
 public sealed record BatchState(bool Running, int Target, int Approved, int Rejected, int Checked,
-    string? CurrentSymbol, string Message, string? Error, string DirectionFilter)
+    string? CurrentSymbol, string Message, string? Error, string DirectionFilter, string ChartFilter)
 {
     public int Proposed { get; init; }
-    public static BatchState Idle => new(false, 0, 0, 0, 0, null, "صفی فعال نیست.", null, "All");
+    public static BatchState Idle => new(false, 0, 0, 0, 0, null, "صفی فعال نیست.", null, "All", "All");
 }
 
-public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt, string? DirectionFilter);
+public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt, string? DirectionFilter, string? ChartFilter);

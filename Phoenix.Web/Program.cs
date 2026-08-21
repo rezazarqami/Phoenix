@@ -216,7 +216,9 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
     if (request.PositionSizeUsdt <= 0) return Results.BadRequest(new { error = "مقدار ورودی باید بیشتر از صفر باشد." });
     var directionFilter = string.IsNullOrWhiteSpace(request.DirectionFilter) ? "All" : request.DirectionFilter;
     if (directionFilter is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "فیلتر جهت معتبر نیست." });
-    return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, out var error)
+    var chartFilter = string.IsNullOrWhiteSpace(request.ChartFilter) ? "All" : request.ChartFilter;
+    if (chartFilter is not ("All" or "Candles" or "Line")) return Results.BadRequest(new { error = "نوع نمودار معتبر نیست." });
+    return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter, out var error)
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });

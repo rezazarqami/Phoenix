@@ -11,6 +11,7 @@ builder.Services.AddSingleton<ServerState>();
 builder.Services.AddSingleton<ServerOrderStore>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
 builder.Services.AddSingleton<PhoenixCredentialStore>();
+builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
 builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
@@ -31,7 +32,39 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login.js" or "/api/auth/login";
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or
+        "/vendor/lightweight-charts.standalone.production.js";
+    var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
+                       context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
+    var publicAnalysisPath = path is "/analysis/login" or "/analysis/login.html" or
+        "/analysis-login.css" or "/analysis-login.js" or "/api/analysis/auth/login";
+    if (analysisPath)
+    {
+        if (publicAnalysisPath)
+        {
+            await next();
+            return;
+        }
+        if (!AnalysisSessionAuth.CredentialsConfigured(out _, out _))
+        {
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(new { error = "Analysis access credentials are not configured." });
+            return;
+        }
+        if (!AnalysisSessionAuth.IsValid(context.Request))
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            else
+                context.Response.Redirect("/analysis/login");
+            return;
+        }
+        await next();
+        return;
+    }
+    var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login.js" or
+        "/login-analysis-link.css" or "/api/auth/login" or
+        "/analysis-login.css" or "/analysis-login.js";
     if (publicPath)
     {
         await next();
@@ -58,6 +91,8 @@ app.UseStaticFiles();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
+app.MapGet("/analysis/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis-login.html"), "text/html; charset=utf-8"));
+app.MapGet("/analysis", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8"));
 app.MapPost("/api/auth/login", (LoginRequest request, HttpResponse response) =>
 {
     if (!PhoenixSessionAuth.CredentialsMatch(request.Username, request.Password))
@@ -73,6 +108,26 @@ app.MapPost("/api/auth/login", (LoginRequest request, HttpResponse response) =>
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
 {
     response.Cookies.Delete(PhoenixSessionAuth.CookieName, new CookieOptions { Path = "/" });
+    return Results.Ok(new { loggedOut = true });
+});
+app.MapPost("/api/analysis/auth/login", (LoginRequest request, HttpRequest httpRequest, HttpResponse response) =>
+{
+    if (!AnalysisSessionAuth.CredentialsConfigured(out _, out _))
+        return Results.Json(new { error = "اطلاعات ورود بخش تحلیل هنوز روی سرور تنظیم نشده است." },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    if (!AnalysisSessionAuth.CredentialsMatch(request.Username, request.Password))
+        return Results.Json(new { error = "نام کاربری یا رمز عبور صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
+    var token = AnalysisSessionAuth.CreateToken(request.Username, request.Password);
+    response.Cookies.Append(AnalysisSessionAuth.CookieName, token, new CookieOptions
+    {
+        HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = httpRequest.IsHttps,
+        MaxAge = TimeSpan.FromHours(12), Path = "/"
+    });
+    return Results.Ok(new { loggedIn = true });
+});
+app.MapPost("/api/analysis/auth/logout", (HttpResponse response) =>
+{
+    response.Cookies.Delete(AnalysisSessionAuth.CookieName, new CookieOptions { Path = "/" });
     return Results.Ok(new { loggedOut = true });
 });
 app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => Results.Ok(new
@@ -133,6 +188,28 @@ app.MapGet("/api/strategy2/history", async (int? days, int? limit, Strategy2Runt
 
 app.MapGet("/api/instruments", async (BybitInstrumentCatalog catalog, CancellationToken token) =>
     Results.Ok(new { symbols = await catalog.GetAsync(token) }));
+
+app.MapGet("/api/analysis/instruments", async (BybitInstrumentCatalog catalog, CancellationToken token) =>
+    Results.Ok(new { symbols = await catalog.GetAsync(token) }));
+
+app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int? limit, int? depth,
+    decimal? deviation, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
+    ElliottWaveAnalyzer analyzer, CancellationToken token) =>
+{
+    try
+    {
+        symbol = symbol.Trim().ToUpperInvariant();
+        if (!await catalog.ContainsAsync(symbol, token))
+            return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
+        var candles = await bybit.GetKlinesAsync(symbol, interval ?? "60", Math.Clamp(limit ?? 500, 50, 1000), token);
+        var analysis = analyzer.Analyze(candles, Math.Clamp(depth ?? 5, 2, 20), deviation ?? 0.6m);
+        return Results.Ok(new { symbol, interval = interval ?? "60", candles, analysis });
+    }
+    catch (Exception exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
 
 app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoClient bybit, CancellationToken token) =>
 {

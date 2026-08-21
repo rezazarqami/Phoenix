@@ -490,6 +490,39 @@ Run("Expired result preserves its reason", () =>
     Equal("TargetAfterActivation", signal.ExpireReason!);
 });
 
+Run("Bybit candles are parsed and sorted oldest first", () =>
+{
+    var handler = new StubHttpHandler(_ => new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+    {
+        Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[[\"2000\",\"20\",\"24\",\"19\",\"23\",\"10\",\"0\"],[\"1000\",\"10\",\"21\",\"9\",\"20\",\"12\",\"0\"]]}}")
+    });
+    var client = new BybitDemoClient(new BybitDemoOptions(null, null), new HttpClient(handler));
+    var candles = client.GetKlinesAsync("btcusdt", "60", 50).GetAwaiter().GetResult();
+    Equal(2, candles.Count);
+    Equal(1000L, candles[0].OpenTime);
+    Equal(23m, candles[1].Close);
+});
+
+Run("Elliott analyzer returns a valid bullish impulse", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.01m).ToArray();
+    void Shape(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+        {
+            var distance = Math.Abs(offset);
+            prices[center + offset] = high ? price - distance : price + distance;
+        }
+    }
+    Shape(10, 100m, false); Shape(25, 120m, true); Shape(38, 110m, false);
+    Shape(52, 145m, true); Shape(67, 130m, false); Shape(82, 155m, true);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L, price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var analysis = new ElliottWaveAnalyzer().Analyze(candles, 3, 2m);
+    True(analysis.Scenarios.Count > 0);
+    Equal("Bullish", analysis.Scenarios[0].Direction);
+    True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3").Passed);
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

@@ -8,18 +8,20 @@ namespace Phoenix.Web;
 public sealed class SignalCandidateFinder(StrategyCalculator calculator)
 {
     public SignalCandidate Find(string symbol, string interval, IReadOnlyList<BybitKline> candles,
-        BybitInstrumentRules rules, decimal positionSizeUsdt, int depth = 5)
+        BybitInstrumentRules rules, decimal positionSizeUsdt, int depth = 5, bool useClosePrices = false)
     {
         if (candles.Count < 30) throw new InvalidOperationException("برای یافتن سقف و کف ماژور، حداقل ۳۰ کندل را روی نمودار نگه دارید.");
         depth = Math.Clamp(depth, 2, 20);
         var highs = new List<(int Index, decimal Price, long Time)>();
         var lows = new List<(int Index, decimal Price, long Time)>();
+        decimal HighAt(int index) => useClosePrices ? candles[index].Close : candles[index].High;
+        decimal LowAt(int index) => useClosePrices ? candles[index].Close : candles[index].Low;
         for (var i = depth; i < candles.Count - depth; i++)
         {
-            if (Enumerable.Range(i - depth, depth * 2 + 1).Where(j => j != i).All(j => candles[i].High > candles[j].High))
-                highs.Add((i, candles[i].High, candles[i].OpenTime));
-            if (Enumerable.Range(i - depth, depth * 2 + 1).Where(j => j != i).All(j => candles[i].Low < candles[j].Low))
-                lows.Add((i, candles[i].Low, candles[i].OpenTime));
+            if (Enumerable.Range(i - depth, depth * 2 + 1).Where(j => j != i).All(j => HighAt(i) > HighAt(j)))
+                highs.Add((i, HighAt(i), candles[i].OpenTime));
+            if (Enumerable.Range(i - depth, depth * 2 + 1).Where(j => j != i).All(j => LowAt(i) < LowAt(j)))
+                lows.Add((i, LowAt(i), candles[i].OpenTime));
         }
         if (highs.Count == 0 || lows.Count == 0) throw new InvalidOperationException("سقف و کف تأییدشده کافی پیدا نشد.");
 
@@ -27,6 +29,52 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
         // confirmed high and low inside that window as its major anchors.
         var recentHigh = highs.MaxBy(x => x.Price);
         var recentLow = lows.MinBy(x => x.Price);
+        var resetCount = 0;
+
+        if (recentLow.Time < recentHigh.Time)
+        {
+            var activeLow = recentLow;
+            var risingHighs = highs.Where(x => x.Index > activeLow.Index && x.Index <= recentHigh.Index)
+                .OrderBy(x => x.Index).ToArray();
+            for (var i = 0; i < risingHighs.Length - 1; i++)
+            {
+                var peak = risingHighs[i];
+                var nextHigher = risingHighs.Skip(i + 1).FirstOrDefault(x => x.Price > peak.Price);
+                if (nextHigher == default || peak.Price <= activeLow.Price) continue;
+                var entry = StrategyCalculator.LogarithmicLevel(activeLow.Price, peak.Price, 1m - 0.618m);
+                var touched = Enumerable.Range(peak.Index + 1, nextHigher.Index - peak.Index - 1)
+                    .Any(index => LowAt(index) <= entry);
+                if (!touched) continue;
+                var nextLow = lows.Where(x => x.Index > peak.Index && x.Index < nextHigher.Index)
+                    .MinBy(x => x.Price);
+                if (nextLow == default) continue;
+                activeLow = nextLow;
+                resetCount++;
+            }
+            recentLow = activeLow;
+        }
+        else
+        {
+            var activeHigh = recentHigh;
+            var fallingLows = lows.Where(x => x.Index > activeHigh.Index && x.Index <= recentLow.Index)
+                .OrderBy(x => x.Index).ToArray();
+            for (var i = 0; i < fallingLows.Length - 1; i++)
+            {
+                var trough = fallingLows[i];
+                var nextLower = fallingLows.Skip(i + 1).FirstOrDefault(x => x.Price < trough.Price);
+                if (nextLower == default || activeHigh.Price <= trough.Price) continue;
+                var entry = StrategyCalculator.LogarithmicLevel(trough.Price, activeHigh.Price, 0.618m);
+                var touched = Enumerable.Range(trough.Index + 1, nextLower.Index - trough.Index - 1)
+                    .Any(index => HighAt(index) >= entry);
+                if (!touched) continue;
+                var nextHigh = highs.Where(x => x.Index > trough.Index && x.Index < nextLower.Index)
+                    .MaxBy(x => x.Price);
+                if (nextHigh == default) continue;
+                activeHigh = nextHigh;
+                resetCount++;
+            }
+            recentHigh = activeHigh;
+        }
 
         var latest = candles[^1].Close;
         var momentumBase = candles[^Math.Min(21, candles.Count)].Close;
@@ -57,8 +105,8 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             Math.Round(confidence, 1), recentHigh.Time, recentLow.Time,
             candles[0].OpenTime, candles[^1].OpenTime, candles.Count,
             direction == Direction.Long
-                ? "کف ماژور زودتر از سقف ماژور تشکیل شده است؛ جهت محدوده صعودی و پیشنهاد Long است."
-                : "سقف ماژور زودتر از کف ماژور تشکیل شده است؛ جهت محدوده نزولی و پیشنهاد Short است.");
+                ? $"کف پیش از سقف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و کف فعال به‌روزرسانی شد. پیشنهاد Long است."
+                : $"سقف پیش از کف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و سقف فعال به‌روزرسانی شد. پیشنهاد Short است.");
     }
 }
 

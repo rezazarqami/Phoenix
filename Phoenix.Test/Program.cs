@@ -542,6 +542,31 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     True(candidate.EntryPrice > candidate.Floor && candidate.EntryPrice < candidate.Ceiling);
     True(candidate.Leverage >= 1m && candidate.Leverage <= 100m);
     True(candidate.Confidence is >= 35m and <= 92m);
+    var lineCandidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal(126m, lineCandidate.Ceiling);
+});
+
+Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was touched", () =>
+{
+    var prices = Enumerable.Range(0, 120).Select(_ => 100m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(18, 80m, false);
+    Pivot(38, 120m, true);
+    Pivot(55, 90m, false); // below the logarithmic 61.8% entry of the first range
+    Pivot(82, 150m, true);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Long", candidate.Direction);
+    Equal(90m, candidate.Floor);
+    Equal(150m, candidate.Ceiling);
 });
 
 Run("Signal Lab direction is Short when major high comes before major low", () =>
@@ -559,6 +584,28 @@ Run("Signal Lab direction is Short when major high comes before major low", () =
         .Find("BTCUSDT", "60", candles, rules, 25m, 3);
     Equal("Short", candidate.Direction);
     True(candidate.CeilingTime < candidate.FloorTime);
+});
+
+Run("Signal Lab moves Short ceiling after an intermediate 61.8 percent entry was touched", () =>
+{
+    var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(18, 150m, true);
+    Pivot(38, 110m, false);
+    Pivot(55, 140m, true); // above the logarithmic 61.8% entry of the first range
+    Pivot(82, 80m, false);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Short", candidate.Direction);
+    Equal(140m, candidate.Ceiling);
+    Equal(80m, candidate.Floor);
 });
 
 Run("Signal Lab major floor follows the visible chart range", () =>

@@ -215,7 +215,7 @@ app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int?
     }
 });
 
-app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? interval, int? depth, long? from, long? to,
+app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? interval, string? chartType, int? depth, long? from, long? to,
     decimal? positionSizeUsdt, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
     SignalCandidateFinder finder, CancellationToken token) =>
 {
@@ -233,7 +233,8 @@ app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? inter
             return Results.BadRequest(new { error = "محدوده نمودار خیلی کوچک است؛ حداقل ۳۰ کندل را نمایش دهید." });
         var rules = await bybit.GetInstrumentRulesAsync(symbol, token);
         var candidate = finder.Find(symbol, selectedInterval, selectedCandles, rules,
-            Math.Clamp(positionSizeUsdt ?? 25m, 1m, 1_000_000m), depth ?? 5);
+            Math.Clamp(positionSizeUsdt ?? 25m, 1m, 1_000_000m), depth ?? 5,
+            string.Equals(chartType, "line", StringComparison.OrdinalIgnoreCase));
         return Results.Ok(new { candidate, candles });
     }
     catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }

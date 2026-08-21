@@ -12,6 +12,9 @@ builder.Services.AddSingleton<ServerOrderStore>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
+builder.Services.AddSingleton<SignalCandidateFinder>();
+builder.Services.AddSingleton<SignalSubmissionService>();
+builder.Services.AddSingleton<SignalPlanPreviewer>();
 builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
 builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
@@ -32,7 +35,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var analysisAsset = path is "/analysis.css" or "/analysis.js" or
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/signal-lab.css" or "/signal-lab.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -93,6 +96,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-w
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis-login.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8"));
+app.MapGet("/analysis/signals", () => Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8"));
 app.MapPost("/api/auth/login", (LoginRequest request, HttpResponse response) =>
 {
     if (!PhoenixSessionAuth.CredentialsMatch(request.Username, request.Password))
@@ -211,6 +215,40 @@ app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int?
     }
 });
 
+app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? interval, int? depth,
+    decimal? positionSizeUsdt, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
+    SignalCandidateFinder finder, CancellationToken token) =>
+{
+    try
+    {
+        symbol = symbol.Trim().ToUpperInvariant();
+        if (!await catalog.ContainsAsync(symbol, token))
+            return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
+        var selectedInterval = interval ?? "60";
+        var candles = await bybit.GetKlinesAsync(symbol, selectedInterval, 300, token);
+        var rules = await bybit.GetInstrumentRulesAsync(symbol, token);
+        var candidate = finder.Find(symbol, selectedInterval, candles, rules,
+            Math.Clamp(positionSizeUsdt ?? 25m, 1m, 1_000_000m), depth ?? 5);
+        return Results.Ok(new { candidate, candles });
+    }
+    catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
+
+app.MapPost("/api/analysis/signals/confirm", async (ConfirmSignalRequest request,
+    SignalSubmissionService submission, CancellationToken token) =>
+{
+    if (!request.Confirmed)
+        return Results.BadRequest(new { error = "ثبت سیگنال نیازمند تأیید صریح است." });
+    return await submission.SubmitAsync(request.Signal, token);
+});
+
+app.MapPost("/api/analysis/signal-preview", async (SignalRequest request,
+    SignalPlanPreviewer previewer, CancellationToken token) =>
+{
+    try { return Results.Ok(await previewer.PreviewAsync(request, token)); }
+    catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
+
 app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoClient bybit, CancellationToken token) =>
 {
     try
@@ -224,63 +262,14 @@ app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoCl
     }
 });
 
-app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpRequest, ServerOrderStore store,
-    StrategyCalculator calculator, BybitDemoClient bybit, BybitInstrumentCatalog catalog,
-    TelegramNotifier telegram, Strategy2Runtime strategy2, Strategy2TelegramNotifier strategy2Telegram,
-    CancellationToken token) =>
+app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpRequest,
+    SignalSubmissionService submission, CancellationToken token) =>
 {
     var panelKey = Environment.GetEnvironmentVariable("PHOENIX_PANEL_KEY");
     if (!string.IsNullOrWhiteSpace(panelKey) && httpRequest.Headers["X-Phoenix-Key"] != panelKey)
         return Results.Json(new { error = "کلید ورود پنل صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
 
-    var error = request.Validate();
-    if (error is not null)
-        return Results.BadRequest(new { error });
-
-    if (!await catalog.ContainsAsync(request.Symbol, token))
-        return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
-
-    try
-    {
-        var direction = Enum.Parse<Direction>(request.Direction);
-        var signal = new Signal
-        {
-            Id = Guid.NewGuid(),
-            Symbol = request.Symbol.Trim().ToUpperInvariant(),
-            Direction = direction,
-            High = request.Ceiling,
-            Low = request.Floor,
-            PositionSizeUsdt = request.PositionSizeUsdt,
-            CreatedAt = DateTime.UtcNow,
-            Status = SignalStatus.WaitingEntry
-        };
-        signal.TradePlan = calculator.Calculate(signal);
-        var rules = await bybit.GetInstrumentRulesAsync(signal.Symbol, token);
-        signal.TradePlan.Leverage = BybitLeverageRules.Normalize(signal.TradePlan.Leverage, rules);
-        var position = new ExecutionManager().PreparePosition(signal)
-            ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
-        var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
-        var queued = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
-        await store.AddAsync(queued, token);
-        await telegram.SignalQueuedAsync(queued, token);
-        if (strategy2.Options.Enabled)
-        {
-            var strategy2Leverage = BybitLeverageRules.Normalize(
-                StrategyCalculator.CalculateLeverage(
-                    signal.TradePlan.EntryPrice, signal.TradePlan.TakeProfit, 20m), rules);
-            var strategy2Signal = ServerSignal.FromPreview(signal, preview, strategy2Leverage);
-            strategy2Signal.PositionSizeUsdt = 0m;
-            strategy2Signal.Quantity = 0m;
-            strategy2Signal.OrderLinkId = $"s2-{strategy2Signal.Id:N}"[..35];
-            await strategy2.Store.AddAsync(strategy2Signal, token);
-            await strategy2Telegram.QueuedAsync(strategy2Signal, token);
-        }
-        return Results.Created($"/api/signals/{queued.Id}", queued);
-    }
-    catch (Exception exception)
-    {
-        return Results.BadRequest(new { error = exception.Message });
-    }
+    return await submission.SubmitAsync(request, token);
 });
 
 app.MapDelete("/api/signals/{id:guid}", async (Guid id, ServerOrderStore store, BybitDemoClient bybit,
@@ -370,4 +359,5 @@ namespace Phoenix.Web
     }
 
     public sealed record LoginRequest(string Username, string Password);
+    public sealed record ConfirmSignalRequest(bool Confirmed, SignalRequest Signal);
 }

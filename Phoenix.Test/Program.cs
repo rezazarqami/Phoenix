@@ -523,6 +523,26 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
     True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3").Passed);
 });
 
+Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.08m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[30 + offset] = 120m - Math.Abs(offset);
+        prices[58 + offset] = 103m + Math.Abs(offset);
+        prices[78 + offset] = 126m - Math.Abs(offset);
+    }
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.2m, price - 0.2m, price, 10m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    True(candidate.Ceiling > candidate.Floor);
+    True(candidate.EntryPrice > candidate.Floor && candidate.EntryPrice < candidate.Ceiling);
+    True(candidate.Leverage >= 1m && candidate.Leverage <= 100m);
+    True(candidate.Confidence is >= 35m and <= 92m);
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

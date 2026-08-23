@@ -218,7 +218,11 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
     if (directionFilter is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "فیلتر جهت معتبر نیست." });
     var chartFilter = string.IsNullOrWhiteSpace(request.ChartFilter) ? "All" : request.ChartFilter;
     if (chartFilter is not ("All" or "Candles" or "Line")) return Results.BadRequest(new { error = "نوع نمودار معتبر نیست." });
-    return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter, out var error)
+    var timeframeFilter = string.IsNullOrWhiteSpace(request.TimeframeFilter) ? "All" : request.TimeframeFilter;
+    if (timeframeFilter is not ("All" or "15" or "60" or "240"))
+        return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
+    return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
+            timeframeFilter, out var error)
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });

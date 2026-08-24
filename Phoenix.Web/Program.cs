@@ -41,7 +41,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/crypto-market.js" or
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/crypto-market.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;

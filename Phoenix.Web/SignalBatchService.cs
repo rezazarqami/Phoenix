@@ -111,7 +111,6 @@ public sealed class SignalBatchService(
                             var proposalKey = ProposalKey(candidate, interval, lineMode);
                             if (!proposedKeys.Contains(proposalKey))
                                 options.Add(new(candidate, candles, interval, lineMode, distance, proposalKey));
-                            break;
                         }
                     }
                     var closest = options.MinBy(x => x.EntryDistancePercent);
@@ -164,8 +163,8 @@ public sealed class SignalBatchService(
     }
 
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
-    private static string[] Intervals(string filter) => filter == "All" ? ["15", "60", "240"] : [filter];
-    private static string IntervalName(string value) => value switch { "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
+    private static string[] Intervals(string filter) => filter == "All" ? ["5", "15", "60", "240"] : [filter];
+    private static string IntervalName(string value) => value switch { "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";

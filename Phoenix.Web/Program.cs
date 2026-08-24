@@ -41,7 +41,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/crypto-market.js" or
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/crypto-market.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -212,7 +212,10 @@ app.MapGet("/api/analysis/coins", async (MarketCapCatalog catalog, CancellationT
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
 app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, SignalBatchService batches) =>
 {
-    if (request.Count is < 1 or > 200) return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
+    if (!request.TimedMode && request.Count is < 1 or > 200)
+        return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
+    if (request.TimedMode && request.DurationMinutes is not (30 or 45 or 60))
+        return Results.BadRequest(new { error = "مدت جست‌وجوی زمان‌دار باید ۳۰، ۴۵ یا ۶۰ دقیقه باشد." });
     if (request.PositionSizeUsdt <= 0) return Results.BadRequest(new { error = "مقدار ورودی باید بیشتر از صفر باشد." });
     var directionFilter = string.IsNullOrWhiteSpace(request.DirectionFilter) ? "All" : request.DirectionFilter;
     if (directionFilter is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "فیلتر جهت معتبر نیست." });
@@ -222,7 +225,7 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
     if (timeframeFilter is not ("All" or "15" or "60" or "240"))
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
     return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
-            timeframeFilter, out var error)
+            timeframeFilter, request.TimedMode, request.DurationMinutes, out var error)
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });

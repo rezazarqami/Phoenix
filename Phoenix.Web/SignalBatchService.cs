@@ -16,17 +16,21 @@ public sealed class SignalBatchService(
     public BatchState Status { get { lock (_sync) return _state; } }
 
     public bool Start(int target, decimal positionSizeUsdt, string directionFilter, string chartFilter,
-        string timeframeFilter, out string? error)
+        string timeframeFilter, bool timedMode, int durationMinutes, out string? error)
     {
         lock (_sync)
         {
             if (_state.Running) { error = "یک صف بررسی در حال اجراست؛ ابتدا همان صف را در تلگرام کامل کنید."; return false; }
             if (!telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
+            DateTimeOffset? endsAt = timedMode ? DateTimeOffset.UtcNow.AddMinutes(durationMinutes) : null;
             _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null,
-                directionFilter, chartFilter, timeframeFilter);
+                directionFilter, chartFilter, timeframeFilter)
+            {
+                TimedMode = timedMode, DurationMinutes = timedMode ? durationMinutes : 0, EndsAtUtc = endsAt
+            };
             error = null;
             _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, chartFilter,
-                timeframeFilter, lifetime.ApplicationStopping));
+                timeframeFilter, endsAt, lifetime.ApplicationStopping));
             return true;
         }
     }
@@ -49,17 +53,29 @@ public sealed class SignalBatchService(
     }
 
     private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter,
-        string chartFilter, string timeframeFilter, CancellationToken token)
+        string chartFilter, string timeframeFilter, DateTimeOffset? endsAt, CancellationToken token)
     {
         try
         {
             var assets = await markets.GetAsync(token);
             var nextAsset = 0;
             const int priorityWindow = 8;
-            while (Status.Approved < target && nextAsset < assets.Count)
+            var proposedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool ShouldContinue() => endsAt.HasValue
+                ? DateTimeOffset.UtcNow < endsAt.Value
+                : Status.Approved < target;
+            while (ShouldContinue())
             {
+                if (nextAsset >= assets.Count)
+                {
+                    if (!endsAt.HasValue) break;
+                    nextAsset = 0;
+                    Update(state => state with { Message = "یک دور بازار کامل شد؛ تا بررسی دوباره کمی صبر می‌کنیم…" });
+                    await Task.Delay(TimeSpan.FromSeconds(45), token);
+                    continue;
+                }
                 var pool = new List<RankedCandidate>();
-                while (nextAsset < assets.Count && pool.Count < priorityWindow)
+                while (nextAsset < assets.Count && pool.Count < priorityWindow && ShouldContinue())
                 {
                     var asset = assets[nextAsset++];
                     Update(state => state with
@@ -92,7 +108,9 @@ public sealed class SignalBatchService(
                                 active.Any(x => x.Direction.Equals(candidate.Direction, StringComparison.OrdinalIgnoreCase)))
                                 continue;
                             var distance = Math.Abs(candidate.LastPrice - candidate.EntryPrice) / candidate.EntryPrice * 100m;
-                            options.Add(new(candidate, candles, interval, lineMode, distance));
+                            var proposalKey = ProposalKey(candidate, interval, lineMode);
+                            if (!proposedKeys.Contains(proposalKey))
+                                options.Add(new(candidate, candles, interval, lineMode, distance, proposalKey));
                             break;
                         }
                     }
@@ -101,7 +119,7 @@ public sealed class SignalBatchService(
                 }
                 foreach (var option in pool.OrderBy(x => x.EntryDistancePercent))
                 {
-                    if (Status.Approved >= target) break;
+                    if (!ShouldContinue()) break;
                     var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N")[..10];
                     var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -115,6 +133,7 @@ public sealed class SignalBatchService(
                     });
                     if (!await telegram.SendCandidateAsync(image, caption, key, token))
                         throw new InvalidOperationException("ارسال پیشنهاد به تلگرام ناموفق بود.");
+                    proposedKeys.Add(option.ProposalKey);
                     var accepted = await decision.Task.WaitAsync(token);
                     if (!accepted) { Update(state => state with { Rejected = state.Rejected + 1 }); continue; }
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
@@ -127,7 +146,13 @@ public sealed class SignalBatchService(
                     Update(state => state with { Approved = state.Approved + 1, Message = $"{selected.Symbol} ثبت شد؛ در حال رفتن به مورد بعدی…" });
                 }
             }
-            Update(state => state with { Running = false, CurrentSymbol = null, Message = state.Approved >= target ? "تعداد درخواستی سیگنال تکمیل شد." : "فهرست بازارها بررسی شد و پیشنهاد بیشتری پیدا نشد." });
+            Update(state => state with
+            {
+                Running = false, CurrentSymbol = null,
+                Message = endsAt.HasValue
+                    ? $"جست‌وجوی زمان‌دار تمام شد؛ {state.Approved} سیگنال تأیید شد."
+                    : state.Approved >= target ? "تعداد درخواستی سیگنال تکمیل شد." : "فهرست بازارها بررسی شد و پیشنهاد بیشتری پیدا نشد."
+            });
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception exception)
@@ -142,8 +167,10 @@ public sealed class SignalBatchService(
     private static string[] Intervals(string filter) => filter == "All" ? ["15", "60", "240"] : [filter];
     private static string IntervalName(string value) => value switch { "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
+    private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
+        $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";
     private sealed record RankedCandidate(SignalCandidate Candidate, IReadOnlyList<BybitKline> Candles,
-        string Interval, bool LineMode, decimal EntryDistancePercent);
+        string Interval, bool LineMode, decimal EntryDistancePercent, string ProposalKey);
 }
 
 public sealed record BatchState(bool Running, int Target, int Approved, int Rejected, int Checked,
@@ -151,8 +178,11 @@ public sealed record BatchState(bool Running, int Target, int Approved, int Reje
     string TimeframeFilter)
 {
     public int Proposed { get; init; }
+    public bool TimedMode { get; init; }
+    public int DurationMinutes { get; init; }
+    public DateTimeOffset? EndsAtUtc { get; init; }
     public static BatchState Idle => new(false, 0, 0, 0, 0, null, "صفی فعال نیست.", null, "All", "All", "All");
 }
 
 public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt, string? DirectionFilter,
-    string? ChartFilter, string? TimeframeFilter);
+    string? ChartFilter, string? TimeframeFilter, bool TimedMode = false, int DurationMinutes = 30);

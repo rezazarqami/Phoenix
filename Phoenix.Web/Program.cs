@@ -123,9 +123,15 @@ app.UseStaticFiles();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis-login.html"), "text/html; charset=utf-8"));
-app.MapGet("/analysis", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8"));
-app.MapGet("/analysis/signals", () => Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8"));
-app.MapGet("/analysis/coins", () => Results.File(Path.Combine(app.Environment.WebRootPath, "crypto-market.html"), "text/html; charset=utf-8"));
+app.MapGet("/analysis", (HttpRequest request) => request.Query["v"] == "20260827-4"
+    ? Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8")
+    : Results.Redirect("/analysis?v=20260827-4"));
+app.MapGet("/analysis/signals", (HttpRequest request) => request.Query["v"] == "20260827-4"
+    ? Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8")
+    : Results.Redirect("/analysis/signals?v=20260827-4"));
+app.MapGet("/analysis/coins", (HttpRequest request) => request.Query["v"] == "20260827-4"
+    ? Results.File(Path.Combine(app.Environment.WebRootPath, "crypto-market.html"), "text/html; charset=utf-8")
+    : Results.Redirect("/analysis/coins?v=20260827-4"));
 app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse response, PhoenixUserStore users,
     CancellationToken cancellationToken) =>
 {

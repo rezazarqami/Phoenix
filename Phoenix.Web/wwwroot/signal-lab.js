@@ -83,7 +83,7 @@ function makeChart(candles) {
     series = chart.addLineSeries({ color: '#168b6d', lineWidth: 2 });
     series.setData(candles.map(c => ({ time: c.openTime / 1000, value: Number(c.close) })));
   } else {
-    series = chart.addCandlestickSeries({ upColor: '#d7aa45', downColor: '#a7663d', borderVisible: false, wickUpColor: '#f1cf76', wickDownColor: '#ce8050' });
+    series = chart.addCandlestickSeries({ upColor: '#26a882', downColor: '#e05267', borderVisible: false, wickUpColor: '#38d39f', wickDownColor: '#f06b7e' });
     series.setData(candles.map(c => ({ time: c.openTime / 1000, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) })));
   }
   const start = Math.max(0, candles.length - 220);
@@ -114,7 +114,7 @@ function drawLevels() {
   clearPriceLines();
   priceLines = [
     line(ui.ceiling.value, '#f0b90b', 'MAJOR HIGH'), line(ui.floor.value, '#a96cf2', 'MAJOR LOW'),
-    line(plan.entryPrice, '#d39b35', 'ENTRY', 0), line(plan.takeProfit, '#f1cf76', 'TP', 0),
+    line(plan.entryPrice, '#46a6ff', 'ENTRY', 0), line(plan.takeProfit, '#38d39f', 'TP', 0),
     line(plan.stopLoss, '#ff6175', 'SL', 0)
   ];
 }

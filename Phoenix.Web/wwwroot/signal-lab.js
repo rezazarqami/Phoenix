@@ -63,9 +63,9 @@ function themeOptions() {
     grid: { vertLines: { color: 'transparent' }, horzLines: { color: 'transparent' } },
     rightPriceScale: { borderColor: '#cfd7d4' }, timeScale: { borderColor: '#cfd7d4' }
   } : {
-    layout: { background: { color: '#0d1715' }, textColor: '#71827d' },
-    grid: { vertLines: { color: '#14211e' }, horzLines: { color: '#14211e' } },
-    rightPriceScale: { borderColor: '#263730' }, timeScale: { borderColor: '#263730' }
+    layout: { background: { color: '#0d0b08' }, textColor: '#9d9078' },
+    grid: { vertLines: { color: '#211a10' }, horzLines: { color: '#211a10' } },
+    rightPriceScale: { borderColor: '#493a23' }, timeScale: { borderColor: '#493a23' }
   };
 }
 
@@ -74,16 +74,16 @@ function makeChart(candles) {
   ui.chart.innerHTML = '';
   chart = LightweightCharts.createChart(ui.chart, {
     width: ui.chart.clientWidth, height: ui.chart.clientHeight,
-    layout: { background: { color: lightChart ? '#fff' : '#0d1715' }, textColor: lightChart ? '#4b5652' : '#71827d', fontFamily: 'Arial' },
-    grid: { vertLines: { color: lightChart ? 'transparent' : '#14211e' }, horzLines: { color: lightChart ? 'transparent' : '#14211e' } },
-    rightPriceScale: { borderColor: lightChart ? '#cfd7d4' : '#263730', mode: LightweightCharts.PriceScaleMode.Logarithmic },
-    timeScale: { borderColor: lightChart ? '#cfd7d4' : '#263730', timeVisible: true }
+    layout: { background: { color: lightChart ? '#fff' : '#0d0b08' }, textColor: lightChart ? '#554b3d' : '#9d9078', fontFamily: 'Arial' },
+    grid: { vertLines: { color: lightChart ? 'transparent' : '#211a10' }, horzLines: { color: lightChart ? 'transparent' : '#211a10' } },
+    rightPriceScale: { borderColor: lightChart ? '#d8c9ab' : '#493a23', mode: LightweightCharts.PriceScaleMode.Logarithmic },
+    timeScale: { borderColor: lightChart ? '#d8c9ab' : '#493a23', timeVisible: true }
   });
   if (ui.type.value === 'line') {
     series = chart.addLineSeries({ color: '#168b6d', lineWidth: 2 });
     series.setData(candles.map(c => ({ time: c.openTime / 1000, value: Number(c.close) })));
   } else {
-    series = chart.addCandlestickSeries({ upColor: '#26a882', downColor: '#e05267', borderVisible: false, wickUpColor: '#38d39f', wickDownColor: '#f06b7e' });
+    series = chart.addCandlestickSeries({ upColor: '#d7aa45', downColor: '#a7663d', borderVisible: false, wickUpColor: '#f1cf76', wickDownColor: '#ce8050' });
     series.setData(candles.map(c => ({ time: c.openTime / 1000, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) })));
   }
   const start = Math.max(0, candles.length - 220);
@@ -114,7 +114,7 @@ function drawLevels() {
   clearPriceLines();
   priceLines = [
     line(ui.ceiling.value, '#f0b90b', 'MAJOR HIGH'), line(ui.floor.value, '#a96cf2', 'MAJOR LOW'),
-    line(plan.entryPrice, '#46a6ff', 'ENTRY', 0), line(plan.takeProfit, '#38d39f', 'TP', 0),
+    line(plan.entryPrice, '#d39b35', 'ENTRY', 0), line(plan.takeProfit, '#f1cf76', 'TP', 0),
     line(plan.stopLoss, '#ff6175', 'SL', 0)
   ];
 }
@@ -285,7 +285,7 @@ $('#finalConfirm').addEventListener('click', async () => {
     const response = await fetch('/api/analysis/signals/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true, signal: requestBody() }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'ثبت ناموفق بود.');
-    ui.dialog.close(); ui.approve.disabled = true; ui.message.style.color = '#38d39f';
+    ui.dialog.close(); ui.approve.disabled = true; ui.message.style.color = '#e8b84b';
     ui.message.textContent = `سیگنال ${data.symbol} با موفقیت وارد صف Phoenix شد.`;
   } catch (error) { ui.dialog.close(); ui.message.textContent = error.message; }
   finally { button.disabled = false; }

@@ -48,10 +48,12 @@ app.Use(async (context, next) =>
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
-    var publicAnalysisPath = path is "/analysis/login" or "/analysis/login.html" or
+    var publicAnalysisPath = context.Request.Path.StartsWithSegments("/analysis-assets") ||
+        path is "/analysis/login" or "/analysis/login.html" or
         "/analysis-login.css" or "/analysis-login.js" or "/api/analysis/auth/login";
     if (analysisPath)
     {
+        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
         if (publicAnalysisPath)
         {
             await next();
@@ -83,10 +85,11 @@ app.Use(async (context, next) =>
         return;
     }
     var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login.js" or
-        "/login-analysis-link.css" or "/viewer-mode.js" or "/api/auth/login" or
+        "/login-analysis-link.css" or "/login-gold.css" or "/viewer-mode.js" or "/api/auth/login" or
         "/analysis-login.css" or "/analysis-login.js";
     if (publicPath)
     {
+        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
         await next();
         return;
     }

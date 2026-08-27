@@ -41,7 +41,7 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/crypto-market.js" or
+    var analysisAsset = path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -207,6 +207,43 @@ app.MapGet("/api/analysis/coins", async (MarketCapCatalog catalog, CancellationT
 {
     try { return Results.Ok(new { assets = await catalog.GetAsync(token) }); }
     catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
+
+app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset? to,
+    ServerOrderStore store, CancellationToken token) =>
+{
+    if (from is null || to is null || to <= from)
+        return Results.BadRequest(new { error = "بازه تاریخ معتبر نیست." });
+    if (to.Value - from.Value > TimeSpan.FromDays(3660))
+        return Results.BadRequest(new { error = "بازه گزارش نمی‌تواند بیشتر از ده سال باشد." });
+
+    var history = await store.GetHistoryRangeAsync(from.Value.UtcDateTime, to.Value.UtcDateTime, 50000, token);
+    var signals = history.Select(item => item.Signal).ToArray();
+    var entered = signals.Count(signal => signal.SubmittedAtUtc is not null || signal.FilledAtUtc is not null ||
+        signal.Outcome is "Target" or "StopLoss" or "RiskFree");
+    var details = signals
+        .Where(signal => signal.Outcome is "Target" or "StopLoss")
+        .OrderByDescending(signal => signal.CompletedAtUtc)
+        .Select(signal => new
+        {
+            signal.Id, signal.Symbol, signal.Direction, signal.Outcome, signal.CreatedAtUtc,
+            signal.CompletedAtUtc, signal.EntryPrice, signal.TakeProfit, signal.StopLoss,
+            signal.AverageFillPrice, signal.Leverage, signal.PositionSizeUsdt
+        });
+    return Results.Ok(new
+    {
+        from, to,
+        summary = new
+        {
+            total = signals.Length,
+            entered,
+            expired = signals.Count(signal => signal.Outcome == "Expired"),
+            target = signals.Count(signal => signal.Outcome == "Target"),
+            stopLoss = signals.Count(signal => signal.Outcome == "StopLoss"),
+            riskFree = signals.Count(signal => signal.Outcome == "RiskFree")
+        },
+        details
+    });
 });
 
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));

@@ -223,6 +223,10 @@ public sealed class ServerOrderStore
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
         CancellationToken token = default) => _history.GetAsync(days, limit, token);
 
+    public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryRangeAsync(DateTime fromUtc, DateTime toUtc,
+        int limit = 20000, CancellationToken token = default) =>
+        _history.GetCreatedRangeAsync(fromUtc, toUtc, limit, token);
+
     private async Task MigrateHistoryUnsafeAsync(List<ServerSignal> signals, CancellationToken token)
     {
         if (_historyMigrated) return;

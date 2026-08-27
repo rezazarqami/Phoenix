@@ -321,12 +321,18 @@ Run("Server signal queue persists across application restarts", () =>
         Equal(1, history.Count);
         Equal(signal.Id, history[0].Signal.Id);
         True(history[0].RemovedAtUtc is not null);
+        var ranged = new ServerOrderStore().GetHistoryRangeAsync(
+            signal.CreatedAtUtc.AddMinutes(-1), signal.CreatedAtUtc.AddMinutes(1)).GetAwaiter().GetResult();
+        Equal(1, ranged.Count);
+        Equal(signal.Id, ranged[0].Signal.Id);
+        Equal(0, new ServerOrderStore().GetHistoryRangeAsync(
+            signal.CreatedAtUtc.AddDays(1), signal.CreatedAtUtc.AddDays(2)).GetAwaiter().GetResult().Count);
     }
     finally
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         if (File.Exists(path)) File.Delete(path);
         if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
         if (File.Exists(historyPath)) File.Delete(historyPath);
@@ -376,7 +382,7 @@ Run("Only one trigger can claim a pending server signal", () =>
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);
     }
@@ -405,7 +411,7 @@ Run("Stale pending snapshot cannot undo an entry claim", () =>
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);
     }
@@ -431,7 +437,7 @@ Run("Strategy 2 allows only one simultaneous entry claim", () =>
     }
     finally
     {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);
     }

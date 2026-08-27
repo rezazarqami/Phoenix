@@ -21,15 +21,18 @@ public static class AnalysisSessionAuth
         return FixedTimeEquals(suppliedUsername, username) && FixedTimeEquals(suppliedPassword, password);
     }
 
-    public static string CreateToken(string username, string password)
+    public static string CreateToken(string username, bool viewerOnly, bool isAdmin)
     {
         var expires = DateTimeOffset.UtcNow.AddHours(12).ToUnixTimeSeconds();
-        var payload = $"analysis\n{username}\n{expires.ToString(CultureInfo.InvariantCulture)}";
+        var role = isAdmin ? "admin" : viewerOnly ? "viewer" : "editor";
+        var payload = $"analysis\n{username}\n{role}\n{expires.ToString(CultureInfo.InvariantCulture)}";
+        CredentialsConfigured(out _, out var password);
         return Base64Url(Encoding.UTF8.GetBytes(payload)) + "." + Sign(payload, password);
     }
 
-    public static bool IsValid(HttpRequest request)
+    public static bool TryGetIdentity(HttpRequest request, out PhoenixSessionIdentity identity)
     {
+        identity = new PhoenixSessionIdentity(string.Empty, true, false);
         if (!CredentialsConfigured(out var username, out var password) ||
             !request.Cookies.TryGetValue(CookieName, out var token)) return false;
         var parts = token.Split('.', 2);
@@ -38,10 +41,15 @@ public static class AnalysisSessionAuth
         {
             var payload = Encoding.UTF8.GetString(FromBase64Url(parts[0]));
             if (!FixedTimeEquals(parts[1], Sign(payload, password))) return false;
-            var values = payload.Split('\n', 3);
-            return values.Length == 3 && values[0] == "analysis" && FixedTimeEquals(values[1], username) &&
-                   long.TryParse(values[2], NumberStyles.None, CultureInfo.InvariantCulture, out var expiry) &&
-                   DateTimeOffset.UtcNow.ToUnixTimeSeconds() < expiry;
+            var values = payload.Split('\n', 4);
+            if (values.Length != 4 || values[0] != "analysis" || values[2] is not ("admin" or "viewer" or "editor") ||
+                !long.TryParse(values[3], NumberStyles.None, CultureInfo.InvariantCulture, out var expiry) ||
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= expiry) return false;
+            var isAdmin = values[2] == "admin";
+            var viewerOnly = values[2] == "viewer";
+            if (isAdmin && !FixedTimeEquals(values[1], username)) return false;
+            identity = new PhoenixSessionIdentity(values[1], viewerOnly, isAdmin);
+            return true;
         }
         catch { return false; }
     }

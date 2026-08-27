@@ -16,6 +16,7 @@ builder.Services.AddHttpClient<MarketCapCatalog>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Phoenix-Signal-Lab/1.0");
 });
 builder.Services.AddSingleton<PhoenixCredentialStore>();
+builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<SignalSubmissionService>();
@@ -40,6 +41,7 @@ builder.Services.AddHostedService<Strategy2EntryWebSocketWorker>();
 var app = builder.Build();
 app.Use(async (context, next) =>
 {
+    var users = context.RequestServices.GetRequiredService<PhoenixUserStore>();
     var path = context.Request.Path.Value;
     var analysisAsset = context.Request.Path.StartsWithSegments("/analysis-assets") ||
         path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or
@@ -61,7 +63,8 @@ app.Use(async (context, next) =>
             await context.Response.WriteAsJsonAsync(new { error = "Analysis access credentials are not configured." });
             return;
         }
-        if (!AnalysisSessionAuth.IsValid(context.Request))
+        if (!AnalysisSessionAuth.TryGetIdentity(context.Request, out var identity) ||
+            !identity.IsAdmin && !await users.ExistsAsync(identity.Username, identity.ViewerOnly, context.RequestAborted))
         {
             if (context.Request.Path.StartsWithSegments("/api"))
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -69,11 +72,18 @@ app.Use(async (context, next) =>
                 context.Response.Redirect("/analysis/login");
             return;
         }
+        if (identity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
+            path is not "/api/analysis/auth/logout")
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = "این حساب فقط امکان مشاهده دارد." });
+            return;
+        }
         await next();
         return;
     }
     var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login.js" or
-        "/login-analysis-link.css" or "/api/auth/login" or
+        "/login-analysis-link.css" or "/viewer-mode.js" or "/api/auth/login" or
         "/analysis-login.css" or "/analysis-login.js";
     if (publicPath)
     {
@@ -86,12 +96,20 @@ app.Use(async (context, next) =>
         await context.Response.WriteAsJsonAsync(new { error = "Phoenix access credentials are not configured." });
         return;
     }
-    if (!PhoenixSessionAuth.IsValid(context.Request))
+    if (!PhoenixSessionAuth.TryGetIdentity(context.Request, out var phoenixIdentity) ||
+        !phoenixIdentity.IsAdmin && !await users.ExistsAsync(phoenixIdentity.Username, phoenixIdentity.ViewerOnly, context.RequestAborted))
     {
         if (context.Request.Path.StartsWithSegments("/api"))
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         else
             context.Response.Redirect("/login");
+        return;
+    }
+    if (phoenixIdentity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
+        path is not "/api/auth/logout")
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { error = "این حساب فقط امکان مشاهده دارد." });
         return;
     }
     await next();
@@ -105,42 +123,92 @@ app.MapGet("/analysis/login", () => Results.File(Path.Combine(app.Environment.We
 app.MapGet("/analysis", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis/signals", () => Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8"));
 app.MapGet("/analysis/coins", () => Results.File(Path.Combine(app.Environment.WebRootPath, "crypto-market.html"), "text/html; charset=utf-8"));
-app.MapPost("/api/auth/login", (LoginRequest request, HttpResponse response) =>
+app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse response, PhoenixUserStore users,
+    CancellationToken cancellationToken) =>
 {
-    if (!PhoenixSessionAuth.CredentialsMatch(request.Username, request.Password))
+    var admin = PhoenixSessionAuth.CredentialsMatch(request.Username, request.Password);
+    var user = admin ? null : await users.AuthenticateAsync(request.Username, request.Password, cancellationToken);
+    if (!admin && user is null)
         return Results.Json(new { error = "نام کاربری یا رمز عبور صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
-    var token = PhoenixSessionAuth.CreateToken(request.Username, request.Password);
+    var viewerOnly = !admin && user!.ViewerOnly;
+    var token = PhoenixSessionAuth.CreateToken(request.Username, viewerOnly, admin);
     response.Cookies.Append(PhoenixSessionAuth.CookieName, token, new CookieOptions
     {
         HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = false,
         MaxAge = TimeSpan.FromHours(12), Path = "/"
     });
-    return Results.Ok(new { loggedIn = true });
+    return Results.Ok(new { loggedIn = true, viewerOnly });
 });
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
 {
     response.Cookies.Delete(PhoenixSessionAuth.CookieName, new CookieOptions { Path = "/" });
     return Results.Ok(new { loggedOut = true });
 });
-app.MapPost("/api/analysis/auth/login", (LoginRequest request, HttpRequest httpRequest, HttpResponse response) =>
+app.MapPost("/api/analysis/auth/login", async (LoginRequest request, HttpRequest httpRequest,
+    HttpResponse response, PhoenixUserStore users, CancellationToken cancellationToken) =>
 {
     if (!AnalysisSessionAuth.CredentialsConfigured(out _, out _))
         return Results.Json(new { error = "اطلاعات ورود بخش تحلیل هنوز روی سرور تنظیم نشده است." },
             statusCode: StatusCodes.Status503ServiceUnavailable);
-    if (!AnalysisSessionAuth.CredentialsMatch(request.Username, request.Password))
+    var admin = AnalysisSessionAuth.CredentialsMatch(request.Username, request.Password);
+    var user = admin ? null : await users.AuthenticateAsync(request.Username, request.Password, cancellationToken);
+    if (!admin && user is null)
         return Results.Json(new { error = "نام کاربری یا رمز عبور صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
-    var token = AnalysisSessionAuth.CreateToken(request.Username, request.Password);
+    var viewerOnly = !admin && user!.ViewerOnly;
+    var token = AnalysisSessionAuth.CreateToken(request.Username, viewerOnly, admin);
     response.Cookies.Append(AnalysisSessionAuth.CookieName, token, new CookieOptions
     {
         HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = httpRequest.IsHttps,
         MaxAge = TimeSpan.FromHours(12), Path = "/"
     });
-    return Results.Ok(new { loggedIn = true });
+    return Results.Ok(new { loggedIn = true, viewerOnly });
 });
 app.MapPost("/api/analysis/auth/logout", (HttpResponse response) =>
 {
     response.Cookies.Delete(AnalysisSessionAuth.CookieName, new CookieOptions { Path = "/" });
     return Results.Ok(new { loggedOut = true });
+});
+app.MapGet("/api/auth/me", (HttpRequest request) =>
+{
+    PhoenixSessionAuth.TryGetIdentity(request, out var identity);
+    return Results.Ok(new { identity.Username, identity.ViewerOnly, identity.IsAdmin });
+});
+app.MapGet("/api/analysis/auth/me", (HttpRequest request) =>
+{
+    AnalysisSessionAuth.TryGetIdentity(request, out var identity);
+    return Results.Ok(new { identity.Username, identity.ViewerOnly, identity.IsAdmin });
+});
+app.MapGet("/api/users", async (HttpRequest request, PhoenixUserStore users, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    var items = (await users.GetAllAsync(token)).Select(user => new
+    {
+        user.Username, user.ViewerOnly, user.CreatedAtUtc
+    });
+    return Results.Ok(items);
+});
+app.MapPost("/api/users", async (CreateUserRequest request, HttpRequest httpRequest, PhoenixUserStore users, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    var error = request.Validate();
+    if (error is not null) return Results.BadRequest(new { error });
+    if (PhoenixSessionAuth.CredentialsConfigured(out var adminUsername, out _) &&
+        string.Equals(adminUsername, request.Username, StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "این نام کاربری متعلق به مدیر اصلی است." });
+    try
+    {
+        await users.AddAsync(request.Username.Trim(), request.Password, request.ViewerOnly, token);
+        return Results.Ok(new { created = true });
+    }
+    catch (InvalidOperationException exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
+app.MapDelete("/api/users/{username}", async (string username, HttpRequest request, PhoenixUserStore users, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    return await users.DeleteAsync(username, token) ? Results.Ok(new { deleted = true }) : Results.NotFound();
 });
 app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => Results.Ok(new
 {
@@ -433,6 +501,20 @@ namespace Phoenix.Web
                 return "تکرار رمز عبور یکسان نیست.";
             if (Password.Contains('\n') || Password.Contains('\r'))
                 return "رمز عبور معتبر نیست.";
+            return null;
+        }
+    }
+
+    public sealed record CreateUserRequest(string Username, string Password, string ConfirmPassword, bool ViewerOnly)
+    {
+        public string? Validate()
+        {
+            if (string.IsNullOrWhiteSpace(Username) || Username.Length is < 3 or > 32 ||
+                Username.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_' and not '.'))
+                return "نام کاربری باید ۳ تا ۳۲ کاراکتر و فقط شامل حروف انگلیسی، عدد، خط تیره، زیرخط یا نقطه باشد.";
+            if (Password.Length is < 6 or > 128)
+                return "رمز عبور باید حداقل ۶ و حداکثر ۱۲۸ کاراکتر باشد.";
+            if (Password != ConfirmPassword) return "تکرار رمز عبور یکسان نیست.";
             return null;
         }
     }

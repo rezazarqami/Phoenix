@@ -16,7 +16,25 @@ const maximumLeverage = document.querySelector('#maximumLeverage');
 const securityDialog = document.querySelector('#securityDialog');
 const securityForm = document.querySelector('#securityForm');
 const securityMessage = document.querySelector('#securityMessage');
+const usersDialog = document.querySelector('#usersDialog');
+const userForm = document.querySelector('#userForm');
+const userMessage = document.querySelector('#userMessage');
 let instruments = [];
+
+async function loadSession() {
+  const response = await fetch('/api/auth/me', { cache: 'no-store' });
+  const session = await response.json();
+  if (!session.isAdmin) {
+    document.querySelector('#securityButton').hidden = true;
+    document.querySelector('#usersButton').hidden = true;
+  }
+  if (!session.viewerOnly) return;
+  document.body.classList.add('viewer-only');
+  const banner = document.createElement('div');
+  banner.className = 'viewer-banner';
+  banner.textContent = 'حساب فقط مشاهده‌گر — امکان ثبت، حذف یا تغییر اطلاعات غیرفعال است.';
+  document.querySelector('main').prepend(banner);
+}
 
 panelKeyInput.value = localStorage.getItem('phoenixPanelKey') || '';
 
@@ -161,6 +179,45 @@ securityForm.addEventListener('submit', async event => {
   }
 });
 
+document.querySelector('#usersButton').addEventListener('click', () => {
+  userMessage.textContent = '';
+  userForm.reset();
+  userForm.elements.viewerOnly.checked = true;
+  usersDialog.showModal();
+  loadUsers();
+});
+document.querySelector('#closeUsers').addEventListener('click', () => usersDialog.close());
+document.querySelector('#refreshUsers').addEventListener('click', loadUsers);
+usersDialog.addEventListener('click', event => { if (event.target === usersDialog) usersDialog.close(); });
+userForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(userForm));
+  values.viewerOnly = userForm.elements.viewerOnly.checked;
+  if (values.password !== values.confirmPassword) return userMessage.textContent = 'تکرار رمز عبور یکسان نیست.';
+  const button = userForm.querySelector('.primary');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ایجاد کاربر ناموفق بود.');
+    userMessage.textContent = 'کاربر با موفقیت ایجاد شد.';
+    userForm.reset(); userForm.elements.viewerOnly.checked = true; await loadUsers();
+  } catch (error) { userMessage.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+async function loadUsers() {
+  const response = await fetch('/api/users', { cache: 'no-store' });
+  if (!response.ok) return;
+  const users = await response.json();
+  document.querySelector('#userList').innerHTML = users.length ? users.map(user => `<div class="user-item"><span><b>${escapeHtml(user.username)}</b><small>${user.viewerOnly ? 'فقط مشاهده‌گر' : 'کاربر عادی'}</small></span><button type="button" data-user="${escapeHtml(user.username)}">حذف</button></div>`).join('') : '<div class="empty compact">کاربر دیگری ثبت نشده است.</div>';
+}
+document.querySelector('#userList').addEventListener('click', async event => {
+  const button = event.target.closest('[data-user]');
+  if (!button || !confirm(`کاربر ${button.dataset.user} حذف شود؟`)) return;
+  await fetch('/api/users/' + encodeURIComponent(button.dataset.user), { method: 'DELETE' });
+  loadUsers();
+});
+
 async function refreshSignals() {
   try {
     const response = await fetch('/api/signals', { cache: 'no-store' });
@@ -245,5 +302,5 @@ form.addEventListener('submit', async event => {
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
-loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
+loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
 setInterval(refreshStatus, 1000); setInterval(refreshSignals, 5000); setInterval(refreshHistory, 5000);

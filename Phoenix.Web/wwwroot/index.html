@@ -14,7 +14,7 @@
   <main>
     <header class="topbar">
       <div class="brand"><span class="brand-mark">P</span><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
-      <div class="header-actions"><a class="security-button page-link" href="/analysis/login">ورود به بخش تحلیل</a><a class="security-button page-link" href="/strategy2.html">Strategy 2 Demo</a><button id="logoutButton" class="security-button" type="button">خروج</button><button id="securityButton" class="security-button" type="button">⚙ تنظیمات امنیتی</button><span id="connection" class="badge"><i></i>در حال بررسی</span></div>
+      <div class="header-actions"><a class="security-button page-link" href="/analysis/login">ورود به بخش تحلیل</a><a class="security-button page-link" href="/strategy2.html">Strategy 2 Demo</a><button id="logoutButton" class="security-button" type="button">خروج</button><button id="usersButton" class="security-button" type="button">👤 کاربران</button><button id="securityButton" class="security-button" type="button">⚙ تنظیمات امنیتی</button><span id="connection" class="badge"><i></i>در حال بررسی</span></div>
     </header>
 
     <section class="hero">
@@ -76,7 +76,22 @@
       </div>
     </form>
   </dialog>
+  <dialog id="usersDialog" class="security-dialog users-dialog">
+    <form id="userForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">04</span><div><h2>مدیریت کاربران</h2><p>ساخت دسترسی جداگانه برای نمایش پنل</p></div></div><button id="closeUsers" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <label>نام کاربری<input name="username" dir="ltr" autocomplete="off" minlength="3" maxlength="32" required placeholder="viewer-name"></label>
+        <label>رمز عبور<input name="password" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="حداقل ۶ کاراکتر"></label>
+        <label>تکرار رمز عبور<input name="confirmPassword" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required></label>
+        <label class="viewer-check"><input name="viewerOnly" type="checkbox" checked><span><b>فقط مشاهده‌گر</b><small>امکان ثبت، تأیید، حذف یا تغییر هیچ اطلاعاتی را ندارد.</small></span></label>
+        <button class="primary" type="submit">ایجاد کاربر جدید</button>
+        <p id="userMessage" role="status"></p>
+        <div class="user-list-head"><b>کاربران ثبت‌شده</b><button id="refreshUsers" type="button">به‌روزرسانی</button></div>
+        <div id="userList" class="user-list"></div>
+      </div>
+    </form>
+  </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>

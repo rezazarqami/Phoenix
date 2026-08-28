@@ -15,7 +15,7 @@ public static class SignalChartRenderer
         var anchorSpan = Math.Max(1, secondAnchor - firstAnchor + 1);
         // Keep the selected anchors readable while showing enough market context
         // on both sides for Telegram review. This affects framing only.
-        var padding = Math.Clamp(anchorSpan * 3 / 4, 90, 300);
+        var padding = Math.Clamp(anchorSpan * 5 / 4, 150, 450);
         var viewStart = Math.Max(0, firstAnchor - padding);
         var viewEnd = Math.Min(candles.Count - 1, secondAnchor + padding);
         candles = candles.Skip(viewStart).Take(viewEnd - viewStart + 1).ToArray();

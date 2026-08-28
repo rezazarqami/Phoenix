@@ -17,6 +17,7 @@ builder.Services.AddHttpClient<MarketCapCatalog>(client =>
 });
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<PhoenixUserStore>();
+builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<SignalSubmissionService>();
@@ -218,6 +219,41 @@ app.MapDelete("/api/users/{username}", async (string username, HttpRequest reque
     if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
         return Results.Forbid();
     return await users.DeleteAsync(username, token) ? Results.Ok(new { deleted = true }) : Results.NotFound();
+});
+app.MapGet("/api/telegram/access", async (HttpRequest request, TelegramAccessStore access, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    return Results.Ok((await access.GetAllAsync(token)).OrderBy(user => user.DisplayName));
+});
+app.MapPost("/api/telegram/access", async (TelegramAccessRequest input, HttpRequest request,
+    TelegramAccessStore access, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    var error = input.Validate();
+    if (error is not null) return Results.BadRequest(new { error });
+    try
+    {
+        await access.AddAsync(input.UserId, input.DisplayName, input.Username, token);
+        return Results.Ok(new { created = true });
+    }
+    catch (InvalidOperationException exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
+app.MapPut("/api/telegram/access/{userId:long}", async (long userId, TelegramAccessStateRequest input,
+    HttpRequest request, TelegramAccessStore access, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    return await access.SetEnabledAsync(userId, input.Enabled, token)
+        ? Results.Ok(new { updated = true }) : Results.NotFound();
+});
+app.MapDelete("/api/telegram/access/{userId:long}", async (long userId, HttpRequest request,
+    TelegramAccessStore access, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.Forbid();
+    return await access.DeleteAsync(userId, token) ? Results.Ok(new { deleted = true }) : Results.NotFound();
 });
 app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => Results.Ok(new
 {
@@ -529,5 +565,19 @@ namespace Phoenix.Web
     }
 
     public sealed record LoginRequest(string Username, string Password);
+    public sealed record TelegramAccessRequest(long UserId, string DisplayName, string? Username)
+    {
+        public string? Validate()
+        {
+            if (UserId <= 0) return "شناسه عددی تلگرام معتبر نیست.";
+            if (string.IsNullOrWhiteSpace(DisplayName) || DisplayName.Trim().Length > 80)
+                return "نام کاربر باید بین ۱ تا ۸۰ کاراکتر باشد.";
+            if (!string.IsNullOrWhiteSpace(Username) &&
+                Username.Trim().TrimStart('@').Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_'))
+                return "نام کاربری تلگرام معتبر نیست.";
+            return null;
+        }
+    }
+    public sealed record TelegramAccessStateRequest(bool Enabled);
     public sealed record ConfirmSignalRequest(bool Confirmed, SignalRequest Signal);
 }

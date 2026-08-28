@@ -32,7 +32,19 @@ public sealed class TelegramCommandWorker(
                 foreach (var command in commands)
                 {
                     offset = Math.Max(offset, command.UpdateId + 1);
-                    if (!telegram.IsAuthorizedChat(command.ChatId)) continue;
+                    if (command.Command == "/myid")
+                    {
+                        await telegram.SendCommandReplyAsync(command.ChatId,
+                            $"شناسه عددی تلگرام شما: {command.UserId}", stoppingToken);
+                        continue;
+                    }
+                    if (!await telegram.IsAuthorizedAsync(command, stoppingToken))
+                    {
+                        if (command.CallbackId is not null)
+                            await telegram.AnswerCallbackAsync(command.CallbackId,
+                                "شما اجازه انجام این عملیات را ندارید.", stoppingToken);
+                        continue;
+                    }
                     if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
                     {
                         await batches.HandleCallbackAsync(command.Command, command.CallbackId, stoppingToken);
@@ -57,7 +69,7 @@ public sealed class TelegramCommandWorker(
         return command switch
         {
             "/start" or "/help" =>
-                "🔥 به دستیار خصوصی Phoenix خوش آمدید.\n\n/status وضعیت موتور\n/active سیگنال‌های فعال\n/results پنج نتیجه آخر\n/help راهنما",
+                "🔥 به دستیار خصوصی Phoenix خوش آمدید.\n\n/status وضعیت موتور\n/active سیگنال‌های فعال\n/results پنج نتیجه آخر\n/myid شناسه عددی من\n/help راهنما",
             "/status" => BuildStatus(signals),
             "/active" => BuildActive(signals),
             "/results" => await BuildResultsAsync(token),

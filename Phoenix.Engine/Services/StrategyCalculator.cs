@@ -5,6 +5,8 @@ namespace Phoenix.Engine.Services;
 
 public class StrategyCalculator : IStrategyCalculator
 {
+    private const decimal DirectionalRangeAdjustment = 0.01m;
+
     public TradePlan Calculate(Signal signal)
     {
         if (signal.High <= signal.Low)
@@ -13,13 +15,15 @@ public class StrategyCalculator : IStrategyCalculator
         if (signal.PositionSizeUsdt <= 0)
             throw new ArgumentException("Position size must be greater than zero.", nameof(signal));
 
+        var (effectiveLow, effectiveHigh) = AdjustRangeForDirection(
+            signal.Low, signal.High, signal.Direction);
         TradePlan plan = new();
 
         if (signal.Direction == Direction.Long)
         {
-            plan.EntryPrice = LogarithmicLevel(signal.Low, signal.High, 1m - 0.618m);
-            plan.TakeProfit = LogarithmicLevel(signal.Low, signal.High, 1m - 0.500m);
-            plan.StopLoss1 = LogarithmicLevel(signal.Low, signal.High, 1m - 0.729m);
+            plan.EntryPrice = LogarithmicLevel(effectiveLow, effectiveHigh, 1m - 0.618m);
+            plan.TakeProfit = LogarithmicLevel(effectiveLow, effectiveHigh, 1m - 0.500m);
+            plan.StopLoss1 = LogarithmicLevel(effectiveLow, effectiveHigh, 1m - 0.729m);
 
             var profitDistance = plan.TakeProfit - plan.EntryPrice;
             plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
@@ -27,9 +31,9 @@ public class StrategyCalculator : IStrategyCalculator
         }
         else
         {
-            plan.EntryPrice = LogarithmicLevel(signal.Low, signal.High, 0.618m);
-            plan.TakeProfit = LogarithmicLevel(signal.Low, signal.High, 0.500m);
-            plan.StopLoss1 = LogarithmicLevel(signal.Low, signal.High, 0.729m);
+            plan.EntryPrice = LogarithmicLevel(effectiveLow, effectiveHigh, 0.618m);
+            plan.TakeProfit = LogarithmicLevel(effectiveLow, effectiveHigh, 0.500m);
+            plan.StopLoss1 = LogarithmicLevel(effectiveLow, effectiveHigh, 0.729m);
 
             var profitDistance = plan.TakeProfit - plan.EntryPrice;
             plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
@@ -39,6 +43,18 @@ public class StrategyCalculator : IStrategyCalculator
         plan.Leverage = CalculateLeverage(plan.EntryPrice, plan.TakeProfit);
 
         return plan;
+    }
+
+    public static (decimal Low, decimal High) AdjustRangeForDirection(
+        decimal low, decimal high, Direction direction)
+    {
+        if (high <= low)
+            throw new ArgumentException("High price must be greater than low price.");
+
+        var adjustment = (high - low) * DirectionalRangeAdjustment;
+        return direction == Direction.Long
+            ? (low + adjustment, high)
+            : (low, high - adjustment);
     }
 
     public static decimal LogarithmicLevel(decimal low, decimal high, decimal fractionFromLow)

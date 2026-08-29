@@ -570,7 +570,7 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     True(snapshot.Take(8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }));
 });
 
-Run("Signal Lab moves Long floor after an intermediate 62.8 percent entry was touched", () =>
+Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was touched", () =>
 {
     var prices = Enumerable.Range(0, 120).Select(_ => 100m).ToArray();
     void Pivot(int center, decimal price, bool high)
@@ -593,7 +593,7 @@ Run("Signal Lab moves Long floor after an intermediate 62.8 percent entry was to
     True(candidate.IsBurned);
 });
 
-Run("Signal Lab checks every small peak sequentially for a 62.8 percent reset", () =>
+Run("Signal Lab checks every candle sequentially for a 61.8 percent reset", () =>
 {
     var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
     for (var offset = -5; offset <= 5; offset++)
@@ -719,7 +719,7 @@ Run("Signal Lab applies the absolute extreme only to the second anchor", () =>
     Equal(50m, shortCandidate.Floor);
 });
 
-Run("Signal Lab moves Short ceiling after an intermediate 62.8 percent entry was touched", () =>
+Run("Signal Lab moves Short ceiling after an intermediate 61.8 percent entry was touched", () =>
 {
     var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();
     void Pivot(int center, decimal price, bool high)
@@ -740,6 +740,29 @@ Run("Signal Lab moves Short ceiling after an intermediate 62.8 percent entry was
     Equal(140m, candidate.Ceiling);
     Equal(80m, candidate.Floor);
     True(candidate.IsBurned);
+});
+
+Run("Signal Lab detects a 61.8 percent reset without a strict local pivot", () =>
+{
+    var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(18, 150m, true);
+    prices[36] = 114m; prices[37] = 112m; prices[38] = 110m; prices[39] = 110m;
+    prices[40] = 112m; prices[41] = 115m; // equal lows deliberately defeat strict pivot detection
+    prices[53] = 137m; prices[54] = 140m; prices[55] = 140m; prices[56] = 137m;
+    Pivot(82, 80m, false);
+    var candles = prices.Select((price, index) => new BybitKline(index * 300_000L,
+        price, price, price, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "5", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Short", candidate.Direction);
+    Equal(140m, candidate.Ceiling);
+    Equal(80m, candidate.Floor);
 });
 
 Run("Signal Lab major floor follows the visible chart range", () =>

@@ -10,6 +10,8 @@ public sealed class SignalHistoryStore
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _initialized;
 
+    public static void ClearConnectionPools() => SqliteConnection.ClearAllPools();
+
     public SignalHistoryStore(string queuePath, string? databasePath = null)
     {
         databasePath ??= Environment.GetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH")
@@ -97,6 +99,39 @@ public sealed class SignalHistoryStore
                 ORDER BY created_at_utc DESC LIMIT $limit;
                 """;
             Add(command, "$from", DateTime.UtcNow.AddDays(-days).ToString("O"));
+            Add(command, "$limit", limit);
+            var result = new List<SignalHistoryItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
+                if (signal is null) continue;
+                result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime()));
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<SignalHistoryItem>> GetCreatedRangeAsync(
+        DateTime fromUtc, DateTime toUtc, int limit = 20000, CancellationToken token = default)
+    {
+        if (toUtc <= fromUtc) throw new ArgumentException("Report end date must be after start date.");
+        limit = Math.Clamp(limit, 1, 50000);
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT payload, updated_at_utc, removed_at_utc
+                FROM signals
+                WHERE created_at_utc >= $from AND created_at_utc < $to
+                ORDER BY created_at_utc DESC LIMIT $limit;
+                """;
+            Add(command, "$from", fromUtc.ToUniversalTime().ToString("O"));
+            Add(command, "$to", toUtc.ToUniversalTime().ToString("O"));
             Add(command, "$limit", limit);
             var result = new List<SignalHistoryItem>();
             await using var reader = await command.ExecuteReaderAsync(token);

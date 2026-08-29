@@ -12,22 +12,22 @@ Run("Long strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Long);
     var plan = new StrategyCalculator().Calculate(signal);
-    Equal(118764m, plan.EntryPrice);
-    Equal(119000m, plan.TakeProfit);
-    Equal(118542m, plan.StopLoss1);
-    Equal(118823m, plan.StopLoss2!.Value);
-    Equal(118941m, plan.RiskFreePrice);
+    Near(118760.03488777m, plan.EntryPrice);
+    Near(118995.798245148m, plan.TakeProfit);
+    Near(118538.683877804m, plan.StopLoss1);
+    Near(118818.975727114m, plan.StopLoss2!.Value);
+    Near(118936.857405803m, plan.RiskFreePrice);
 });
 
 Run("Short strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Short);
     var plan = new StrategyCalculator().Calculate(signal);
-    Equal(119236m, plan.EntryPrice);
-    Equal(119000m, plan.TakeProfit);
-    Equal(119458m, plan.StopLoss1);
-    Equal(119177m, plan.StopLoss2!.Value);
-    Equal(119059m, plan.RiskFreePrice);
+    Near(119232.029641802m, plan.EntryPrice);
+    Near(118995.798245148m, plan.TakeProfit);
+    Near(119454.675358104m, plan.StopLoss1);
+    Near(119172.971792639m, plan.StopLoss2!.Value);
+    Near(119054.856094312m, plan.RiskFreePrice);
 });
 
 Run("Invalid range is rejected", () =>
@@ -50,6 +50,15 @@ Run("Leverage targets fifty percent return at take profit", () =>
     var plan = new StrategyCalculator().Calculate(BuildSignal(Direction.Long));
     var targetMovePercent = Math.Abs(plan.EntryPrice - plan.TakeProfit) / plan.EntryPrice * 100m;
     Equal(50m, plan.Leverage * targetMovePercent);
+});
+
+Run("Strategy 2 leverage targets twenty percent return at take profit", () =>
+{
+    var plan = new StrategyCalculator().Calculate(BuildSignal(Direction.Long));
+    var leverage = StrategyCalculator.CalculateLeverage(
+        plan.EntryPrice, plan.TakeProfit, 20m);
+    var targetMovePercent = Math.Abs(plan.EntryPrice - plan.TakeProfit) / plan.EntryPrice * 100m;
+    Near(20m, leverage * targetMovePercent);
 });
 
 Run("Paper exchange records full protective order set", () =>
@@ -108,10 +117,10 @@ Run("Bybit order preview follows instrument precision", () =>
     var position = new ExecutionManager().OpenPosition(signal)!;
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     var preview = BybitOrderPreviewBuilder.Build("btcusdt", position, rules);
-    Equal(0.423m, preview.Quantity);
-    Equal(118764.00m, preview.Price);
-    Equal(119000.00m, preview.TakeProfit);
-    Equal(118542.00m, preview.StopLoss);
+    Equal(0.424m, preview.Quantity);
+    Equal(118760.00m, preview.Price);
+    Equal(118995.80m, preview.TakeProfit);
+    Equal(118538.70m, preview.StopLoss);
     Equal("Buy", preview.Side);
 });
 
@@ -312,12 +321,18 @@ Run("Server signal queue persists across application restarts", () =>
         Equal(1, history.Count);
         Equal(signal.Id, history[0].Signal.Id);
         True(history[0].RemovedAtUtc is not null);
+        var ranged = new ServerOrderStore().GetHistoryRangeAsync(
+            signal.CreatedAtUtc.AddMinutes(-1), signal.CreatedAtUtc.AddMinutes(1)).GetAwaiter().GetResult();
+        Equal(1, ranged.Count);
+        Equal(signal.Id, ranged[0].Signal.Id);
+        Equal(0, new ServerOrderStore().GetHistoryRangeAsync(
+            signal.CreatedAtUtc.AddDays(1), signal.CreatedAtUtc.AddDays(2)).GetAwaiter().GetResult().Count);
     }
     finally
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         if (File.Exists(path)) File.Delete(path);
         if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
         if (File.Exists(historyPath)) File.Delete(historyPath);
@@ -367,7 +382,7 @@ Run("Only one trigger can claim a pending server signal", () =>
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);
     }
@@ -396,7 +411,7 @@ Run("Stale pending snapshot cannot undo an entry claim", () =>
     {
         Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH", previous);
         Environment.SetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH", previousHistory);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);
     }
@@ -422,34 +437,34 @@ Run("Strategy 2 allows only one simultaneous entry claim", () =>
     }
     finally
     {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SignalHistoryStore.ClearConnectionPools();
         foreach (var file in new[] { path, path + ".tmp", historyPath, historyPath + "-wal", historyPath + "-shm" })
             if (File.Exists(file)) File.Delete(file);
     }
 });
 
-Run("Long expiry activates after twenty percent approach", () =>
+Run("Long expiry activates after twenty-five percent approach", () =>
 {
     var signal = new ServerSignal
     {
         Direction = "Long", EntryPrice = 100m, TakeProfit = 110m,
-        ExpireActivationPrice = 102m
+        ExpireActivationPrice = 102.5m
     };
-    False(DemoOrderWorker.ExpireActivationReached(signal, 102.01m));
-    True(DemoOrderWorker.ExpireActivationReached(signal, 102m));
+    False(DemoOrderWorker.ExpireActivationReached(signal, 102.51m));
+    True(DemoOrderWorker.ExpireActivationReached(signal, 102.5m));
     False(DemoOrderWorker.TargetExpiryReached(signal, 109.99m));
     True(DemoOrderWorker.TargetExpiryReached(signal, 110m));
 });
 
-Run("Short expiry activates after twenty percent approach", () =>
+Run("Short expiry activates after twenty-five percent approach", () =>
 {
     var signal = new ServerSignal
     {
         Direction = "Short", EntryPrice = 110m, TakeProfit = 100m,
-        ExpireActivationPrice = 108m
+        ExpireActivationPrice = 107.5m
     };
-    False(DemoOrderWorker.ExpireActivationReached(signal, 107.99m));
-    True(DemoOrderWorker.ExpireActivationReached(signal, 108m));
+    False(DemoOrderWorker.ExpireActivationReached(signal, 107.49m));
+    True(DemoOrderWorker.ExpireActivationReached(signal, 107.5m));
     False(DemoOrderWorker.TargetExpiryReached(signal, 100.01m));
     True(DemoOrderWorker.TargetExpiryReached(signal, 100m));
 });
@@ -514,6 +529,226 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
     True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3").Passed);
 });
 
+Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.08m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[30 + offset] = 120m - Math.Abs(offset);
+        prices[58 + offset] = 103m + Math.Abs(offset);
+        prices[78 + offset] = 126m - Math.Abs(offset);
+    }
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.2m, price - 0.2m, price, 10m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    True(candidate.Ceiling > candidate.Floor);
+    Equal("Long", candidate.Direction);
+    True(candidate.EntryPrice > candidate.Floor && candidate.EntryPrice < candidate.Ceiling);
+    True(candidate.Leverage >= 1m && candidate.Leverage <= 100m);
+    True(candidate.Confidence is >= 35m and <= 92m);
+    var lineCandidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal(126m, lineCandidate.Ceiling);
+    var snapshot = SignalChartRenderer.Render(candles, candidate, false);
+    True(snapshot.Length > 1000);
+    True(snapshot.Take(8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }));
+});
+
+Run("Signal Lab moves Long floor after an intermediate 62.8 percent entry was touched", () =>
+{
+    var prices = Enumerable.Range(0, 120).Select(_ => 100m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(18, 80m, false);
+    Pivot(38, 120m, true);
+    Pivot(55, 90m, false); // below the logarithmic 61.8% entry of the first range
+    Pivot(82, 150m, true);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Long", candidate.Direction);
+    Equal(90m, candidate.Floor);
+    Equal(150m, candidate.Ceiling);
+    True(candidate.IsBurned);
+});
+
+Run("Signal Lab checks every small peak sequentially for a 62.8 percent reset", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -5; offset <= 5; offset++)
+    {
+        prices[12 + offset] = 80m + Math.Abs(offset);
+        prices[72 + offset] = 130m - Math.Abs(offset);
+    }
+    prices[23] = 96m; prices[24] = 98m; prices[25] = 100m; prices[26] = 94m;
+    prices[27] = 85m; prices[28] = 96m; prices[29] = 105m; prices[30] = 101m;
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price, price, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 5, useClosePrices: true);
+    Equal("Long", candidate.Direction);
+    Equal(85m, candidate.Floor);
+    Equal(130m, candidate.Ceiling);
+});
+
+Run("Signal Lab keeps a candidate active while entry has not been touched", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(i => i < 60 ? 120m : 145m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[20 + offset] = 80m + Math.Abs(offset);
+        prices[60 + offset] = 150m - Math.Abs(offset);
+    }
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Long", candidate.Direction);
+    False(candidate.IsBurned);
+    True(candidate.EntryTouchedTime is null);
+});
+
+Run("Signal Lab direction is Short when major high comes before major low", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[25 + offset] = 140m - Math.Abs(offset);
+        prices[70 + offset] = 60m + Math.Abs(offset);
+    }
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    Equal("Short", candidate.Direction);
+    True(candidate.CeilingTime < candidate.FloorTime);
+});
+
+Run("Signal Lab Short floor uses the lowest shadow or close in the visible range", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[20 + offset] = 140m - Math.Abs(offset);
+        prices[60 + offset] = 70m + Math.Abs(offset);
+    }
+    prices[68] = 75m;
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, index == 68 ? 50m : price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var candleCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    var lineCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Short", candleCandidate.Direction);
+    Equal(50m, candleCandidate.Floor);
+    Equal(70m, lineCandidate.Floor);
+});
+
+Run("Signal Lab Long ceiling uses the highest shadow or close in the visible range", () =>
+{
+    var prices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        prices[20 + offset] = 60m + Math.Abs(offset);
+        prices[60 + offset] = 130m - Math.Abs(offset);
+    }
+    prices[68] = 125m;
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, index == 68 ? 160m : price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var candleCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3);
+    var lineCandidate = finder.Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Long", candleCandidate.Direction);
+    Equal(160m, candleCandidate.Ceiling);
+    Equal(130m, lineCandidate.Ceiling);
+});
+
+Run("Signal Lab applies the absolute extreme only to the second anchor", () =>
+{
+    var longPrices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        longPrices[20 + offset] = 60m + Math.Abs(offset);
+        longPrices[60 + offset] = 130m - Math.Abs(offset);
+    }
+    var longCandles = longPrices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, index == 68 ? 160m : price + 0.1m, index == 1 ? 30m : price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var longCandidate = finder.Find("BTCUSDT", "60", longCandles, rules, 25m, 3);
+    Equal("Long", longCandidate.Direction);
+    Equal(59.9m, longCandidate.Floor);
+    Equal(160m, longCandidate.Ceiling);
+
+    var shortPrices = Enumerable.Range(0, 100).Select(_ => 100m).ToArray();
+    for (var offset = -3; offset <= 3; offset++)
+    {
+        shortPrices[20 + offset] = 140m - Math.Abs(offset);
+        shortPrices[60 + offset] = 70m + Math.Abs(offset);
+    }
+    var shortCandles = shortPrices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, index == 1 ? 180m : price + 0.1m, index == 68 ? 50m : price - 0.1m, price, 1m)).ToArray();
+    var shortCandidate = finder.Find("BTCUSDT", "60", shortCandles, rules, 25m, 3);
+    Equal("Short", shortCandidate.Direction);
+    Equal(140.1m, shortCandidate.Ceiling);
+    Equal(50m, shortCandidate.Floor);
+});
+
+Run("Signal Lab moves Short ceiling after an intermediate 62.8 percent entry was touched", () =>
+{
+    var prices = Enumerable.Range(0, 120).Select(_ => 120m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(18, 150m, true);
+    Pivot(38, 110m, false);
+    Pivot(55, 140m, true); // above the logarithmic 61.8% entry of the first range
+    Pivot(82, 80m, false);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var candidate = new SignalCandidateFinder(new StrategyCalculator())
+        .Find("BTCUSDT", "60", candles, rules, 25m, 3, useClosePrices: true);
+    Equal("Short", candidate.Direction);
+    Equal(140m, candidate.Ceiling);
+    Equal(80m, candidate.Floor);
+    True(candidate.IsBurned);
+});
+
+Run("Signal Lab major floor follows the visible chart range", () =>
+{
+    var prices = Enumerable.Range(0, 140).Select(i => 110m + i * 0.03m).ToArray();
+    void Pivot(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            prices[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Pivot(20, 80m, false); Pivot(38, 130m, true); // old wide-range anchors
+    Pivot(75, 105m, false); Pivot(96, 130m, true); Pivot(116, 111m, false);
+    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L,
+        price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    var rules = new BybitInstrumentRules("BTCUSDT", 0.1m, 0.001m, 0.001m, 5m, 100m, 1m, 0.01m);
+    var finder = new SignalCandidateFinder(new StrategyCalculator());
+    var full = finder.Find("BTCUSDT", "240", candles, rules, 25m, 3);
+    var visible = finder.Find("BTCUSDT", "240", candles.Skip(60).ToArray(), rules, 25m, 3);
+    True(visible.Floor > full.Floor);
+    Equal(full.Ceiling, visible.Ceiling);
+    Equal(80, visible.RangeCandleCount);
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 
@@ -542,6 +777,11 @@ static void Equal<T>(T expected, T actual) where T : notnull
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
         throw new Exception($"Expected {expected}, got {actual}.");
+}
+static void Near(decimal expected, decimal actual, decimal tolerance = 0.000001m)
+{
+    if (Math.Abs(expected - actual) > tolerance)
+        throw new Exception($"Expected {expected} ± {tolerance}, got {actual}.");
 }
 static void Throws<T>(Action action) where T : Exception
 {

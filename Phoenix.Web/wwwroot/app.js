@@ -16,7 +16,29 @@ const maximumLeverage = document.querySelector('#maximumLeverage');
 const securityDialog = document.querySelector('#securityDialog');
 const securityForm = document.querySelector('#securityForm');
 const securityMessage = document.querySelector('#securityMessage');
+const usersDialog = document.querySelector('#usersDialog');
+const userForm = document.querySelector('#userForm');
+const userMessage = document.querySelector('#userMessage');
+const telegramAccessDialog = document.querySelector('#telegramAccessDialog');
+const telegramAccessForm = document.querySelector('#telegramAccessForm');
+const telegramAccessMessage = document.querySelector('#telegramAccessMessage');
 let instruments = [];
+
+async function loadSession() {
+  const response = await fetch('/api/auth/me', { cache: 'no-store' });
+  const session = await response.json();
+  if (!session.isAdmin) {
+    document.querySelector('#securityButton').hidden = true;
+    document.querySelector('#usersButton').hidden = true;
+    document.querySelector('#telegramAccessButton').hidden = true;
+  }
+  if (!session.viewerOnly) return;
+  document.body.classList.add('viewer-only');
+  const banner = document.createElement('div');
+  banner.className = 'viewer-banner';
+  banner.textContent = 'حساب فقط مشاهده‌گر — امکان ثبت، حذف یا تغییر اطلاعات غیرفعال است.';
+  document.querySelector('main').prepend(banner);
+}
 
 panelKeyInput.value = localStorage.getItem('phoenixPanelKey') || '';
 
@@ -27,10 +49,12 @@ async function refreshStatus() {
     if (data.lastPrice) price.textContent = fa.format(data.lastPrice) + ' USDT';
     const connected = data.publicApiConnected;
     document.querySelector('#keyField').style.display = data.panelLocked ? 'block' : 'none';
+    const environment = data.tradingEnvironment === 'Real' ? 'Real' : 'Demo';
+    document.body.dataset.tradingEnvironment = environment.toLowerCase();
     document.querySelector('#modeNote').innerHTML = data.tradingEnabled
-      ? '<i>✓</i><span>موتور Bybit Demo فعال است؛ سفارش پس از رسیدن قیمت به نقطه ورود ارسال می‌شود.</span>'
+      ? `<i>✓</i><span>موتور Bybit ${environment} فعال است؛ سفارش پس از رسیدن قیمت به نقطه ورود ارسال می‌شود.</span>`
       : '<i>!</i><span>موتور ارسال سفارش خاموش است؛ سیگنال فقط در صف دائمی ذخیره می‌شود.</span>';
-    connection.innerHTML = '<i></i>' + (connected ? (data.demoAuthenticated ? 'Bybit Demo متصل' : 'Bybit عمومی متصل') : 'خطای اتصال');
+    connection.innerHTML = '<i></i>' + (connected ? (data.demoAuthenticated ? `Bybit ${environment} متصل` : 'Bybit عمومی متصل') : 'خطای اتصال');
     connection.className = 'badge ' + (connected ? 'ok' : 'bad');
     updated.textContent = connected ? 'به‌روزرسانی خودکار هر ۱ ثانیه' : (data.error || 'ارتباط برقرار نشد');
   } catch {
@@ -161,6 +185,92 @@ securityForm.addEventListener('submit', async event => {
   }
 });
 
+document.querySelector('#usersButton').addEventListener('click', () => {
+  userMessage.textContent = '';
+  userForm.reset();
+  userForm.elements.viewerOnly.checked = true;
+  usersDialog.showModal();
+  loadUsers();
+});
+document.querySelector('#closeUsers').addEventListener('click', () => usersDialog.close());
+document.querySelector('#refreshUsers').addEventListener('click', loadUsers);
+usersDialog.addEventListener('click', event => { if (event.target === usersDialog) usersDialog.close(); });
+userForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(userForm));
+  values.viewerOnly = userForm.elements.viewerOnly.checked;
+  if (values.password !== values.confirmPassword) return userMessage.textContent = 'تکرار رمز عبور یکسان نیست.';
+  const button = userForm.querySelector('.primary');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ایجاد کاربر ناموفق بود.');
+    userMessage.textContent = 'کاربر با موفقیت ایجاد شد.';
+    userForm.reset(); userForm.elements.viewerOnly.checked = true; await loadUsers();
+  } catch (error) { userMessage.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+async function loadUsers() {
+  const response = await fetch('/api/users', { cache: 'no-store' });
+  if (!response.ok) return;
+  const users = await response.json();
+  document.querySelector('#userList').innerHTML = users.length ? users.map(user => `<div class="user-item"><span><b>${escapeHtml(user.username)}</b><small>${user.viewerOnly ? 'فقط مشاهده‌گر' : 'کاربر عادی'}</small></span><button type="button" data-user="${escapeHtml(user.username)}">حذف</button></div>`).join('') : '<div class="empty compact">کاربر دیگری ثبت نشده است.</div>';
+}
+document.querySelector('#userList').addEventListener('click', async event => {
+  const button = event.target.closest('[data-user]');
+  if (!button || !confirm(`کاربر ${button.dataset.user} حذف شود؟`)) return;
+  await fetch('/api/users/' + encodeURIComponent(button.dataset.user), { method: 'DELETE' });
+  loadUsers();
+});
+
+document.querySelector('#telegramAccessButton').addEventListener('click', () => {
+  telegramAccessMessage.textContent = '';
+  telegramAccessMessage.className = '';
+  telegramAccessForm.reset();
+  telegramAccessDialog.showModal();
+  loadTelegramAccess();
+});
+document.querySelector('#closeTelegramAccess').addEventListener('click', () => telegramAccessDialog.close());
+document.querySelector('#refreshTelegramAccess').addEventListener('click', loadTelegramAccess);
+telegramAccessDialog.addEventListener('click', event => { if (event.target === telegramAccessDialog) telegramAccessDialog.close(); });
+telegramAccessForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(telegramAccessForm));
+  values.userId = Number(values.userId);
+  const button = telegramAccessForm.querySelector('.primary');
+  button.disabled = true;
+  telegramAccessMessage.className = '';
+  try {
+    const response = await fetch('/api/telegram/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ثبت دسترسی تلگرام ناموفق بود.');
+    telegramAccessMessage.textContent = 'کاربر به فهرست مجاز اضافه شد.';
+    telegramAccessForm.reset();
+    await loadTelegramAccess();
+  } catch (error) {
+    telegramAccessMessage.textContent = error.message;
+    telegramAccessMessage.className = 'security-error';
+  } finally { button.disabled = false; }
+});
+async function loadTelegramAccess() {
+  const response = await fetch('/api/telegram/access', { cache: 'no-store' });
+  if (!response.ok) return;
+  const users = await response.json();
+  document.querySelector('#telegramAccessList').innerHTML = users.length ? users.map(user => `<div class="user-item telegram-user${user.enabled ? '' : ' disabled'}"><span><b>${escapeHtml(user.displayName)}</b><small>${user.username ? '@' + escapeHtml(user.username) + ' · ' : ''}<span dir="ltr">ID ${user.userId}</span> · ${user.enabled ? 'فعال' : 'غیرفعال'}</small></span><div class="user-actions"><button type="button" class="toggle-access" data-toggle-telegram="${user.userId}" data-enabled="${!user.enabled}">${user.enabled ? 'غیرفعال' : 'فعال'}</button><button type="button" data-delete-telegram="${user.userId}">حذف</button></div></div>`).join('') : '<div class="empty compact">هنوز کاربر مجازی ثبت نشده است.</div>';
+}
+document.querySelector('#telegramAccessList').addEventListener('click', async event => {
+  const toggle = event.target.closest('[data-toggle-telegram]');
+  if (toggle) {
+    await fetch('/api/telegram/access/' + toggle.dataset.toggleTelegram, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: toggle.dataset.enabled === 'true' }) });
+    return loadTelegramAccess();
+  }
+  const remove = event.target.closest('[data-delete-telegram]');
+  if (!remove || !confirm('این دسترسی تلگرام حذف شود؟')) return;
+  await fetch('/api/telegram/access/' + remove.dataset.deleteTelegram, { method: 'DELETE' });
+  loadTelegramAccess();
+});
+
 async function refreshSignals() {
   try {
     const response = await fetch('/api/signals', { cache: 'no-store' });
@@ -170,7 +280,7 @@ async function refreshSignals() {
     document.querySelector('#orders').innerHTML = active.length ? active.map(s => `
       <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
       <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
-      <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش Demo' : 'حذف از صف'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
+      <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'حذف از صف'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
   } catch { /* status indicator already reports connectivity */ }
 }
 
@@ -210,7 +320,7 @@ async function refreshHistory() {
 }
 
 function statusLabel(status) {
-  return ({ Pending:'در انتظار ورود', Submitting:'در حال ارسال', Submitted:'سفارش باز در Demo', Filled:'اجراشده در Demo', Expired:'اکسپایر شده', Cancelled:'لغوشده', Rejected:'ردشده', Error:'خطا' })[status] || status;
+  return ({ Pending:'در انتظار ورود', Submitting:'در حال ارسال', Submitted:'سفارش باز', Filled:'پوزیشن فعال', Expired:'اکسپایر شده', Cancelled:'لغوشده', Rejected:'ردشده', Error:'خطا' })[status] || status;
 }
 
 function escapeHtml(value) {
@@ -245,5 +355,5 @@ form.addEventListener('submit', async event => {
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
-loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
+loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
 setInterval(refreshStatus, 1000); setInterval(refreshSignals, 5000); setInterval(refreshHistory, 5000);

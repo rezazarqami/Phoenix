@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0e11">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=3">
-  <link rel="stylesheet" href="/security.css?v=1">
+  <link rel="stylesheet" href="/styles.css?v=4">
+  <link rel="stylesheet" href="/security.css?v=2">
   <title>Phoenix Trading Panel</title>
 </head>
 <body>
@@ -14,7 +14,17 @@
   <main>
     <header class="topbar">
       <div class="brand"><span class="brand-mark">P</span><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
-      <div class="header-actions"><a class="security-button page-link" href="/strategy2.html">Strategy 2 Demo</a><button id="logoutButton" class="security-button" type="button">خروج</button><button id="securityButton" class="security-button" type="button">⚙ تنظیمات امنیتی</button><span id="connection" class="badge"><i></i>در حال بررسی</span></div>
+      <div class="header-actions">
+        <span id="connection" class="badge"><i></i>در حال بررسی</span>
+        <nav class="panel-nav" aria-label="ابزارهای پنل">
+          <a class="security-button page-link" href="/analysis/login"><span class="action-icon">◈</span><span>بخش تحلیل</span></a>
+          <a class="security-button page-link" href="/strategy2.html"><span class="action-icon">Ⅱ</span><span>Strategy 2</span></a>
+          <button id="telegramAccessButton" class="security-button" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
+          <button id="usersButton" class="security-button" type="button"><span class="action-icon">♙</span><span>کاربران</span></button>
+          <button id="securityButton" class="security-button" type="button"><span class="action-icon">⚙</span><span>تنظیمات امنیتی</span></button>
+          <button id="logoutButton" class="security-button logout-action" type="button"><span class="action-icon">↪</span><span>خروج</span></button>
+        </nav>
+      </div>
     </header>
 
     <section class="hero">
@@ -76,7 +86,37 @@
       </div>
     </form>
   </dialog>
+  <dialog id="telegramAccessDialog" class="security-dialog users-dialog">
+    <form id="telegramAccessForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">05</span><div><h2>دسترسی تلگرام</h2><p>افراد مجاز برای فرمان‌ها و دکمه‌های ربات Phoenix</p></div></div><button id="closeTelegramAccess" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <div class="security-note"><i>i</i><span>کاربر ابتدا در گفت‌وگوی خصوصی ربات دستور <b dir="ltr">/myid</b> را می‌زند و شناسه عددی نمایش‌داده‌شده را برای شما می‌فرستد. کانال‌های اعلان دو ربات دیگر باید در تلگرام خصوصی نگه داشته شوند.</span></div>
+        <label>نام نمایشی<input name="displayName" maxlength="80" required placeholder="مثلاً علی رضایی"></label>
+        <label>شناسه عددی تلگرام<input name="userId" dir="ltr" inputmode="numeric" pattern="[0-9]+" required placeholder="مثلاً 123456789"></label>
+        <label>نام کاربری تلگرام (اختیاری)<input name="username" dir="ltr" autocomplete="off" placeholder="username@"></label>
+        <button class="primary" type="submit">افزودن به کاربران مجاز</button>
+        <p id="telegramAccessMessage" role="status"></p>
+        <div class="user-list-head"><b>کاربران مجاز ربات</b><button id="refreshTelegramAccess" type="button">به‌روزرسانی</button></div>
+        <div id="telegramAccessList" class="user-list"></div>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="usersDialog" class="security-dialog users-dialog">
+    <form id="userForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">04</span><div><h2>مدیریت کاربران</h2><p>ساخت دسترسی جداگانه برای نمایش پنل</p></div></div><button id="closeUsers" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <label>نام کاربری<input name="username" dir="ltr" autocomplete="off" minlength="3" maxlength="32" required placeholder="viewer-name"></label>
+        <label>رمز عبور<input name="password" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="حداقل ۶ کاراکتر"></label>
+        <label>تکرار رمز عبور<input name="confirmPassword" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required></label>
+        <label class="viewer-check"><input name="viewerOnly" type="checkbox" checked><span><b>فقط مشاهده‌گر</b><small>امکان ثبت، تأیید، حذف یا تغییر هیچ اطلاعاتی را ندارد.</small></span></label>
+        <button class="primary" type="submit">ایجاد کاربر جدید</button>
+        <p id="userMessage" role="status"></p>
+        <div class="user-list-head"><b>کاربران ثبت‌شده</b><button id="refreshUsers" type="button">به‌روزرسانی</button></div>
+        <div id="userList" class="user-list"></div>
+      </div>
+    </form>
+  </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

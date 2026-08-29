@@ -51,7 +51,7 @@ public sealed class Strategy2Worker(
     {
         if (order.ExpirePrice == 0) order.ExpirePrice = order.Direction == "Long" ? order.Ceiling : order.Floor;
         if (order.ExpireActivationPrice == 0)
-            order.ExpireActivationPrice = order.EntryPrice + 0.20m * (order.TakeProfit - order.EntryPrice);
+            order.ExpireActivationPrice = order.EntryPrice + 0.25m * (order.TakeProfit - order.EntryPrice);
 
         if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
         {
@@ -103,7 +103,7 @@ public sealed class Strategy2Worker(
             // Keep a small exchange reserve for entry/exit fees and initial-margin
             // fluctuations; otherwise a nominal 99.5% allocation can exceed AB.
             order.PositionSizeUsdt = available * runtime.Options.BalanceUsageRatio * 0.97m;
-            order.ApplyPhoenixLeverage(rules);
+            order.ApplyPhoenixLeverage(rules, 20m);
             if (order.PositionSizeUsdt <= 0 || order.Quantity < rules.MinimumOrderQuantity)
                 throw new InvalidOperationException("Demo available balance is not sufficient for Strategy 2.");
             await runtime.Client.SetLeverageAsync(order.Symbol, order.Leverage!.Value, token);

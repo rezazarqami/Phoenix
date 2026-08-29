@@ -1,0 +1,8 @@
+.batch-box{grid-template-columns:minmax(250px,1fr) 105px 115px 140px 125px 145px 140px 120px}
+.timed-toggle{display:flex!important;align-items:center;gap:8px;margin-top:10px;color:#b9ccc5!important;cursor:pointer}
+.batch-box .timed-toggle input{width:18px;height:18px;margin:0;padding:0;accent-color:#38d39f}
+.timed-toggle span{color:#b9ccc5;font:700 10px Tahoma,Arial;letter-spacing:0}
+.batch-box label.is-disabled{opacity:.42}
+@media(max-width:1350px){.batch-box{grid-template-columns:1fr 1fr 1fr 1fr}.batch-box>div:first-child,.batch-status{grid-column:1/-1}}
+@media(max-width:760px){.batch-box{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.batch-box{grid-template-columns:1fr}}

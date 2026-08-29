@@ -61,6 +61,16 @@ TELEGRAM_CHAT_ID=<private chat, group, or channel id>
 
 `TELEGRAM_CHAT_ID` is optional. If it is omitted, send `/start` to the bot and Phoenix discovers the most recent chat automatically.
 
+Telegram commands and inline approval/rejection buttons are protected by a persistent per-user allowlist.
+An administrator manages it from **دسترسی تلگرام** in the Phoenix panel. A user can send `/myid` to
+the bot to learn their numeric Telegram user ID; `/myid` does not grant access. Once the first allowlist
+entry exists, only enabled IDs in that list can run commands or press action buttons. The optional store
+location is configured with `PHOENIX_TELEGRAM_ACCESS_FILE` and defaults to
+`/var/lib/phoenix/telegram-access.json`.
+
+The public-signal and Strategy 2 bots are outbound notification bots. Their destination channels or groups
+must be private, and their readers are managed using Telegram's channel/group member controls.
+
 Telegram failures are logged but never block or change order execution. Price-level messages say that a level was touched; they do not claim an exchange fill without exchange confirmation.
 
 ## Persistent order queue

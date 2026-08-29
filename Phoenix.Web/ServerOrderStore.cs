@@ -67,7 +67,7 @@ public sealed class ServerSignal
             StopLoss2 = signal.TradePlan?.StopLoss2,
             RiskFreePrice = signal.TradePlan?.RiskFreePrice,
             ExpirePrice = signal.Direction == Phoenix.Core.Entities.Direction.Long ? signal.High : signal.Low,
-            ExpireActivationPrice = preview.Price + 0.20m * (preview.TakeProfit - preview.Price),
+            ExpireActivationPrice = preview.Price + 0.25m * (preview.TakeProfit - preview.Price),
             OrderLinkId = $"phoenix-{id:N}"[..36],
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -77,10 +77,12 @@ public sealed class ServerSignal
         Symbol, Direction == "Long" ? "Buy" : "Sell", Quantity,
         EntryPrice, TakeProfit, StopLoss, Quantity * EntryPrice);
 
-    public void ApplyPhoenixLeverage(BybitInstrumentRules rules)
+    public void ApplyPhoenixLeverage(
+        BybitInstrumentRules rules, decimal targetReturnPercent = 50m)
     {
         Leverage = BybitLeverageRules.Normalize(
-            StrategyCalculator.CalculateLeverage(EntryPrice, TakeProfit), rules);
+            StrategyCalculator.CalculateLeverage(
+                EntryPrice, TakeProfit, targetReturnPercent), rules);
         Quantity = BybitOrderPreviewBuilder.RoundToStep(
             PositionSizeUsdt * Leverage.Value / EntryPrice, rules.QuantityStep);
         LeverageSource = "PhoenixFormula";
@@ -220,6 +222,10 @@ public sealed class ServerOrderStore
 
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
         CancellationToken token = default) => _history.GetAsync(days, limit, token);
+
+    public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryRangeAsync(DateTime fromUtc, DateTime toUtc,
+        int limit = 20000, CancellationToken token = default) =>
+        _history.GetCreatedRangeAsync(fromUtc, toUtc, limit, token);
 
     private async Task MigrateHistoryUnsafeAsync(List<ServerSignal> signals, CancellationToken token)
     {

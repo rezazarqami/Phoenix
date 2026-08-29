@@ -14,6 +14,7 @@ public sealed record TelegramOptions(string? BotToken, string? ChatId)
 }
 
 public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions bybitOptions,
+    TelegramAccessStore access,
     ILogger<TelegramNotifier> logger)
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
@@ -22,8 +23,14 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
 
     public bool IsConfigured => options.HasToken;
 
-    public bool IsAuthorizedChat(string chatId) =>
-        !string.IsNullOrWhiteSpace(_chatId) && string.Equals(_chatId, chatId, StringComparison.Ordinal);
+    public async Task<bool> IsAuthorizedAsync(TelegramCommand command, CancellationToken token)
+    {
+        var users = await access.GetAllAsync(token);
+        if (users.Count > 0) return users.Any(user => user.Enabled && user.UserId == command.UserId);
+        return !string.IsNullOrWhiteSpace(_chatId) &&
+               string.Equals(_chatId, command.ChatId, StringComparison.Ordinal) &&
+               long.TryParse(_chatId, out var configuredUserId) && configuredUserId == command.UserId;
+    }
 
     public Task<bool> SignalQueuedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🆕 سیگنال جدید وارد Phoenix شد\n{Describe(signal)}\nزمان: {FormatTime(signal.CreatedAtUtc)}", token);
@@ -58,7 +65,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         await SendAsync("✅ اتصال اعلان‌های Telegram به Phoenix برقرار شد.", token);
 
     public Task<bool> SendCommandReplyAsync(string chatId, string text, CancellationToken token) =>
-        IsAuthorizedChat(chatId) ? SendToChatAsync(chatId, text, token) : Task.FromResult(false);
+        SendToChatAsync(chatId, text, token);
 
     public async Task ConfigureMenuAsync(CancellationToken token)
     {
@@ -70,6 +77,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
                 new { command = "status", description = "وضعیت اتصال و موتور Phoenix" },
                 new { command = "active", description = "سیگنال‌های فعال و در انتظار" },
                 new { command = "results", description = "۵ نتیجه آخر" },
+                new { command = "myid", description = "نمایش شناسه عددی تلگرام من" },
                 new { command = "help", description = "راهنمای ربات" }
             }
         });
@@ -92,7 +100,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
     {
         if (!options.HasToken) return Array.Empty<TelegramCommand>();
         using var response = await _httpClient.GetAsync(
-            $"https://api.telegram.org/bot{options.BotToken}/getUpdates?offset={offset}&timeout=25&allowed_updates=%5B%22message%22%5D", token);
+            $"https://api.telegram.org/bot{options.BotToken}/getUpdates?offset={offset}&timeout=25&allowed_updates=%5B%22message%22,%22callback_query%22%5D", token);
         var json = await response.Content.ReadAsStringAsync(token);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(json);
@@ -100,6 +108,19 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         var result = new List<TelegramCommand>();
         foreach (var update in document.RootElement.GetProperty("result").EnumerateArray())
         {
+            if (update.TryGetProperty("callback_query", out var callback) &&
+                callback.TryGetProperty("data", out var callbackData) && callback.TryGetProperty("message", out var callbackMessage) &&
+                callbackMessage.TryGetProperty("chat", out var callbackChat) &&
+                callback.TryGetProperty("from", out var callbackFrom))
+            {
+                result.Add(new TelegramCommand(update.GetProperty("update_id").GetInt64(),
+                    callbackChat.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture),
+                    callbackFrom.GetProperty("id").GetInt64(),
+                    GetOptionalString(callbackFrom, "username"), GetDisplayName(callbackFrom),
+                    callbackData.GetString() ?? string.Empty,
+                    callback.GetProperty("id").GetString()));
+                continue;
+            }
             if (!update.TryGetProperty("message", out var message) ||
                 !message.TryGetProperty("text", out var textElement) ||
                 !message.TryGetProperty("chat", out var chat)) continue;
@@ -108,10 +129,33 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
             result.Add(new TelegramCommand(
                 update.GetProperty("update_id").GetInt64(),
                 chat.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture),
-                text.Split('@', 2)[0].Split(' ', 2)[0].ToLowerInvariant()));
+                message.TryGetProperty("from", out var from) ? from.GetProperty("id").GetInt64() : 0,
+                message.TryGetProperty("from", out from) ? GetOptionalString(from, "username") : null,
+                message.TryGetProperty("from", out from) ? GetDisplayName(from) : "Telegram user",
+                text.Split('@', 2)[0].Split(' ', 2)[0].ToLowerInvariant(), null));
         }
         return result;
     }
+
+    public async Task<bool> SendCandidateAsync(byte[] image, string caption, string key, CancellationToken token)
+    {
+        if (!options.HasToken) return false;
+        var chatId = await ResolveChatIdAsync(token);
+        if (string.IsNullOrWhiteSpace(chatId)) return false;
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(chatId), "chat_id");
+        content.Add(new StringContent(caption), "caption");
+        content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] { new[] {
+            new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
+            new { text = "❌ رد", callback_data = $"batch:no:{key}" }
+        } } })), "reply_markup");
+        var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png"); content.Add(photo, "photo", $"signal-{key}.png");
+        using var response = await _httpClient.PostAsync($"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task AnswerCallbackAsync(string callbackId, string text, CancellationToken token) =>
+        await PostJsonAsync("answerCallbackQuery", JsonSerializer.Serialize(new { callback_query_id = callbackId, text }), token);
 
     public async Task<long> GetInitialUpdateOffsetAsync(CancellationToken token)
     {
@@ -218,6 +262,14 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
 
     private static string Format(decimal? value) => value?.ToString("0.################", CultureInfo.InvariantCulture) ?? "—";
     private static string FormatTime(DateTime value) => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+    private static string? GetOptionalString(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) ? value.GetString() : null;
+    private static string GetDisplayName(JsonElement user)
+    {
+        var name = $"{GetOptionalString(user, "first_name")} {GetOptionalString(user, "last_name")}".Trim();
+        return string.IsNullOrWhiteSpace(name) ? "Telegram user" : name;
+    }
 }
 
-public sealed record TelegramCommand(long UpdateId, string ChatId, string Command);
+public sealed record TelegramCommand(long UpdateId, string ChatId, long UserId, string? Username,
+    string DisplayName, string Command, string? CallbackId);

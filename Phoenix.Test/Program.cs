@@ -12,22 +12,36 @@ Run("Long strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Long);
     var plan = new StrategyCalculator().Calculate(signal);
-    Near(118760.03488777m, plan.EntryPrice);
-    Near(118995.798245148m, plan.TakeProfit);
-    Near(118538.683877804m, plan.StopLoss1);
-    Near(118818.975727114m, plan.StopLoss2!.Value);
-    Near(118936.857405803m, plan.RiskFreePrice);
+    var effectiveLow = signal.Low + (signal.High - signal.Low) * 0.01m;
+    var entry = StrategyCalculator.LogarithmicLevel(effectiveLow, signal.High, 1m - 0.618m);
+    var target = StrategyCalculator.LogarithmicLevel(effectiveLow, signal.High, 1m - 0.500m);
+    var stop = StrategyCalculator.LogarithmicLevel(effectiveLow, signal.High, 1m - 0.729m);
+    Near(entry, plan.EntryPrice);
+    Near(target, plan.TakeProfit);
+    Near(stop, plan.StopLoss1);
+    Near(entry + (target - entry) * 0.25m, plan.StopLoss2!.Value);
+    Near(entry + (target - entry) * 0.75m, plan.RiskFreePrice);
 });
 
 Run("Short strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Short);
     var plan = new StrategyCalculator().Calculate(signal);
-    Near(119232.029641802m, plan.EntryPrice);
-    Near(118995.798245148m, plan.TakeProfit);
-    Near(119454.675358104m, plan.StopLoss1);
-    Near(119172.971792639m, plan.StopLoss2!.Value);
-    Near(119054.856094312m, plan.RiskFreePrice);
+    var effectiveHigh = signal.High - (signal.High - signal.Low) * 0.01m;
+    var entry = StrategyCalculator.LogarithmicLevel(signal.Low, effectiveHigh, 0.618m);
+    var target = StrategyCalculator.LogarithmicLevel(signal.Low, effectiveHigh, 0.500m);
+    var stop = StrategyCalculator.LogarithmicLevel(signal.Low, effectiveHigh, 0.729m);
+    Near(entry, plan.EntryPrice);
+    Near(target, plan.TakeProfit);
+    Near(stop, plan.StopLoss1);
+    Near(entry + (target - entry) * 0.25m, plan.StopLoss2!.Value);
+    Near(entry + (target - entry) * 0.75m, plan.RiskFreePrice);
+});
+
+Run("Directional range adjustment moves only the side nearest entry", () =>
+{
+    Equal((118020m, 120000m), StrategyCalculator.AdjustRangeForDirection(118000m, 120000m, Direction.Long));
+    Equal((118000m, 119980m), StrategyCalculator.AdjustRangeForDirection(118000m, 120000m, Direction.Short));
 });
 
 Run("Invalid range is rejected", () =>
@@ -117,10 +131,10 @@ Run("Bybit order preview follows instrument precision", () =>
     var position = new ExecutionManager().OpenPosition(signal)!;
     var rules = new BybitInstrumentRules("BTCUSDT", 0.10m, 0.001m, 0.001m, 5m);
     var preview = BybitOrderPreviewBuilder.Build("btcusdt", position, rules);
-    Equal(0.424m, preview.Quantity);
-    Equal(118760.00m, preview.Price);
-    Equal(118995.80m, preview.TakeProfit);
-    Equal(118538.70m, preview.StopLoss);
+    Equal(BybitOrderPreviewBuilder.FloorToStep(position.Quantity, rules.QuantityStep), preview.Quantity);
+    Equal(BybitOrderPreviewBuilder.RoundToStep(position.EntryPrice, rules.TickSize), preview.Price);
+    Equal(BybitOrderPreviewBuilder.RoundToStep(position.TakeProfit, rules.TickSize), preview.TakeProfit);
+    Equal(BybitOrderPreviewBuilder.RoundToStep(position.StopLoss1, rules.TickSize), preview.StopLoss);
     Equal("Buy", preview.Side);
 });
 

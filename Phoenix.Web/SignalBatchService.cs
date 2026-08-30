@@ -12,6 +12,7 @@ public sealed class SignalBatchService(
     private BatchState _state = BatchState.Idle;
     private TaskCompletionSource<bool>? _decision;
     private string? _decisionKey;
+    private CancellationTokenSource? _runCancellation;
 
     public BatchState Status { get { lock (_sync) return _state; } }
 
@@ -20,7 +21,7 @@ public sealed class SignalBatchService(
     {
         lock (_sync)
         {
-            if (_state.Running) { error = "یک صف بررسی در حال اجراست؛ ابتدا همان صف را در تلگرام کامل کنید."; return false; }
+            if (_runCancellation is not null) { error = "صف قبلی هنوز در حال توقف است؛ چند لحظه دیگر دوباره تلاش کنید."; return false; }
             if (!telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
             DateTimeOffset? endsAt = timedMode ? DateTimeOffset.UtcNow.AddMinutes(durationMinutes) : null;
             _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null,
@@ -29,10 +30,38 @@ public sealed class SignalBatchService(
                 TimedMode = timedMode, DurationMinutes = timedMode ? durationMinutes : 0, EndsAtUtc = endsAt
             };
             error = null;
+            var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.ApplicationStopping);
+            _runCancellation = runCancellation;
             _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, chartFilter,
-                timeframeFilter, endsAt, lifetime.ApplicationStopping));
+                timeframeFilter, endsAt, runCancellation));
             return true;
         }
+    }
+
+    public bool Stop(out string? error)
+    {
+        CancellationTokenSource cancellation;
+        lock (_sync)
+        {
+            if (!_state.Running || _runCancellation is null)
+            {
+                error = "در حال حاضر صف فعالی برای توقف وجود ندارد.";
+                return false;
+            }
+            cancellation = _runCancellation;
+            _decision = null;
+            _decisionKey = null;
+            _state = _state with
+            {
+                Running = false,
+                CurrentSymbol = null,
+                Message = "ارسال سیگنال‌ها به درخواست شما متوقف شد.",
+                Error = null
+            };
+            error = null;
+        }
+        cancellation.Cancel();
+        return true;
     }
 
     public async Task<bool> HandleCallbackAsync(string data, string? callbackId, CancellationToken token)
@@ -53,8 +82,10 @@ public sealed class SignalBatchService(
     }
 
     private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter,
-        string chartFilter, string timeframeFilter, DateTimeOffset? endsAt, CancellationToken token)
+        string chartFilter, string timeframeFilter, DateTimeOffset? endsAt,
+        CancellationTokenSource runCancellation)
     {
+        var token = runCancellation.Token;
         try
         {
             var assets = await markets.GetAsync(token);
@@ -153,13 +184,29 @@ public sealed class SignalBatchService(
                     : state.Approved >= target ? "تعداد درخواستی سیگنال تکمیل شد." : "فهرست بازارها بررسی شد و پیشنهاد بیشتری پیدا نشد."
             });
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            if (!lifetime.ApplicationStopping.IsCancellationRequested)
+                Update(state => state with { Running = false, CurrentSymbol = null, Message = "ارسال سیگنال‌ها به درخواست شما متوقف شد.", Error = null });
+        }
         catch (Exception exception)
         {
             logger.LogError(exception, "Signal batch failed");
             Update(state => state with { Running = false, Error = exception.Message, Message = "صف بررسی متوقف شد." });
         }
-        finally { lock (_sync) { _decision = null; _decisionKey = null; } }
+        finally
+        {
+            lock (_sync)
+            {
+                if (ReferenceEquals(_runCancellation, runCancellation))
+                {
+                    _decision = null;
+                    _decisionKey = null;
+                    _runCancellation = null;
+                }
+            }
+            runCancellation.Dispose();
+        }
     }
 
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }

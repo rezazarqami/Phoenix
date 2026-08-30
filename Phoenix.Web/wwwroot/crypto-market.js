@@ -61,6 +61,17 @@ document.querySelector('#startBatch').addEventListener('click', async () => {
   } catch (error) { document.querySelector('#marketMessage').textContent = error.message; }
   finally { button.disabled = false; }
 });
+document.querySelector('#stopBatch').addEventListener('click', async () => {
+  const button = document.querySelector('#stopBatch');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/analysis/signal-batch/stop', { method: 'POST' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'توقف ارسال ناموفق بود.');
+    renderBatch(data);
+  } catch (error) { document.querySelector('#marketMessage').textContent = error.message; }
+  finally { await pollBatch(); }
+});
 function renderBatch(state) {
   const status = document.querySelector('#batchStatus');
   status.classList.toggle('running', state.running);
@@ -70,6 +81,7 @@ function renderBatch(state) {
     : `تأیید ${faMarket.format(state.approved)} از ${faMarket.format(state.target)}`;
   status.textContent = state.running ? `${state.message} · ${progress} · بررسی‌شده ${faMarket.format(state.checked)} · ردشده ${faMarket.format(state.rejected)}` : state.message;
   document.querySelector('#startBatch').disabled = state.running;
+  document.querySelector('#stopBatch').disabled = !state.running;
 }
 async function pollBatch() { try { const response = await fetch('/api/analysis/signal-batch', { cache: 'no-store' }); if (response.ok) renderBatch(await response.json()); } catch {} }
 setInterval(pollBatch, 4000); pollBatch();

@@ -130,9 +130,9 @@ app.MapGet("/analysis", (HttpRequest request) => request.Query["v"] == "20260827
 app.MapGet("/analysis/signals", (HttpRequest request) => request.Query["v"] == "20260827-4"
     ? Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8")
     : Results.Redirect("/analysis/signals?v=20260827-4"));
-app.MapGet("/analysis/coins", (HttpRequest request) => request.Query["v"] == "20260827-4"
+app.MapGet("/analysis/coins", (HttpRequest request) => request.Query["v"] == "20260830-1"
     ? Results.File(Path.Combine(app.Environment.WebRootPath, "crypto-market.html"), "text/html; charset=utf-8")
-    : Results.Redirect("/analysis/coins?v=20260827-4"));
+    : Results.Redirect("/analysis/coins?v=20260830-1"));
 app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse response, PhoenixUserStore users,
     CancellationToken cancellationToken) =>
 {
@@ -365,8 +365,8 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
 {
     if (!request.TimedMode && request.Count is < 1 or > 200)
         return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
-    if (request.TimedMode && request.DurationMinutes is not (30 or 45 or 60))
-        return Results.BadRequest(new { error = "مدت جست‌وجوی زمان‌دار باید ۳۰، ۴۵ یا ۶۰ دقیقه باشد." });
+    if (request.TimedMode && request.DurationMinutes is not (5 or 10 or 20 or 30 or 45 or 60))
+        return Results.BadRequest(new { error = "مدت جست‌وجوی زمان‌دار باید ۵، ۱۰، ۲۰، ۳۰، ۴۵ یا ۶۰ دقیقه باشد." });
     if (request.PositionSizeUsdt <= 0) return Results.BadRequest(new { error = "مقدار ورودی باید بیشتر از صفر باشد." });
     var directionFilter = string.IsNullOrWhiteSpace(request.DirectionFilter) ? "All" : request.DirectionFilter;
     if (directionFilter is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "فیلتر جهت معتبر نیست." });
@@ -380,6 +380,10 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });
+app.MapPost("/api/analysis/signal-batch/stop", (SignalBatchService batches) =>
+    batches.Stop(out var error)
+        ? Results.Ok(batches.Status)
+        : Results.Conflict(new { error }));
 
 app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int? limit, int? depth,
     decimal? deviation, BybitDemoClient bybit, BybitInstrumentCatalog catalog,

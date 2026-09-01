@@ -22,7 +22,8 @@ public sealed class SignalSubmissionService(
             : Results.BadRequest(new { error = outcome.Error });
     }
 
-    public async Task<SignalSubmissionOutcome> QueueAsync(SignalRequest request, CancellationToken token)
+    public async Task<SignalSubmissionOutcome> QueueAsync(SignalRequest request, CancellationToken token,
+        SignalEvidence? evidence = null)
     {
         var error = request.Validate();
         if (error is not null) return new(null, error);
@@ -45,7 +46,9 @@ public sealed class SignalSubmissionService(
                 ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
             var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
             var queued = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
-            await store.AddAsync(queued, token);
+            queued.Timeframe = evidence?.Timeframe;
+            queued.ChartMode = evidence?.ChartMode;
+            await store.AddAsync(queued, token, evidence);
             await telegram.SignalQueuedAsync(queued, token);
 
             if (strategy2.Options.Enabled)
@@ -56,6 +59,8 @@ public sealed class SignalSubmissionService(
                 strategy2Signal.PositionSizeUsdt = 0m;
                 strategy2Signal.Quantity = 0m;
                 strategy2Signal.OrderLinkId = $"s2-{strategy2Signal.Id:N}"[..35];
+                strategy2Signal.Timeframe = evidence?.Timeframe;
+                strategy2Signal.ChartMode = evidence?.ChartMode;
                 await strategy2.Store.AddAsync(strategy2Signal, token);
                 await strategy2Telegram.QueuedAsync(strategy2Signal, token);
             }

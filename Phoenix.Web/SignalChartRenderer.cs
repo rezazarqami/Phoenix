@@ -5,7 +5,8 @@ namespace Phoenix.Web;
 
 public static class SignalChartRenderer
 {
-    public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode)
+    public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode,
+        string? timeframeBadge = null)
     {
         const int width = 1000, height = 600, left = 30, right = 25, top = 25, bottom = 35;
         var ceilingIndex = FindNearestIndex(candles, candidate.CeilingTime);
@@ -41,6 +42,7 @@ public static class SignalChartRenderer
             }
         Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
+        if (!string.IsNullOrWhiteSpace(timeframeBadge)) DrawBadge(pixels, width, height, timeframeBadge);
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);
@@ -61,6 +63,45 @@ public static class SignalChartRenderer
         while (true) { FillRect(p, w, h, x0 - thickness / 2, y0 - thickness / 2, thickness, thickness, r, g, b); if (x0 == x1 && y0 == y1) break; var twice = 2 * error; if (twice >= dy) { error += dy; x0 += sx; } if (twice <= dx) { error += dx; y0 += sy; } }
     }
     private static void Put(byte[] p, int w, int h, int x, int y, byte r, byte g, byte b) { if (x < 0 || y < 0 || x >= w || y >= h) return; var i = (y * w + x) * 3; p[i] = r; p[i + 1] = g; p[i + 2] = b; }
+    private static void DrawBadge(byte[] pixels, int width, int height, string text)
+    {
+        const int scale = 4, glyphWidth = 5, gap = 1, padding = 9;
+        text = text.ToUpperInvariant();
+        var badgeWidth = padding * 2 + text.Length * glyphWidth * scale + Math.Max(0, text.Length - 1) * gap * scale;
+        var badgeHeight = padding * 2 + 7 * scale;
+        var x = width - badgeWidth - 18;
+        const int y = 14;
+        FillRect(pixels, width, height, x, y, badgeWidth, badgeHeight, 19, 16, 10);
+        for (var border = 0; border < 2; border++)
+        {
+            DrawLine(pixels, width, height, x + border, y + border, x + badgeWidth - 1 - border, y + border, 224, 174, 61);
+            DrawLine(pixels, width, height, x + border, y + badgeHeight - 1 - border, x + badgeWidth - 1 - border, y + badgeHeight - 1 - border, 224, 174, 61);
+            DrawLine(pixels, width, height, x + border, y + border, x + border, y + badgeHeight - 1 - border, 224, 174, 61);
+            DrawLine(pixels, width, height, x + badgeWidth - 1 - border, y + border, x + badgeWidth - 1 - border, y + badgeHeight - 1 - border, 224, 174, 61);
+        }
+        var cursor = x + padding;
+        foreach (var character in text)
+        {
+            var rows = Glyph(character);
+            for (var row = 0; row < rows.Length; row++)
+                for (var column = 0; column < glyphWidth; column++)
+                    if ((rows[row] & (1 << (glyphWidth - 1 - column))) != 0)
+                        FillRect(pixels, width, height, cursor + column * scale, y + padding + row * scale,
+                            scale, scale, 246, 211, 112);
+            cursor += (glyphWidth + gap) * scale;
+        }
+    }
+
+    private static int[] Glyph(char character) => character switch
+    {
+        '0' => [14, 17, 19, 21, 25, 17, 14], '1' => [4, 12, 4, 4, 4, 4, 14],
+        '2' => [14, 17, 1, 2, 4, 8, 31], '3' => [30, 1, 1, 14, 1, 1, 30],
+        '4' => [2, 6, 10, 18, 31, 2, 2], '5' => [31, 16, 16, 30, 1, 1, 30],
+        '6' => [14, 16, 16, 30, 17, 17, 14], '7' => [31, 1, 2, 4, 8, 8, 8],
+        '8' => [14, 17, 17, 14, 17, 17, 14], '9' => [14, 17, 17, 15, 1, 1, 14],
+        'M' => [17, 27, 21, 21, 17, 17, 17], 'H' => [17, 17, 17, 31, 17, 17, 17],
+        _ => [0, 0, 0, 0, 0, 0, 0]
+    };
     private static byte[] EncodePng(byte[] pixels, int width, int height)
     {
         using var output = new MemoryStream(); output.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });

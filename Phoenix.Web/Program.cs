@@ -130,9 +130,9 @@ app.MapGet("/analysis", (HttpRequest request) => request.Query["v"] == "20260827
 app.MapGet("/analysis/signals", (HttpRequest request) => request.Query["v"] == "20260827-4"
     ? Results.File(Path.Combine(app.Environment.WebRootPath, "signal-lab.html"), "text/html; charset=utf-8")
     : Results.Redirect("/analysis/signals?v=20260827-4"));
-app.MapGet("/analysis/coins", (HttpRequest request) => request.Query["v"] == "20260830-1"
+app.MapGet("/analysis/coins", (HttpRequest request) => request.Query["v"] == "20260902-1"
     ? Results.File(Path.Combine(app.Environment.WebRootPath, "crypto-market.html"), "text/html; charset=utf-8")
-    : Results.Redirect("/analysis/coins?v=20260830-1"));
+    : Results.Redirect("/analysis/coins?v=20260902-1"));
 app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse response, PhoenixUserStore users,
     CancellationToken cancellationToken) =>
 {
@@ -323,8 +323,8 @@ app.MapGet("/api/analysis/coins", async (MarketCapCatalog catalog, CancellationT
     catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
 });
 
-app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset? to,
-    ServerOrderStore store, CancellationToken token) =>
+app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset? to, string? direction,
+    string? outcome, string? timeframe, ServerOrderStore store, CancellationToken token) =>
 {
     if (from is null || to is null || to <= from)
         return Results.BadRequest(new { error = "بازه تاریخ معتبر نیست." });
@@ -332,17 +332,25 @@ app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset?
         return Results.BadRequest(new { error = "بازه گزارش نمی‌تواند بیشتر از ده سال باشد." });
 
     var history = await store.GetHistoryRangeAsync(from.Value.UtcDateTime, to.Value.UtcDateTime, 50000, token);
-    var signals = history.Select(item => item.Signal).ToArray();
+    var filtered = history.Where(item =>
+        (string.IsNullOrWhiteSpace(direction) || direction == "All" || item.Signal.Direction == direction) &&
+        (string.IsNullOrWhiteSpace(outcome) || outcome == "All" || item.Signal.Outcome == outcome ||
+            outcome == "ExpiredNearEntry" && item.Signal.Outcome == "Expired" && item.Signal.ExpireReason == "TargetAfterActivation") &&
+        (string.IsNullOrWhiteSpace(timeframe) || timeframe == "All" || item.Signal.Timeframe == timeframe)).ToArray();
+    var signals = filtered.Select(item => item.Signal).ToArray();
     var entered = signals.Count(signal => signal.SubmittedAtUtc is not null || signal.FilledAtUtc is not null ||
         signal.Outcome is "Target" or "StopLoss" or "RiskFree");
-    var details = signals
-        .Where(signal => signal.Outcome is "Target" or "StopLoss")
-        .OrderByDescending(signal => signal.CompletedAtUtc)
-        .Select(signal => new
+    var details = filtered
+        .Where(item => item.Signal.Outcome is "Target" or "StopLoss" or "RiskFree" ||
+            item.Signal.Outcome == "Expired" && item.Signal.ExpireReason == "TargetAfterActivation")
+        .OrderByDescending(item => item.Signal.CompletedAtUtc)
+        .Select(item => new
         {
-            signal.Id, signal.Symbol, signal.Direction, signal.Outcome, signal.CreatedAtUtc,
-            signal.CompletedAtUtc, signal.EntryPrice, signal.TakeProfit, signal.StopLoss,
-            signal.AverageFillPrice, signal.Leverage, signal.PositionSizeUsdt
+            item.Signal.Id, item.Signal.Symbol, item.Signal.Direction, item.Signal.Outcome, item.Signal.ExpireReason,
+            item.Signal.CreatedAtUtc, item.Signal.CompletedAtUtc, item.Signal.EntryPrice, item.Signal.TakeProfit,
+            item.Signal.StopLoss, item.Signal.AverageFillPrice, item.Signal.Leverage, item.Signal.PositionSizeUsdt,
+            item.Signal.Timeframe, item.Signal.ChartMode, item.HasImage,
+            imageUrl = item.HasImage ? $"/api/analysis/results/{item.Signal.Id}/image" : null
         });
     return Results.Ok(new
     {
@@ -356,8 +364,22 @@ app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset?
             stopLoss = signals.Count(signal => signal.Outcome == "StopLoss"),
             riskFree = signals.Count(signal => signal.Outcome == "RiskFree")
         },
+        byDirection = signals.Where(signal => signal.Direction is "Long" or "Short")
+            .GroupBy(signal => signal.Direction).Select(group => new { key = group.Key, count = group.Count() }),
+        byTimeframe = signals.Where(signal => !string.IsNullOrWhiteSpace(signal.Timeframe))
+            .GroupBy(signal => signal.Timeframe).OrderBy(group => group.Key)
+            .Select(group => new { key = group.Key, count = group.Count() }),
+        byOutcome = signals.Where(signal => !string.IsNullOrWhiteSpace(signal.Outcome))
+            .GroupBy(signal => signal.Outcome == "Expired" && signal.ExpireReason == "TargetAfterActivation"
+                ? "ExpiredNearEntry" : signal.Outcome!)
+            .Select(group => new { key = group.Key, count = group.Count() }),
         details
     });
+});
+app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderStore store, CancellationToken token) =>
+{
+    var image = await store.GetHistoryImageAsync(id, token);
+    return image is null ? Results.NotFound() : Results.File(image, "image/png");
 });
 
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));

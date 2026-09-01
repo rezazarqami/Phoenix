@@ -155,7 +155,8 @@ public sealed class SignalBatchService(
                     var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     lock (_sync) { _decision = decision; _decisionKey = key; }
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم: {IntervalName(option.Interval)}\nنوع نمودار: {(option.LineMode ? "خطی (Close)" : "کندل‌استیک")}\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT\n\nآیا این سیگنال ثبت شود؟";
-                    var image = SignalChartRenderer.Render(option.Candles, selected, option.LineMode);
+                    var image = SignalChartRenderer.Render(option.Candles, selected, option.LineMode,
+                        TimeframeBadge(option.Interval));
                     Update(state => state with
                     {
                         Proposed = state.Proposed + 1, CurrentSymbol = selected.Symbol,
@@ -167,7 +168,8 @@ public sealed class SignalBatchService(
                     var accepted = await decision.Task.WaitAsync(token);
                     if (!accepted) { Update(state => state with { Rejected = state.Rejected + 1 }); continue; }
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
-                        selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token);
+                        selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
+                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image));
                     if (outcome.Signal is null)
                     {
                         Update(state => state with { Error = outcome.Error, Message = $"ثبت {selected.Symbol} ناموفق بود؛ بررسی ادامه دارد." });
@@ -212,6 +214,7 @@ public sealed class SignalBatchService(
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
     private static string[] Intervals(string filter) => filter == "All" ? ["5", "15", "60", "240"] : [filter];
     private static string IntervalName(string value) => value switch { "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
+    private static string TimeframeBadge(string value) => value switch { "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", _ => value };
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";

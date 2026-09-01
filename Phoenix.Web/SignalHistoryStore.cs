@@ -25,7 +25,8 @@ public sealed class SignalHistoryStore
         }.ToString();
     }
 
-    public async Task UpsertAsync(ServerSignal signal, string fallbackEvent, CancellationToken token = default)
+    public async Task UpsertAsync(ServerSignal signal, string fallbackEvent, CancellationToken token = default,
+        SignalEvidence? evidence = null)
     {
         await _gate.WaitAsync(token);
         try
@@ -40,11 +41,14 @@ public sealed class SignalHistoryStore
             var command = connection.CreateCommand();
             command.Transaction = (SqliteTransaction)transaction;
             command.CommandText = """
-                INSERT INTO signals (id, symbol, direction, status, created_at_utc, updated_at_utc, removed_at_utc, payload)
-                VALUES ($id, $symbol, $direction, $status, $created, $updated, NULL, $payload)
+                INSERT INTO signals (id, symbol, direction, status, created_at_utc, updated_at_utc, removed_at_utc, payload, timeframe, chart_mode, review_image)
+                VALUES ($id, $symbol, $direction, $status, $created, $updated, NULL, $payload, $timeframe, $chartMode, $image)
                 ON CONFLICT(id) DO UPDATE SET
                     symbol = excluded.symbol, direction = excluded.direction, status = excluded.status,
-                    updated_at_utc = excluded.updated_at_utc, payload = excluded.payload;
+                    updated_at_utc = excluded.updated_at_utc, payload = excluded.payload,
+                    timeframe = COALESCE(excluded.timeframe, signals.timeframe),
+                    chart_mode = COALESCE(excluded.chart_mode, signals.chart_mode),
+                    review_image = COALESCE(excluded.review_image, signals.review_image);
                 """;
             Add(command, "$id", signal.Id.ToString());
             Add(command, "$symbol", signal.Symbol);
@@ -53,10 +57,15 @@ public sealed class SignalHistoryStore
             Add(command, "$created", signal.CreatedAtUtc.ToString("O"));
             Add(command, "$updated", now.ToString("O"));
             Add(command, "$payload", payload);
+            AddNullable(command, "$timeframe", evidence?.Timeframe ?? signal.Timeframe);
+            AddNullable(command, "$chartMode", evidence?.ChartMode ?? signal.ChartMode);
+            AddNullable(command, "$image", evidence?.Image);
             await command.ExecuteNonQueryAsync(token);
 
             if (eventType is not null)
                 await InsertEventAsync(connection, (SqliteTransaction)transaction, signal.Id, eventType, now, payload, token);
+            if (signal.Outcome == "Expired" && signal.ExpireReason == "InitialBoundary")
+                await CompactInitialExpiryAsync(connection, (SqliteTransaction)transaction, signal, now, token);
             await transaction.CommitAsync(token);
         }
         finally { _gate.Release(); }
@@ -94,7 +103,7 @@ public sealed class SignalHistoryStore
             await using var connection = await OpenAsync(token);
             var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT payload, updated_at_utc, removed_at_utc
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
                 FROM signals WHERE created_at_utc >= $from
                 ORDER BY created_at_utc DESC LIMIT $limit;
                 """;
@@ -107,7 +116,8 @@ public sealed class SignalHistoryStore
                 var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
                 if (signal is null) continue;
                 result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
-                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime()));
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
+                    reader.GetBoolean(3)));
             }
             return result;
         }
@@ -125,7 +135,7 @@ public sealed class SignalHistoryStore
             await using var connection = await OpenAsync(token);
             var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT payload, updated_at_utc, removed_at_utc
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
                 FROM signals
                 WHERE created_at_utc >= $from AND created_at_utc < $to
                 ORDER BY created_at_utc DESC LIMIT $limit;
@@ -140,9 +150,24 @@ public sealed class SignalHistoryStore
                 var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
                 if (signal is null) continue;
                 result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
-                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime()));
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
+                    reader.GetBoolean(3)));
             }
             return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<byte[]?> GetImageAsync(Guid id, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT review_image FROM signals WHERE id=$id";
+            Add(command, "$id", id.ToString());
+            return await command.ExecuteScalarAsync(token) as byte[];
         }
         finally { _gate.Release(); }
     }
@@ -160,7 +185,7 @@ public sealed class SignalHistoryStore
                 CREATE TABLE IF NOT EXISTS signals (
                     id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL, status TEXT NOT NULL,
                     created_at_utc TEXT NOT NULL, updated_at_utc TEXT NOT NULL, removed_at_utc TEXT NULL,
-                    payload TEXT NOT NULL);
+                    payload TEXT NOT NULL, timeframe TEXT NULL, chart_mode TEXT NULL, review_image BLOB NULL);
                 CREATE INDEX IF NOT EXISTS ix_signals_created ON signals(created_at_utc DESC);
                 CREATE INDEX IF NOT EXISTS ix_signals_symbol ON signals(symbol, created_at_utc DESC);
                 CREATE INDEX IF NOT EXISTS ix_signals_status ON signals(status, created_at_utc DESC);
@@ -171,6 +196,9 @@ public sealed class SignalHistoryStore
                 CREATE INDEX IF NOT EXISTS ix_events_signal ON signal_events(signal_id, occurred_at_utc);
                 """;
             await command.ExecuteNonQueryAsync(token);
+            await EnsureColumnAsync(connection, "signals", "timeframe", "TEXT NULL", token);
+            await EnsureColumnAsync(connection, "signals", "chart_mode", "TEXT NULL", token);
+            await EnsureColumnAsync(connection, "signals", "review_image", "BLOB NULL", token);
             _initialized = true;
         }
         return connection;
@@ -210,8 +238,50 @@ public sealed class SignalHistoryStore
         await command.ExecuteNonQueryAsync(token);
     }
 
+    private static async Task CompactInitialExpiryAsync(SqliteConnection connection, SqliteTransaction transaction,
+        ServerSignal signal, DateTime now, CancellationToken token)
+    {
+        var compact = new ServerSignal
+        {
+            Id = signal.Id, Symbol = "DELETED", Direction = "Deleted", Status = "Expired",
+            CreatedAtUtc = signal.CreatedAtUtc, CompletedAtUtc = signal.CompletedAtUtc,
+            ExpiredAtUtc = signal.ExpiredAtUtc, Outcome = "Expired", ExpireReason = "InitialBoundary"
+        };
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "UPDATE signals SET symbol='DELETED',direction='Deleted',status='Expired',updated_at_utc=$updated,payload=$payload,timeframe=NULL,chart_mode=NULL,review_image=NULL WHERE id=$id";
+        Add(command, "$updated", now.ToString("O"));
+        Add(command, "$payload", JsonSerializer.Serialize(compact, JsonOptions));
+        Add(command, "$id", signal.Id.ToString());
+        await command.ExecuteNonQueryAsync(token);
+        var events = connection.CreateCommand();
+        events.Transaction = transaction;
+        events.CommandText = "DELETE FROM signal_events WHERE signal_id=$id";
+        Add(events, "$id", signal.Id.ToString());
+        await events.ExecuteNonQueryAsync(token);
+    }
+
+    private static async Task EnsureColumnAsync(SqliteConnection connection, string table, string column,
+        string definition, CancellationToken token)
+    {
+        var inspect = connection.CreateCommand();
+        inspect.CommandText = $"PRAGMA table_info({table})";
+        await using var reader = await inspect.ExecuteReaderAsync(token);
+        var exists = false;
+        while (await reader.ReadAsync(token))
+            if (reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase)) { exists = true; break; }
+        await reader.DisposeAsync();
+        if (exists) return;
+        var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        await alter.ExecuteNonQueryAsync(token);
+    }
+
     private static void Add(SqliteCommand command, string name, object value) =>
         command.Parameters.AddWithValue(name, value);
+    private static void AddNullable(SqliteCommand command, string name, object? value) =>
+        command.Parameters.AddWithValue(name, value ?? DBNull.Value);
 }
 
-public sealed record SignalHistoryItem(ServerSignal Signal, DateTime UpdatedAtUtc, DateTime? RemovedAtUtc);
+public sealed record SignalHistoryItem(ServerSignal Signal, DateTime UpdatedAtUtc, DateTime? RemovedAtUtc,
+    bool HasImage = false);

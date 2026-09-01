@@ -96,14 +96,18 @@ function renderResults(data) {
   const summary = data.summary || {};
   const values = [summary.total, summary.entered, summary.expired, summary.target, summary.stopLoss, summary.riskFree];
   document.querySelectorAll('#resultsSummary b').forEach((node, index) => { node.textContent = faMarket.format(values[index] || 0); });
+  const label = key => ({ Long:'Long', Short:'Short', Target:'تارگت', StopLoss:'استاپ‌لاس', RiskFree:'ریسک‌فری', Expired:'اکسپایر', ExpiredNearEntry:'اکسپایر نزدیک ورود', 5:'5M', 15:'15M', 60:'1H', 240:'4H' })[key] || key;
+  const group = (title, items) => `<section><strong>${title}</strong><div>${(items || []).map(item => `<span>${escapeMarket(label(item.key))}<b>${faMarket.format(item.count)}</b></span>`).join('') || '<small>داده‌ای نیست</small>'}</div></section>`;
+  document.querySelector('#resultsBreakdown').innerHTML = group('بر اساس جهت', data.byDirection) + group('بر اساس تایم‌فریم', data.byTimeframe) + group('بر اساس نتیجه', data.byOutcome);
   const rows = data.details || [];
   document.querySelector('#resultsRows').innerHTML = rows.length ? rows.map(signal => {
-    const isTarget = signal.outcome === 'Target';
-    const result = isTarget ? 'تارگت' : 'استاپ‌لاس';
+    const result = signal.outcome === 'Target' ? 'تارگت' : signal.outcome === 'StopLoss' ? 'استاپ‌لاس' : signal.outcome === 'RiskFree' ? 'ریسک‌فری' : 'اکسپایر نزدیک ورود';
+    const resultClass = signal.outcome === 'Target' ? 'target' : signal.outcome === 'StopLoss' ? 'stop' : 'neutral';
     const direction = signal.direction === 'Long' ? 'LONG' : 'SHORT';
     const ended = signal.completedAtUtc ? new Date(signal.completedAtUtc).toLocaleString('fa-IR') : '—';
-    return `<article class="result-row"><strong>${escapeMarket(signal.symbol)}</strong><span>${direction}</span><b class="${isTarget ? 'target' : 'stop'}">${result}</b><span class="result-levels">ENTRY ${reportPrice.format(signal.entryPrice)} · TP ${reportPrice.format(signal.takeProfit)} · SL ${reportPrice.format(signal.stopLoss)}</span><span>${signal.leverage ? faMarket.format(signal.leverage) + '×' : '—'}</span><time>${ended}</time></article>`;
-  }).join('') : '<div class="results-empty">در این بازه، نتیجه تارگت یا استاپ‌لاس ثبت نشده است.</div>';
+    const image = signal.imageUrl ? `<a class="result-image" href="${signal.imageUrl}" target="_blank"><img src="${signal.imageUrl}" alt="نمودار ${escapeMarket(signal.symbol)}"><span>مشاهده تصویر</span></a>` : '';
+    return `<article class="result-row"><div class="result-symbol">${image}<strong>${escapeMarket(signal.symbol)}</strong></div><span>${direction}</span><b class="${resultClass}">${result}</b><span class="result-levels"><b>${escapeMarket(label(signal.timeframe || 'نامشخص'))} · ${escapeMarket(signal.chartMode || '')}</b>ENTRY ${reportPrice.format(signal.entryPrice)} · TP ${reportPrice.format(signal.takeProfit)} · SL ${reportPrice.format(signal.stopLoss)}</span><span>${signal.leverage ? faMarket.format(signal.leverage) + '×' : '—'}</span><time>${ended}</time></article>`;
+  }).join('') : '<div class="results-empty">در این فیلتر نتیجه‌ای برای نمایش وجود ندارد.</div>';
 }
 
 document.querySelector('#loadResults').addEventListener('click', async () => {
@@ -117,7 +121,8 @@ document.querySelector('#loadResults').addEventListener('click', async () => {
   button.disabled = true; message.textContent = '';
   document.querySelector('#resultsRows').innerHTML = '<div class="results-empty">در حال آماده‌سازی گزارش…</div>';
   try {
-    const response = await fetch(`/api/analysis/results?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { cache: 'no-store' });
+    const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), direction: document.querySelector('#resultsDirection').value, outcome: document.querySelector('#resultsOutcome').value, timeframe: document.querySelector('#resultsTimeframe').value });
+    const response = await fetch(`/api/analysis/results?${query}`, { cache: 'no-store' });
     if (response.status === 401) return location.replace('/analysis/login');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'دریافت گزارش ناموفق بود.');

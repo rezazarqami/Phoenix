@@ -46,6 +46,8 @@ public sealed class ServerSignal
     public string? ExpireReason { get; set; }
     public int? PublicSignalNumber { get; set; }
     public int? PublicTelegramMessageId { get; set; }
+    public string? Timeframe { get; set; }
+    public string? ChartMode { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {
@@ -119,7 +121,8 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
-    public async Task AddAsync(ServerSignal signal, CancellationToken token = default)
+    public async Task AddAsync(ServerSignal signal, CancellationToken token = default,
+        SignalEvidence? evidence = null)
     {
         await _gate.WaitAsync(token);
         try
@@ -127,7 +130,7 @@ public sealed class ServerOrderStore
             var signals = await LoadUnsafeAsync(token);
             signals.Add(Clone(signal));
             await SaveUnsafeAsync(signals, token);
-            await _history.UpsertAsync(signal, "SignalCreated", token);
+            await _history.UpsertAsync(signal, "SignalCreated", token, evidence);
         }
         finally { _gate.Release(); }
     }
@@ -227,6 +230,9 @@ public sealed class ServerOrderStore
         int limit = 20000, CancellationToken token = default) =>
         _history.GetCreatedRangeAsync(fromUtc, toUtc, limit, token);
 
+    public Task<byte[]?> GetHistoryImageAsync(Guid id, CancellationToken token = default) =>
+        _history.GetImageAsync(id, token);
+
     private async Task MigrateHistoryUnsafeAsync(List<ServerSignal> signals, CancellationToken token)
     {
         if (_historyMigrated) return;
@@ -296,8 +302,10 @@ public sealed class ServerOrderStore
         ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc,
         Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason
         , PublicSignalNumber = signal.PublicSignalNumber,
-        PublicTelegramMessageId = signal.PublicTelegramMessageId
+        PublicTelegramMessageId = signal.PublicTelegramMessageId,
+        Timeframe = signal.Timeframe, ChartMode = signal.ChartMode
     };
 }
 
 public enum ExclusiveClaimResult { Unavailable, PositionBusy, Claimed }
+public sealed record SignalEvidence(string Timeframe, string ChartMode, byte[] Image);

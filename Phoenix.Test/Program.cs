@@ -355,6 +355,47 @@ Run("Server signal queue persists across application restarts", () =>
     }
 });
 
+Run("Signal evidence is stored and initial expiry removes its details", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-evidence-{Guid.NewGuid():N}.json");
+    var historyPath = Path.ChangeExtension(path, ".db");
+    try
+    {
+        var store = new ServerOrderStore(path, historyPath);
+        var signal = new ServerSignal
+        {
+            Id = Guid.NewGuid(), Symbol = "ETHUSDT", Direction = "Short", Quantity = 0.01m,
+            EntryPrice = 100m, TakeProfit = 90m, StopLoss = 110m, OrderLinkId = "evidence-test",
+            CreatedAtUtc = DateTime.UtcNow, Timeframe = "15", ChartMode = "Candles"
+        };
+        var image = new byte[] { 137, 80, 78, 71, 1, 2, 3 };
+        store.AddAsync(signal, evidence: new SignalEvidence("15", "Candles", image)).GetAwaiter().GetResult();
+        True(store.GetHistoryImageAsync(signal.Id).GetAwaiter().GetResult()!.SequenceEqual(image));
+        var retained = store.GetHistoryRangeAsync(signal.CreatedAtUtc.AddMinutes(-1), signal.CreatedAtUtc.AddMinutes(1)).GetAwaiter().GetResult().Single();
+        Equal("15", retained.Signal.Timeframe!);
+        True(retained.HasImage);
+
+        signal.Status = "Expired"; signal.Outcome = "Expired"; signal.ExpireReason = "InitialBoundary";
+        signal.ExpiredAtUtc = signal.CompletedAtUtc = DateTime.UtcNow;
+        store.UpdateAsync(signal).GetAwaiter().GetResult();
+        True(store.GetHistoryImageAsync(signal.Id).GetAwaiter().GetResult() is null);
+        var compact = store.GetHistoryRangeAsync(signal.CreatedAtUtc.AddMinutes(-1), signal.CreatedAtUtc.AddMinutes(1)).GetAwaiter().GetResult().Single();
+        Equal("Expired", compact.Signal.Outcome!);
+        Equal("InitialBoundary", compact.Signal.ExpireReason!);
+        Equal("DELETED", compact.Signal.Symbol);
+        False(compact.HasImage);
+    }
+    finally
+    {
+        SignalHistoryStore.ClearConnectionPools();
+        if (File.Exists(path)) File.Delete(path);
+        if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
+        if (File.Exists(historyPath)) File.Delete(historyPath);
+        if (File.Exists(historyPath + "-wal")) File.Delete(historyPath + "-wal");
+        if (File.Exists(historyPath + "-shm")) File.Delete(historyPath + "-shm");
+    }
+});
+
 Run("Server lifecycle levels respect Long direction", () =>
 {
     var signal = new ServerSignal { Direction = "Long", TakeProfit = 110m, StopLoss = 90m };
@@ -568,6 +609,9 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     var snapshot = SignalChartRenderer.Render(candles, candidate, false);
     True(snapshot.Length > 1000);
     True(snapshot.Take(8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }));
+    var labeledSnapshot = SignalChartRenderer.Render(candles, candidate, false, "1H");
+    True(labeledSnapshot.Length > 1000);
+    False(snapshot.SequenceEqual(labeledSnapshot));
 });
 
 Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was touched", () =>

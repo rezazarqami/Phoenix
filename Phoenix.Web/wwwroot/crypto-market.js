@@ -57,7 +57,7 @@ async function loadMarket() {
   document.querySelector('#marketMessage').textContent = '';
   try {
     const response = await fetch('/api/analysis/coins', { cache: 'no-store' });
-    if (response.status === 401) return location.replace('/analysis/login');
+    if (response.status === 401) return location.replace('/login');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'اطلاعات بازار دریافت نشد.');
     marketAssets = data.assets || [];
@@ -155,7 +155,7 @@ document.querySelector('#loadResults').addEventListener('click', async () => {
   try {
     const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), direction: document.querySelector('#resultsDirection').value, outcome: document.querySelector('#resultsOutcome').value, timeframe: document.querySelector('#resultsTimeframe').value });
     const response = await fetch(`/api/analysis/results?${query}`, { cache: 'no-store' });
-    if (response.status === 401) return location.replace('/analysis/login');
+    if (response.status === 401) return location.replace('/login');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'دریافت گزارش ناموفق بود.');
     renderResults(data);
@@ -164,5 +164,5 @@ document.querySelector('#loadResults').addEventListener('click', async () => {
     document.querySelector('#resultsRows').innerHTML = '<div class="results-empty">گزارش دریافت نشد.</div>';
   } finally { button.disabled = false; }
 });
-document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); location.replace('/analysis/login'); });
+document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); location.replace('/login'); });
 loadMarket();

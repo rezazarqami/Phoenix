@@ -8,6 +8,42 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 
+Run("Analysis accepts only the shared Phoenix session and preserves roles", () =>
+{
+    var previousUser = Environment.GetEnvironmentVariable("PHOENIX_AUTH_USERNAME");
+    var previousPassword = Environment.GetEnvironmentVariable("PHOENIX_AUTH_PASSWORD");
+    try
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_AUTH_USERNAME", "test-admin");
+        Environment.SetEnvironmentVariable("PHOENIX_AUTH_PASSWORD", "test-only-password");
+        foreach (var role in new[] { "admin", "viewer", "editor" })
+        {
+            var username = role == "admin" ? "test-admin" : "test-user";
+            var token = PhoenixSessionAuth.CreateToken(username, role == "viewer", role == "admin");
+            var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            context.Request.Headers.Cookie = PhoenixSessionAuth.CookieName + "=" + token;
+            True(AnalysisSessionAuth.TryGetIdentity(context.Request, out var identity));
+            Equal(username, identity.Username);
+            Equal(role == "viewer", identity.ViewerOnly);
+            Equal(role == "admin", identity.IsAdmin);
+            var legacy = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            legacy.Request.Headers.Cookie = AnalysisSessionAuth.CookieName + "=" + token;
+            False(AnalysisSessionAuth.TryGetIdentity(legacy.Request, out _));
+        }
+        var original = PhoenixSessionAuth.CreateToken("test-admin", false, true);
+        var stale = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        stale.Request.Headers.Cookie = PhoenixSessionAuth.CookieName + "=" + original;
+        Environment.SetEnvironmentVariable("PHOENIX_AUTH_PASSWORD", "rotated-test-password");
+        False(PhoenixSessionAuth.TryGetIdentity(stale.Request, out _));
+        False(AnalysisSessionAuth.TryGetIdentity(stale.Request, out _));
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("PHOENIX_AUTH_USERNAME", previousUser);
+        Environment.SetEnvironmentVariable("PHOENIX_AUTH_PASSWORD", previousPassword);
+    }
+});
+
 Run("Wallet notifications use USDT wallet balance, not available USD or equity", () =>
 {
     var client = new BybitDemoClient(new BybitDemoOptions("test-key", "test-secret"),

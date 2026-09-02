@@ -202,6 +202,21 @@ public sealed class BybitDemoClient
         return balance;
     }
 
+    public async Task<decimal> GetUsdtWalletBalanceAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateSignedGetRequest("/v5/account/wallet-balance", "accountType=UNIFIED&coin=USDT");
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        EnsureSuccess(document.RootElement);
+        var coins = document.RootElement.GetProperty("result").GetProperty("list")[0].GetProperty("coin");
+        foreach (var coin in coins.EnumerateArray())
+            if (coin.GetProperty("coin").GetString() == "USDT" &&
+                decimal.TryParse(coin.GetProperty("walletBalance").GetString(), NumberStyles.Number,
+                    CultureInfo.InvariantCulture, out var balance)) return balance;
+        throw new InvalidOperationException("Bybit did not return a valid USDT wallet balance.");
+    }
+
     public async Task<decimal?> GetLeverageAsync(
         string symbol,
         CancellationToken cancellationToken = default)

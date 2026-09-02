@@ -6,7 +6,7 @@ namespace Phoenix.Web;
 public sealed class SignalBatchService(
     MarketCapCatalog markets, BybitDemoClient bybit, SignalCandidateFinder finder,
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
-    IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger)
+    IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
     private readonly object _sync = new();
     private BatchState _state = BatchState.Idle;
@@ -67,7 +67,7 @@ public sealed class SignalBatchService(
     public async Task<bool> HandleCallbackAsync(string data, string? callbackId, CancellationToken token)
     {
         var parts = data.Split(':');
-        if (parts.Length != 3 || parts[0] != "batch") return false;
+        if (parts.Length != 3 || parts[0] != "batch" || parts[1] is not ("yes" or "no")) return false;
         TaskCompletionSource<bool>? decision;
         lock (_sync)
         {
@@ -75,6 +75,12 @@ public sealed class SignalBatchService(
             decision = _decision; _decision = null; _decisionKey = null;
         }
         var accepted = parts[1] == "yes";
+        try
+        {
+            if (!await reviews.DecideAsync(parts[2], accepted, token))
+                throw new InvalidOperationException("ثبت پاسخ در آرشیو پیشنهادها ناموفق بود.");
+        }
+        catch (Exception exception) { decision.TrySetException(exception); throw; }
         decision.TrySetResult(accepted);
         if (!string.IsNullOrWhiteSpace(callbackId))
             await telegram.AnswerCallbackAsync(callbackId, accepted ? "سیگنال تأیید شد؛ در حال ثبت…" : "پیشنهاد رد شد؛ مورد بعدی بررسی می‌شود.", token);
@@ -151,18 +157,21 @@ public sealed class SignalBatchService(
                 {
                     if (!ShouldContinue()) break;
                     var selected = option.Candidate;
-                    var key = Guid.NewGuid().ToString("N")[..10];
+                    var key = Guid.NewGuid().ToString("N");
                     var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     lock (_sync) { _decision = decision; _decisionKey = key; }
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم: {IntervalName(option.Interval)}\nنوع نمودار: {(option.LineMode ? "خطی (Close)" : "کندل‌استیک")}\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT\n\nآیا این سیگنال ثبت شود؟";
                     var image = SignalChartRenderer.Render(option.Candles, selected, option.LineMode,
                         TimeframeBadge(option.Interval));
+                    await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
                     Update(state => state with
                     {
                         Proposed = state.Proposed + 1, CurrentSymbol = selected.Symbol,
                         Message = $"منتظر پاسخ تلگرام برای {selected.Symbol}؛ فاصله تا ورود {Format(option.EntryDistancePercent)}٪"
                     });
-                    if (!await telegram.SendCandidateAsync(image, caption, key, token))
+                    var sent = await telegram.SendCandidateAsync(image, caption, key, token);
+                    await reviews.MarkDeliveryAsync(key, sent, token);
+                    if (!sent)
                         throw new InvalidOperationException("ارسال پیشنهاد به تلگرام ناموفق بود.");
                     proposedKeys.Add(option.ProposalKey);
                     var accepted = await decision.Task.WaitAsync(token);
@@ -170,6 +179,7 @@ public sealed class SignalBatchService(
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
                         selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
                         new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image));
+                    await reviews.LinkSignalAsync(key, outcome.Signal?.Id, token);
                     if (outcome.Signal is null)
                     {
                         Update(state => state with { Error = outcome.Error, Message = $"ثبت {selected.Symbol} ناموفق بود؛ بررسی ادامه دارد." });

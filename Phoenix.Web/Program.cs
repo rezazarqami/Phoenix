@@ -23,6 +23,7 @@ builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<SignalSubmissionService>();
 builder.Services.AddSingleton<SignalPlanPreviewer>();
 builder.Services.AddSingleton<SignalBatchService>();
+builder.Services.AddSingleton<ReviewArchiveStore>();
 builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
 builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
@@ -383,6 +384,19 @@ app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderS
 });
 
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
+app.MapGet("/api/analysis/reviews/export", async (DateTimeOffset? from, DateTimeOffset? to,
+    HttpRequest request, ReviewArchiveStore reviews, CancellationToken token) =>
+{
+    if (!AnalysisSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    if (from is null || to is null) return Results.BadRequest(new { error = "بازه تاریخ را انتخاب کنید." });
+    try
+    {
+        var zip = await reviews.ExportAsync(from.Value.UtcDateTime, to.Value.UtcDateTime, token);
+        return Results.File(zip, "application/zip", $"phoenix-reviews-{from:yyyyMMdd}-{to:yyyyMMdd}.zip");
+    }
+    catch (ArgumentException exception) { return Results.BadRequest(new { error = exception.Message }); }
+});
 app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, SignalBatchService batches) =>
 {
     if (!request.TimedMode && request.Count is < 1 or > 200)

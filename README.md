@@ -102,3 +102,29 @@ The first analysis ruleset reads public Bybit linear-market candles, detects
 configurable swing pivots, validates five-wave impulses, ranks up to three
 scenarios, and reports Fibonacci ratios and invalidation levels. It does not
 place orders and does not use exchange API credentials.
+
+## Review dataset and completion notifications
+
+Every new Telegram batch proposal is saved before delivery in `review-archive.db`
+beside `PHOENIX_QUEUE_PATH` (or the default queue directory). This independent
+archive retains PNG images, proposal-time candles and candidate levels, timeframe,
+chart mode, delivery state, and the first valid Approved/Rejected decision.
+Unanswered proposals are not rejections. Approval labels are saved before trade
+submission; a later submission failure does not change the preference label.
+Trade-history expiry compaction does not delete this review dataset.
+
+An analysis administrator can download a date-range ZIP from Crypto Markets.
+Exports contain a manifest and Approved/Rejected/Unanswered image folders with
+JSON metadata and candles. Limits are 31 days, 2,000 proposals and 128 MiB of
+uncompressed source data per export; use shorter ranges if exceeded. Nothing is
+uploaded to an AI service automatically and no learned filtering is enabled.
+Evaluate future rules chronologically, group duplicate proposals, and test in
+shadow mode before suppressing candidates. Approval is not proof of profitability.
+No automatic archive deletion is configured; include this database in backups.
+
+Private Phoenix and Strategy 2 completion notifications query their own account's
+USDT `walletBalance` (not available USD balance or equity). The bounded five-second
+lookup cannot prevent a result notification on API failure. The amount is labelled
+as a snapshot at notification time: current target/stop events are price-based,
+so exchange settlement is not guaranteed to have completed. Wallet balances are
+not added to public signal broadcasts or Risk Free activation messages.

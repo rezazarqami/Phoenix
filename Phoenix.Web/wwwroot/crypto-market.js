@@ -3,6 +3,38 @@ const usdMarket = new Intl.NumberFormat('en-US', { notation: 'compact', maximumF
 const escapeMarket = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 let marketAssets = [];
 
+document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
+<details class="results-report"><summary>آرشیو تأیید و رد پیشنهادها — خروجی برای تحلیل</summary>
+<div class="results-body"><p class="results-note">همه پیشنهادهای جدید با عکس، کندل‌ها، تایم‌فریم و پاسخ شما ذخیره می‌شوند. بدون پاسخ، رد محسوب نمی‌شود. این آرشیو مستقل از نتایج معاملات است و فعلاً هیچ فیلتر هوش مصنوعی فعال نیست. خروجی فقط برای مدیر قابل دریافت است.</p>
+<div class="results-filters"><label>از تاریخ<input id="reviewFrom" type="date"></label><label>تا تاریخ<input id="reviewTo" type="date"></label><button id="exportReviews" type="button">دریافت آرشیو ZIP</button></div>
+<p id="reviewMessage" role="status" class="results-message"></p></div></details>`);
+const reviewDate = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+const reviewToday = new Date(), reviewStart = new Date();
+reviewStart.setDate(reviewStart.getDate()-4);
+document.querySelector('#reviewFrom').value = reviewDate(reviewStart);
+document.querySelector('#reviewTo').value = reviewDate(reviewToday);
+document.querySelector('#exportReviews').addEventListener('click', async () => {
+  const button = document.querySelector('#exportReviews'), message = document.querySelector('#reviewMessage');
+  const fromValue = document.querySelector('#reviewFrom').value, toValue = document.querySelector('#reviewTo').value;
+  if (!fromValue || !toValue || fromValue > toValue) { message.textContent = 'بازه تاریخ معتبر نیست.'; return; }
+  const from = new Date(`${fromValue}T00:00:00`), to = new Date(`${toValue}T00:00:00`);
+  to.setDate(to.getDate()+1);
+  button.disabled = true; message.textContent = 'در حال آماده‌سازی آرشیو…';
+  try {
+    const query = new URLSearchParams({from:from.toISOString(), to:to.toISOString()});
+    const response = await fetch(`/api/analysis/reviews/export?${query}`, {cache:'no-store'});
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('خروجی آرشیو فقط برای مدیر مجاز است.');
+      const data = await response.json(); throw new Error(data.error || 'دریافت آرشیو ناموفق بود.');
+    }
+    const url = URL.createObjectURL(await response.blob()), link = document.createElement('a');
+    link.href = url; link.download = `phoenix-reviews-${fromValue}-${toValue}.zip`;
+    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+    message.textContent = 'آرشیو دریافت شد. عکس‌ها در پوشه‌های Approved، Rejected و Unanswered هستند؛ مشخصات و کندل‌ها هم همراهشان است.';
+  } catch(error) { message.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
 function renderMarket() {
   const query = document.querySelector('#marketSearch').value.trim().toUpperCase();
   const filter = document.querySelector('#marketFilter').value;

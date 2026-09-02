@@ -12,7 +12,7 @@ public sealed record Strategy2TelegramOptions(string? BotToken, string? ChatId)
 }
 
 public sealed class Strategy2TelegramNotifier(
-    Strategy2TelegramOptions options, ILogger<Strategy2TelegramNotifier> logger)
+    Strategy2TelegramOptions options, ILogger<Strategy2TelegramNotifier> logger, Strategy2Runtime runtime)
 {
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(10) };
 
@@ -24,12 +24,12 @@ public sealed class Strategy2TelegramNotifier(
         $"⌛ سیگنال Strategy 2 اکسپایر شد\n{Describe(s)}\nدلیل: {ExpireReason(s.ExpireReason)}", token);
     public Task RiskFreeAsync(ServerSignal s, CancellationToken token) => SendAsync(
         $"🛡️ Strategy 2 به منطقه Risk Free رسید\n{Describe(s)}\nSL2: {F(s.StopLoss2)}", token);
-    public Task TargetAsync(ServerSignal s, CancellationToken token) => SendAsync(
-        $"🏆 Strategy 2 به تارگت رسید\n{Describe(s)}", token);
-    public Task StopAsync(ServerSignal s, CancellationToken token) => SendAsync(
-        $"🛑 Strategy 2 به استاپ‌لاس رسید\n{Describe(s)}", token);
-    public Task ClosedRiskFreeAsync(ServerSignal s, CancellationToken token) => SendAsync(
-        $"💚 Strategy 2 با ریسک‌فری بسته شد\n{Describe(s)}", token);
+    public async Task TargetAsync(ServerSignal s, CancellationToken token) => await SendAsync(
+        $"🏆 Strategy 2 به تارگت رسید\n{Describe(s)}" + await WalletNotification.ReadAsync(runtime.Client, token), token);
+    public async Task StopAsync(ServerSignal s, CancellationToken token) => await SendAsync(
+        $"🛑 Strategy 2 به استاپ‌لاس رسید\n{Describe(s)}" + await WalletNotification.ReadAsync(runtime.Client, token), token);
+    public async Task ClosedRiskFreeAsync(ServerSignal s, CancellationToken token) => await SendAsync(
+        $"💚 Strategy 2 با ریسک‌فری بسته شد\n{Describe(s)}" + await WalletNotification.ReadAsync(runtime.Client, token), token);
     public Task ErrorAsync(ServerSignal s, CancellationToken token) => SendAsync(
         $"⚠️ خطای Strategy 2\n{Describe(s)}\n{s.Error}", token);
 

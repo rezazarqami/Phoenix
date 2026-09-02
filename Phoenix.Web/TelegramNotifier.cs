@@ -14,7 +14,7 @@ public sealed record TelegramOptions(string? BotToken, string? ChatId)
 }
 
 public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions bybitOptions,
-    TelegramAccessStore access,
+    TelegramAccessStore access, BybitDemoClient bybit,
     ILogger<TelegramNotifier> logger)
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
@@ -41,17 +41,17 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
     public Task<bool> OrderSubmittedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"✅ سفارش در Bybit {bybitOptions.EnvironmentName} پذیرفته شد\n{Describe(signal)}\nشناسه سفارش: {signal.BybitOrderId}", token);
 
-    public Task<bool> TargetReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
-        $"🏆 قیمت به تارگت رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
+    public async Task<bool> TargetReachedAsync(ServerSignal signal, CancellationToken token) => await SendAsync(
+        $"🏆 قیمت به تارگت رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
     public Task<bool> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🛡️ مرحله ریسک‌فری / SL2 فعال شد\n{Describe(signal)}\nSL2: {Format(signal.StopLoss2)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
 
-    public Task<bool> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
-        $"💚 معامله با ریسک‌فری بسته شد\n{Describe(signal)}\nقیمت خروج SL2: {Format(signal.StopLoss2)}", token);
+    public async Task<bool> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) => await SendAsync(
+        $"💚 معامله با ریسک‌فری بسته شد\n{Describe(signal)}\nقیمت خروج SL2: {Format(signal.StopLoss2)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
-    public Task<bool> StopLossReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
-        $"🛑 قیمت به سطح استاپ‌لاس رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
+    public async Task<bool> StopLossReachedAsync(ServerSignal signal, CancellationToken token) => await SendAsync(
+        $"🛑 قیمت به سطح استاپ‌لاس رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
     public Task<bool> OrderErrorAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"⚠️ خطای ارسال سفارش {bybitOptions.EnvironmentName}\n{Describe(signal)}\nخطا: {signal.Error}", token);

@@ -8,6 +8,70 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 
+Run("Wallet notifications use USDT wallet balance, not available USD or equity", () =>
+{
+    var client = new BybitDemoClient(new BybitDemoOptions("test-key", "test-secret"),
+        new HttpClient(new StubHttpHandler(request =>
+        {
+            Equal("/v5/account/wallet-balance", request.RequestUri!.AbsolutePath);
+            Equal("?accountType=UNIFIED&coin=USDT", request.RequestUri.Query);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(
+                "{\"retCode\":0,\"result\":{\"list\":[{\"totalAvailableBalance\":\"12\",\"totalEquity\":\"500\",\"coin\":[{\"coin\":\"USDT\",\"walletBalance\":\"123.45\"}]}]}}") };
+        })));
+    Equal(123.45m, client.GetUsdtWalletBalanceAsync().GetAwaiter().GetResult());
+    True(WalletNotification.ReadAsync(client, default).GetAwaiter().GetResult().Contains("123.45 USDT"));
+});
+
+Run("Missing wallet balance is not reported as zero and does not block notification", () =>
+{
+    var client = new BybitDemoClient(new BybitDemoOptions("test-key", "test-secret"),
+        new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        { Content = new StringContent("{\"retCode\":0,\"result\":{\"list\":[{\"coin\":[]}]}}") })));
+    var text = WalletNotification.ReadAsync(client, default).GetAwaiter().GetResult();
+    True(text.Contains("دریافت نشد"));
+    False(text.Contains("0 USDT"));
+});
+
+Run("Review archive preserves rejected, approved and unanswered images across restart", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"phoenix-review-{Guid.NewGuid():N}.db");
+    try
+    {
+        var archive = new ReviewArchiveStore(path);
+        var candidate = new SignalCandidate("BTCUSDT", "5", "Long", 120, 80, 101, 100, 110, 90,
+            102.5m, 107.5m, 5, 1, 80, 1, 2, 0, 3, 4, "test", false, null);
+        var candles = new[] { new BybitKline(0, 100, 101, 99, 100, 10) };
+        byte[] image = [137, 80, 78, 71, 3, 4];
+        foreach (var key in new[] { "approved", "rejected", "unanswered" })
+        {
+            archive.SaveAsync(key, candidate, candles, "5", false, image, default).GetAwaiter().GetResult();
+            archive.MarkDeliveryAsync(key, true, default).GetAwaiter().GetResult();
+        }
+        True(archive.DecideAsync("approved", true, default).GetAwaiter().GetResult());
+        True(archive.DecideAsync("rejected", false, default).GetAwaiter().GetResult());
+        False(archive.DecideAsync("rejected", true, default).GetAwaiter().GetResult());
+        False(archive.DecideAsync("unknown", true, default).GetAwaiter().GetResult());
+        var zip = new ReviewArchiveStore(path).ExportAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1), default).GetAwaiter().GetResult();
+        using var stream = new MemoryStream(zip);
+        using var result = new System.IO.Compression.ZipArchive(stream);
+        foreach (var folder in new[] { "Approved/approved", "Rejected/rejected", "Unanswered/unanswered" })
+        {
+            using var png = result.GetEntry(folder + ".png")!.Open();
+            using var saved = new MemoryStream(); png.CopyTo(saved);
+            True(image.SequenceEqual(saved.ToArray()));
+            True(result.GetEntry(folder + "-candles.json") is not null);
+        }
+        using var manifestReader = new StreamReader(result.GetEntry("manifest.json")!.Open());
+        var manifest = manifestReader.ReadToEnd();
+        True(manifest.Contains("Rejected")); True(manifest.Contains("timeframe"));
+    }
+    finally
+    {
+        SignalHistoryStore.ClearConnectionPools();
+        foreach (var suffix in new[] { "", "-wal", "-shm" }) if (File.Exists(path + suffix)) File.Delete(path + suffix);
+    }
+});
+
 Run("Long strategy calculates expected levels", () =>
 {
     var signal = BuildSignal(Direction.Long);

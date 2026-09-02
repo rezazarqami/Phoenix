@@ -89,13 +89,17 @@ Bybit or its network provider may reject requests based on the originating regio
 
 ## Elliott Wave Lab
 
-Phoenix Web includes a separately authenticated market-analysis workspace at
-`/analysis`. The main login page links to its own `/analysis/login` screen.
-Configure its credentials outside source control:
+Phoenix Web includes an analysis workspace inside the main Phoenix panel.
+Sign in once at `/login` and choose «بخش تحلیل» to open Crypto Markets,
+Signal Lab and Elliott Wave Lab. All analysis pages and APIs share the
+Phoenix session and viewer/editor/admin permissions. Legacy analysis login
+URLs redirect to the shared flow; the former analysis credential variables
+are no longer used. Logging out from either workspace signs out of both.
+Configure the main credentials outside source control:
 
 ```text
-PHOENIX_ANALYSIS_USERNAME=<analysis username>
-PHOENIX_ANALYSIS_PASSWORD=<strong analysis password>
+PHOENIX_AUTH_USERNAME=<username>
+PHOENIX_AUTH_PASSWORD=<strong password>
 ```
 
 The first analysis ruleset reads public Bybit linear-market candles, detects

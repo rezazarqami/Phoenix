@@ -15,7 +15,7 @@ let candidateLoading = false, previewTimer;
 async function loadInstruments() {
   try {
     const response = await fetch('/api/analysis/instruments', { cache: 'no-store' });
-    if (response.status === 401) return location.replace('/analysis/login');
+    if (response.status === 401) return location.replace('/login');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'فهرست نمادها دریافت نشد.');
     instruments = (data.symbols || []).sort();
@@ -214,7 +214,7 @@ async function findCandidate(useVisible = false) {
       query.set('to', Math.ceil(Number(visible.to)));
     }
     const response = await fetch(`/api/analysis/signal-candidate?${query}`, { cache: 'no-store', signal: controller.signal });
-    if (response.status === 401) return location.replace('/analysis/login');
+    if (response.status === 401) return location.replace('/login');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'تحلیل ناموفق بود.');
     if (controller !== candidateController || currentRequest !== requestNumber || key !== selectedKey()) return;
@@ -292,7 +292,7 @@ $('#finalConfirm').addEventListener('click', async () => {
 });
 $('#analysisLogout').addEventListener('click', async () => {
   await fetch('/api/analysis/auth/logout', { method: 'POST' });
-  location.replace('/analysis/login');
+  location.replace('/login');
 });
 
 localStorage.removeItem('phoenix.signal.quantity');

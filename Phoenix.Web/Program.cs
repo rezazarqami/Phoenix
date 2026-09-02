@@ -45,6 +45,12 @@ app.Use(async (context, next) =>
 {
     var users = context.RequestServices.GetRequiredService<PhoenixUserStore>();
     var path = context.Request.Path.Value;
+    if (path is "/analysis/login" or "/analysis/login.html" or "/analysis-login.html")
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Redirect("/analysis/coins");
+        return;
+    }
     var analysisAsset = context.Request.Path.StartsWithSegments("/analysis-assets") ||
         path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or
         "/vendor/lightweight-charts.standalone.production.js";
@@ -73,7 +79,7 @@ app.Use(async (context, next) =>
             if (context.Request.Path.StartsWithSegments("/api"))
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             else
-                context.Response.Redirect("/analysis/login");
+                context.Response.Redirect("/login");
             return;
         }
         if (identity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
@@ -124,7 +130,7 @@ app.UseStaticFiles();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
-app.MapGet("/analysis/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "analysis-login.html"), "text/html; charset=utf-8"));
+
 app.MapGet("/analysis", (HttpRequest request) => request.Query["v"] == "20260827-4"
     ? Results.File(Path.Combine(app.Environment.WebRootPath, "analysis.html"), "text/html; charset=utf-8")
     : Results.Redirect("/analysis?v=20260827-4"));
@@ -153,29 +159,14 @@ app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse respons
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
 {
     response.Cookies.Delete(PhoenixSessionAuth.CookieName, new CookieOptions { Path = "/" });
+    response.Cookies.Delete(AnalysisSessionAuth.CookieName, new CookieOptions { Path = "/" });
     return Results.Ok(new { loggedOut = true });
 });
-app.MapPost("/api/analysis/auth/login", async (LoginRequest request, HttpRequest httpRequest,
-    HttpResponse response, PhoenixUserStore users, CancellationToken cancellationToken) =>
-{
-    if (!AnalysisSessionAuth.CredentialsConfigured(out _, out _))
-        return Results.Json(new { error = "اطلاعات ورود بخش تحلیل هنوز روی سرور تنظیم نشده است." },
-            statusCode: StatusCodes.Status503ServiceUnavailable);
-    var admin = AnalysisSessionAuth.CredentialsMatch(request.Username, request.Password);
-    var user = admin ? null : await users.AuthenticateAsync(request.Username, request.Password, cancellationToken);
-    if (!admin && user is null)
-        return Results.Json(new { error = "نام کاربری یا رمز عبور صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
-    var viewerOnly = !admin && user!.ViewerOnly;
-    var token = AnalysisSessionAuth.CreateToken(request.Username, viewerOnly, admin);
-    response.Cookies.Append(AnalysisSessionAuth.CookieName, token, new CookieOptions
-    {
-        HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = httpRequest.IsHttps,
-        MaxAge = TimeSpan.FromHours(12), Path = "/"
-    });
-    return Results.Ok(new { loggedIn = true, viewerOnly });
-});
+app.MapPost("/api/analysis/auth/login", () =>
+    Results.Json(new { error = "ورود تحلیل با فونیکس یکپارچه شده است؛ از صفحه ورود اصلی وارد شوید." }, statusCode: 410));
 app.MapPost("/api/analysis/auth/logout", (HttpResponse response) =>
 {
+    response.Cookies.Delete(PhoenixSessionAuth.CookieName, new CookieOptions { Path = "/" });
     response.Cookies.Delete(AnalysisSessionAuth.CookieName, new CookieOptions { Path = "/" });
     return Results.Ok(new { loggedOut = true });
 });

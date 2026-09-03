@@ -15,7 +15,8 @@ public sealed record PublicSignalTelegramOptions(string? BotToken, string? ChatI
 
 public sealed class PublicSignalNotifier(
     PublicSignalTelegramOptions options,
-    ILogger<PublicSignalNotifier> logger)
+    ILogger<PublicSignalNotifier> logger,
+    HttpClient? httpClient = null)
 {
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(10) };
 
@@ -49,16 +50,29 @@ public sealed class PublicSignalNotifier(
     }
 
     public Task<int?> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) =>
-        SendAsync("✅ این سیگنال به منطقه Risk Free رسید.", signal.PublicTelegramMessageId, token);
+        ReplyAsync(signal, "✅ این سیگنال به منطقه Risk Free رسید.", token);
 
     public Task<int?> TargetReachedAsync(ServerSignal signal, CancellationToken token) =>
-        SendAsync($"🏆 سیگنال {signal.Symbol} به تارگت رسید.", signal.PublicTelegramMessageId, token);
+        ReplyAsync(signal, $"🏆 سیگنال {signal.Symbol} به تارگت رسید.", token);
 
     public Task<int?> StopLossReachedAsync(ServerSignal signal, CancellationToken token) =>
-        SendAsync($"🛑 سیگنال {signal.Symbol} به استاپ‌لاس رسید.", signal.PublicTelegramMessageId, token);
+        ReplyAsync(signal, $"🛑 سیگنال {signal.Symbol} به استاپ‌لاس رسید.", token);
 
     public Task<int?> ExpiredAsync(ServerSignal signal, CancellationToken token) =>
-        SendAsync($"⌛ سیگنال {signal.Symbol} اکسپایر شد.", signal.PublicTelegramMessageId, token);
+        signal.ExpireReason == "TargetAfterActivation"
+            ? ReplyAsync(signal, $"⌛ سیگنال {signal.Symbol} پس از نزدیک‌شدن به ورود و بازگشت به تارگت اکسپایر شد.", token)
+            : Task.FromResult<int?>(null);
+
+    public Task<int?> OpenedAsync(ServerSignal signal, CancellationToken token) =>
+        ReplyAsync(signal, $"▶️ معامله {signal.Symbol} باز شد.", token);
+
+    public Task<int?> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) =>
+        ReplyAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.", token);
+
+    private Task<int?> ReplyAsync(ServerSignal signal, string text, CancellationToken token) =>
+        signal.PublicTelegramMessageId is > 0
+            ? SendAsync(text, signal.PublicTelegramMessageId, token)
+            : Task.FromResult<int?>(null);
 
     private async Task<int?> SendAsync(string text, int? replyToMessageId, CancellationToken token)
     {
@@ -72,7 +86,7 @@ public sealed class PublicSignalNotifier(
             };
             if (replyToMessageId is { } messageId)
                 payload["reply_parameters"] = new { message_id = messageId };
-            using var response = await Client.PostAsJsonAsync(
+            using var response = await (httpClient ?? Client).PostAsJsonAsync(
                 $"https://api.telegram.org/bot{options.BotToken}/sendMessage", payload, token);
             var body = await response.Content.ReadAsStringAsync(token);
             if (!response.IsSuccessStatusCode)

@@ -34,6 +34,9 @@ builder.Services.AddSingleton(Strategy2TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<Strategy2TelegramNotifier>();
 builder.Services.AddSingleton<StrategyCalculator>();
 builder.Services.AddHostedService<DemoOrderWorker>();
+builder.Services.AddHostedService<PublicSignalNotificationWorker>();
+builder.Services.AddSingleton<BulkPositionService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<BulkPositionService>());
 builder.Services.AddHostedService<BybitEntryWebSocketWorker>();
 builder.Services.AddHostedService<TelegramCommandWorker>();
 builder.Services.AddSingleton<Strategy2Worker>();
@@ -499,6 +502,8 @@ app.MapDelete("/api/signals/{id:guid}", async (Guid id, ServerOrderStore store, 
 {
     var signal = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
     if (signal is null) return Results.NotFound(new { error = "سفارش پیدا نشد." });
+    if (signal.Status is "Filled" or "Closing")
+        return Results.Conflict(new { error = "پوزیشن فعال را از صف حذف نکنید؛ از گزینه بستن پوزیشن‌ها استفاده کنید." });
     if (signal.Status == "Submitting")
         return Results.Conflict(new { error = "سفارش در حال ارسال است؛ چند ثانیه بعد دوباره تلاش کنید." });
     var cancelledAtBybit = signal.Status == "Submitted" && !string.IsNullOrWhiteSpace(signal.BybitOrderId);
@@ -510,6 +515,46 @@ app.MapDelete("/api/signals/{id:guid}", async (Guid id, ServerOrderStore store, 
     await store.RemoveAsync(id, token);
     await telegram.RemovedAsync(signal, cancelledAtBybit, token);
     return Results.NoContent();
+});
+
+app.MapPost("/api/signals/cancel-pending/{direction}", async (string direction, HttpRequest request,
+    ServerOrderStore store, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    if (direction is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "جهت نامعتبر است." });
+    await store.ExecutionGate.WaitAsync(token);
+    try { return Results.Ok(new { cancelled = await store.CancelPendingAsync(direction, token) }); }
+    finally { store.ExecutionGate.Release(); }
+});
+app.MapPost("/api/positions/close-preview", async (HttpRequest request, BulkPositionService bulk, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);
+    try { return Results.Ok(await bulk.PreviewAsync(token)); }
+    catch { return Results.BadRequest(new { error = "دریافت پوزیشن‌های صرافی ناموفق بود؛ هیچ تغییری انجام نشد." }); }
+});
+app.MapPost("/api/positions/close-all/{previewId:guid}", async (Guid previewId, HttpRequest request,
+    BulkPositionService bulk) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);
+    // Once explicitly confirmed, disconnecting the browser must not interrupt reconciliation.
+    try { return Results.Ok(new { items = await bulk.CloseAsync(previewId, CancellationToken.None), entriesPaused = true }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch { return Results.Problem("عملیات کامل نشد؛ وضعیت صرافی و توقف ورودها را بررسی کنید."); }
+});
+app.MapGet("/api/positions/entry-pause", (ServerOrderStore store) => Results.Ok(new { paused = store.EntriesPaused }));
+app.MapPost("/api/positions/resume-entries", async (HttpRequest request, ServerOrderStore store, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);
+    await store.ExecutionGate.WaitAsync(token);
+    try
+    {
+        if ((await store.GetAllAsync(token)).Any(x => x.Status == "Closing"))
+            return Results.Conflict(new { error = "پوزیشن در انتظار تأیید بسته‌شدن وجود دارد؛ ابتدا وضعیت آن را بررسی کنید." });
+        await store.SetEntriesPausedAsync(false, token);
+        return Results.Ok(new { paused = false });
+    }
+    finally { store.ExecutionGate.Release(); }
 });
 
 app.MapPost("/api/telegram/test", async (HttpRequest httpRequest, TelegramNotifier telegram, CancellationToken token) =>

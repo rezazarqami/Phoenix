@@ -99,6 +99,41 @@ public sealed class ServerOrderStore
     private readonly SignalHistoryStore _history;
     private List<ServerSignal>? _signals;
     private bool _historyMigrated;
+    public string NotificationLedgerPath => _filePath + ".public-notifications.json";
+    public SemaphoreSlim ExecutionGate { get; } = new(1, 1);
+    public bool EntriesPaused => File.Exists(_filePath + ".entry-pause");
+    public async Task SetEntriesPausedAsync(bool paused, CancellationToken token = default)
+    {
+        if (paused)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+            await File.WriteAllTextAsync(_filePath + ".entry-pause", "Manual bulk close", token);
+        }
+        else File.Delete(_filePath + ".entry-pause");
+    }
+
+    public async Task<int> CancelPendingAsync(string direction, CancellationToken token = default)
+    {
+        if (direction is not ("All" or "Long" or "Short"))
+            throw new ArgumentException("Invalid direction.");
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var selected = signals.Where(x => x.Status == "Pending" && x.CompletedAtUtc is null &&
+                (direction == "All" || x.Direction == direction)).ToArray();
+            foreach (var signal in selected)
+            {
+                signal.Status = "Cancelled";
+                signal.Outcome = "Cancelled";
+                signal.CompletedAtUtc = DateTime.UtcNow;
+            }
+            await SaveUnsafeAsync(signals, token);
+            foreach (var signal in selected) await _history.UpsertAsync(signal, "BulkCancelled", token);
+            return selected.Length;
+        }
+        finally { _gate.Release(); }
+    }
 
     public ServerOrderStore(string? filePath = null, string? historyPath = null)
     {
@@ -143,6 +178,7 @@ public sealed class ServerOrderStore
             var signals = await LoadUnsafeAsync(token);
             var index = signals.FindIndex(x => x.Id == signal.Id);
             if (index < 0) throw new InvalidOperationException("سفارش در صف پیدا نشد.");
+            if (signals[index].CompletedAtUtc is not null) return;
             if (signal.Status == "Pending" && signals[index].Status != "Pending")
                 return; // Never let a stale polling snapshot undo an atomic entry claim.
             signals[index] = Clone(signal);
@@ -177,7 +213,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
-            if (signal is null || signal.Status != "Pending") return false;
+            if (EntriesPaused || signal is null || signal.Status != "Pending") return false;
             signal.Status = "Submitting";
             signal.LastPrice = price;
             await SaveUnsafeAsync(signals, token);

@@ -290,6 +290,7 @@ function isFinished(signal) {
 }
 
 function resultLabel(signal) {
+  if (signal.outcome === 'ManualClosed') return 'بسته‌شده پس از درخواست دستی';
   if (signal.outcome === 'Target') return 'تارگت خورده';
   if (signal.outcome === 'RiskFree') return 'ریسک‌فری';
   if (signal.outcome === 'StopLoss') return 'استاپ خورده';
@@ -320,6 +321,7 @@ async function refreshHistory() {
 }
 
 function statusLabel(status) {
+  if (status === 'Closing') return 'درخواست بستن؛ منتظر تأیید صرافی';
   return ({ Pending:'در انتظار ورود', Submitting:'در حال ارسال', Submitted:'سفارش باز', Filled:'پوزیشن فعال', Expired:'اکسپایر شده', Cancelled:'لغوشده', Rejected:'ردشده', Error:'خطا' })[status] || status;
 }
 

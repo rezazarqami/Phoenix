@@ -37,7 +37,12 @@ public sealed class DemoOrderWorker(
                     foreach (var order in orders.Where(x =>
                                  (x.Status is "Pending" or "Submitted" or "Filled") && x.Symbol == symbol))
                     {
+                        await store.ExecutionGate.WaitAsync(stoppingToken);
+                        try
+                        {
                         order.LastPrice = ticker.LastPrice;
+                        var latest = (await store.GetAllAsync(stoppingToken)).SingleOrDefault(x => x.Id == order.Id);
+                        if (latest is null || latest.Status != order.Status || latest.CompletedAtUtc is not null) continue;
                         if (order.Status == "Pending")
                         {
                             var entryReached = EntryReached(order, ticker.LastPrice);
@@ -56,6 +61,8 @@ public sealed class DemoOrderWorker(
                             await TrackLevelsAsync(order, ticker.LastPrice, stoppingToken);
                         else
                             await store.UpdateAsync(order, stoppingToken);
+                        }
+                        finally { store.ExecutionGate.Release(); }
                     }
                 }
                 state.PublicApiConnected = true;
@@ -86,7 +93,6 @@ public sealed class DemoOrderWorker(
         if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
         {
             Complete(order, "Expired", DateTime.UtcNow, "InitialBoundary");
-            await publicSignals.ExpiredAsync(order, token);
             await store.UpdateAsync(order, token);
             return;
         }
@@ -103,7 +109,6 @@ public sealed class DemoOrderWorker(
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
         {
             Complete(order, "Expired", DateTime.UtcNow, "TargetAfterActivation");
-            await publicSignals.ExpiredAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);
@@ -188,6 +193,7 @@ public sealed class DemoOrderWorker(
             {
                 order.BybitOrderId = recovered.OrderId;
                 order.Status = recovered.Status == "Filled" ? "Filled" : "Submitted";
+                if (order.Status == "Filled") order.FilledAtUtc = recovered.UpdatedAtUtc ?? DateTime.UtcNow;
                 order.Error = null;
             }
             else
@@ -223,7 +229,6 @@ public sealed class DemoOrderWorker(
             Complete(order, "Target", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.TargetReachedAsync(order, token);
-            await publicSignals.TargetReachedAsync(order, token);
         }
         else if (order.RiskFreeReachedAtUtc is null && order.RiskFreePrice is { } riskFree &&
                  order.StopLoss2 is { } stopLoss2 && ProfitLevelReached(order, price, riskFree))
@@ -241,8 +246,6 @@ public sealed class DemoOrderWorker(
                 order.StopLoss2OrderId = result.OrderId;
                 order.RiskFreeReachedAtUtc = DateTime.UtcNow;
                 await telegram.RiskFreeReachedAsync(order, token);
-                if (order.PublicTelegramMessageId is not null)
-                    await publicSignals.RiskFreeReachedAsync(order, token);
             }
             catch (Exception exception)
             {
@@ -256,7 +259,6 @@ public sealed class DemoOrderWorker(
             Complete(order, "StopLoss", DateTime.UtcNow);
             await CancelStopLoss2Async(order, token);
             await telegram.StopLossReachedAsync(order, token);
-            await publicSignals.StopLossReachedAsync(order, token);
         }
 
         await store.UpdateAsync(order, token);
@@ -280,7 +282,7 @@ public sealed class DemoOrderWorker(
         if (order.RiskFreeReachedAtUtc is not null || order.StopLoss2OrderId is not null) return;
         var distance = order.TakeProfit - order.EntryPrice;
         if (distance == 0) return;
-        order.StopLoss2 = order.EntryPrice + distance * 0.25m;
+        order.StopLoss2 = order.EntryPrice + distance * 0.50m;
         order.RiskFreePrice = order.EntryPrice + distance * 0.75m;
     }
 

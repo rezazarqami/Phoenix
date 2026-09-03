@@ -844,6 +844,9 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     var labeledSnapshot = SignalChartRenderer.Render(candles, candidate, false, "1H");
     True(labeledSnapshot.Length > 1000);
     False(snapshot.SequenceEqual(labeledSnapshot));
+    Equal("15", SignalBatchService.ReviewChartInterval("5"));
+    Equal("15", SignalBatchService.ReviewChartInterval("15"));
+    Equal("60", SignalBatchService.ReviewChartInterval("60"));
 });
 
 Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was touched", () =>

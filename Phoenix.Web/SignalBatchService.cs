@@ -160,9 +160,16 @@ public sealed class SignalBatchService(
                     var key = Guid.NewGuid().ToString("N");
                     var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     lock (_sync) { _decision = decision; _decisionKey = key; }
-                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم: {IntervalName(option.Interval)}\nنوع نمودار: {(option.LineMode ? "خطی (Close)" : "کندل‌استیک")}\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT\n\nآیا این سیگنال ثبت شود؟";
-                    var image = SignalChartRenderer.Render(option.Candles, selected, option.LineMode,
-                        TimeframeBadge(option.Interval));
+                    var chartInterval = ReviewChartInterval(option.Interval);
+                    var chartCandles = chartInterval == option.Interval
+                        ? option.Candles
+                        : await bybit.GetKlinesAsync(selected.Symbol, chartInterval, 1000, token);
+                    var chartTimeframeLine = chartInterval == option.Interval
+                        ? string.Empty
+                        : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
+                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمودار: {(option.LineMode ? "خطی (Close)" : "کندل‌استیک")}\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT\n\nآیا این سیگنال ثبت شود؟";
+                    var image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
+                        TimeframeBadge(chartInterval));
                     await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
                     Update(state => state with
                     {
@@ -223,6 +230,7 @@ public sealed class SignalBatchService(
 
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
     private static string[] Intervals(string filter) => filter == "All" ? ["5", "15", "60", "240"] : [filter];
+    public static string ReviewChartInterval(string signalInterval) => signalInterval == "5" ? "15" : signalInterval;
     private static string IntervalName(string value) => value switch { "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", _ => value };
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);

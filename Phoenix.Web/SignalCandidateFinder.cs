@@ -135,15 +135,30 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             ?? throw new InvalidOperationException("پیش‌نمایش موقعیت ساخته نشد.");
         var preview = BybitOrderPreviewBuilder.Build(symbol, position, rules);
         var formedAtIndex = Math.Max(recentHigh.Index, recentLow.Index);
+        // A line chart hides wicks. Validity is always checked against the full
+        // candle so a line-mode proposal cannot revive an already touched entry.
         var touchedCandle = candles.Skip(formedAtIndex + 1).Select((candle, offset) => new
             {
                 Candle = candle,
                 Index = formedAtIndex + 1 + offset
             })
             .FirstOrDefault(item => direction == Direction.Long
-                ? LowAt(item.Index) <= preview.Price
-                : HighAt(item.Index) >= preview.Price);
-        var isBurned = touchedCandle is not null;
+                ? item.Candle.Low <= preview.Price
+                : item.Candle.High >= preview.Price);
+        var activation = preview.Price + 0.25m * (preview.TakeProfit - preview.Price);
+        var approached = false;
+        BybitKline? returnedAfterApproach = null;
+        foreach (var candle in candles.Skip(formedAtIndex + 1))
+        {
+            if (!approached)
+                approached = direction == Direction.Long ? candle.Low <= activation : candle.High >= activation;
+            else if (direction == Direction.Long ? candle.High >= preview.TakeProfit : candle.Low <= preview.TakeProfit)
+            {
+                returnedAfterApproach = candle;
+                break;
+            }
+        }
+        var isBurned = touchedCandle is not null || returnedAfterApproach is not null;
 
         var rangePercent = (recentHigh.Price - recentLow.Price) / recentLow.Price * 100m;
         var momentumPercent = Math.Abs(latest - momentumBase) / momentumBase * 100m;
@@ -159,8 +174,46 @@ public sealed class SignalCandidateFinder(StrategyCalculator calculator)
             (direction == Direction.Long
                 ? $"کف پیش از سقف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و کف فعال مرحله‌به‌مرحله به‌روزرسانی شد. پیشنهاد Long است."
                 : $"سقف پیش از کف تشکیل شده است؛ {resetCount} اصلاح کامل ۶۱٫۸٪ شناسایی و سقف فعال مرحله‌به‌مرحله به‌روزرسانی شد. پیشنهاد Short است.") +
-            (isBurned ? " نقطه ورود پس از تشکیل محدوده لمس شده و این سیگنال سوخته است." : " نقطه ورود هنوز لمس نشده و سیگنال فعال است."),
-            isBurned, touchedCandle?.Candle.OpenTime);
+            (touchedCandle is not null
+                ? " سایه کندل پس از تشکیل محدوده نقطه ورود را لمس کرده و سیگنال سوخته است."
+                : returnedAfterApproach is not null
+                    ? " قیمت به ناحیه نزدیک ورود رسیده و سپس به تارگت برگشته؛ سیگنال منقضی است."
+                    : " نقطه ورود هنوز لمس نشده و سیگنال فعال است."),
+            isBurned, touchedCandle?.Candle.OpenTime ?? returnedAfterApproach?.OpenTime);
+    }
+}
+
+public static class SignalQualityAssessment
+{
+    public const decimal MinimumImpulseEfficiency = 0.06m;
+    public static decimal ImpulseEfficiency(SignalCandidate candidate, IReadOnlyList<BybitKline> candles)
+    {
+        var start = Math.Min(candidate.CeilingTime, candidate.FloorTime);
+        var end = Math.Max(candidate.CeilingTime, candidate.FloorTime);
+        var wave = candles.Where(x => x.OpenTime >= start && x.OpenTime <= end).ToArray();
+        decimal path = 0m;
+        for (var i = 1; i < wave.Length; i++) path += Math.Abs(wave[i].Close - wave[i - 1].Close);
+        return path == 0m ? 0m : Math.Abs(candidate.Ceiling - candidate.Floor) / path;
+    }
+    public static bool IsVeryWeakImpulse(SignalCandidate candidate, IReadOnlyList<BybitKline> candles) =>
+        ImpulseEfficiency(candidate, candles) < MinimumImpulseEfficiency;
+
+    public static (bool Invalid, long? At, string Reason) PostFormationValidity(
+        string direction, decimal entry, decimal target, long formedAt,
+        IReadOnlyList<BybitKline> candles)
+    {
+        var activation = entry + 0.25m * (target - entry);
+        var approached = false;
+        foreach (var candle in candles.Where(x => x.OpenTime > formedAt))
+        {
+            if (direction == "Long" ? candle.Low <= entry : candle.High >= entry)
+                return (true, candle.OpenTime, "EntryTouchedByWick");
+            if (!approached)
+                approached = direction == "Long" ? candle.Low <= activation : candle.High >= activation;
+            else if (direction == "Long" ? candle.High >= target : candle.Low <= target)
+                return (true, candle.OpenTime, "TargetAfterActivation");
+        }
+        return (false, null, "");
     }
 }
 

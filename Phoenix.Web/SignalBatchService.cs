@@ -140,7 +140,7 @@ public sealed class SignalBatchService(
                             SignalCandidate candidate;
                             try { candidate = finder.Find(asset.Symbol, interval, candles, rules, positionSizeUsdt, 5, lineMode); }
                             catch { continue; }
-                            if (candidate.IsBurned ||
+                            if (candidate.IsBurned || SignalQualityAssessment.IsVeryWeakImpulse(candidate, candles) ||
                                 (directionFilter != "All" && !candidate.Direction.Equals(directionFilter, StringComparison.OrdinalIgnoreCase)) ||
                                 active.Any(x => x.Direction.Equals(candidate.Direction, StringComparison.OrdinalIgnoreCase)))
                                 continue;

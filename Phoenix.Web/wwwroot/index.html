@@ -62,6 +62,16 @@
       </section>
 
       <section class="card orders-card">
+        <div id="bulkControls" hidden style="padding:18px;border-bottom:1px solid #806328">
+          <p>عملیات گروهی — فقط حساب استراتژی اصلی (Strategy 2 دمو تغییر نمی‌کند)</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <select id="cancelDirection" aria-label="جهت سیگنال‌های منتظر ورود"><option value="All">همه جهت‌ها</option><option value="Long">فقط Long</option><option value="Short">فقط Short</option></select>
+            <button id="cancelPendingButton" type="button" class="security-button">لغو منتظرهای ورود</button>
+            <button id="closePositionsButton" type="button" class="security-button" style="color:#f87171">بستن همه پوزیشن‌های باز…</button>
+            <button id="resumeEntriesButton" type="button" class="security-button" hidden>ادامه ورودهای جدید</button>
+          </div>
+          <p id="bulkStatus" role="status" style="white-space:pre-line"></p>
+        </div>
         <div class="section-title"><div><span class="step">02</span><div><h2>سیگنال‌های فعال</h2><p>سیگنال‌های در انتظار یا معامله‌های باز</p></div></div><span id="count" class="counter">۰</span></div>
         <div id="orders" class="orders"><div class="empty"><span>◇</span><strong>هنوز سیگنالی ثبت نشده</strong><p>اولین سیگنال شما اینجا نمایش داده می‌شود.</p></div></div>
       </section>
@@ -117,6 +127,7 @@
     </form>
   </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
+  <script src="/bulk-controls.js?v=1"></script>
 </body>
 </html>

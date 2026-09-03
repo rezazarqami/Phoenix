@@ -26,7 +26,7 @@ public class StrategyCalculator : IStrategyCalculator
             plan.StopLoss1 = LogarithmicLevel(effectiveLow, effectiveHigh, 1m - 0.729m);
 
             var profitDistance = plan.TakeProfit - plan.EntryPrice;
-            plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
+            plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.50m;
             plan.RiskFreePrice = plan.EntryPrice + profitDistance * 0.75m;
         }
         else
@@ -36,7 +36,7 @@ public class StrategyCalculator : IStrategyCalculator
             plan.StopLoss1 = LogarithmicLevel(effectiveLow, effectiveHigh, 0.729m);
 
             var profitDistance = plan.TakeProfit - plan.EntryPrice;
-            plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.25m;
+            plan.StopLoss2 = plan.EntryPrice + profitDistance * 0.50m;
             plan.RiskFreePrice = plan.EntryPrice + profitDistance * 0.75m;
         }
 

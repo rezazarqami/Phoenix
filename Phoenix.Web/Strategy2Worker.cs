@@ -218,7 +218,8 @@ public sealed class Strategy2Worker(
     {
         var distance = x.TakeProfit - x.EntryPrice;
         if (distance == 0) return;
-        x.StopLoss2 ??= x.EntryPrice + distance * 0.25m;
+        if (x.RiskFreeReachedAtUtc is null && x.StopLoss2OrderId is null)
+            x.StopLoss2 = x.EntryPrice + distance * 0.50m;
         x.RiskFreePrice ??= x.EntryPrice + distance * 0.75m;
     }
     private static void Complete(ServerSignal x, string outcome, string? reason = null)

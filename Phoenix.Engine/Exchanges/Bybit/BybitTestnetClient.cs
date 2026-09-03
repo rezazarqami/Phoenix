@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace Phoenix.Engine.Exchanges.Bybit;
 
-public sealed class BybitDemoClient
+public sealed partial class BybitDemoClient
 {
     private readonly HttpClient _httpClient;
     private readonly BybitDemoOptions _options;

@@ -106,11 +106,16 @@ public sealed class BybitEntryWebSocketWorker(
         var candidates = _pending.Values.Where(x => x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase));
         foreach (var watch in candidates)
         {
+            await store.ExecutionGate.WaitAsync(token);
+            try
+            {
             if (!EntryReached(watch, price) || !await store.TryClaimSubmissionAsync(watch.Id, price, token))
                 continue;
             _pending.TryRemove(watch.Id, out _);
             var order = (await store.GetAllAsync(token)).Single(x => x.Id == watch.Id);
             await SubmitClaimedAsync(order, token);
+            }
+            finally { store.ExecutionGate.Release(); }
         }
     }
 
@@ -146,6 +151,7 @@ public sealed class BybitEntryWebSocketWorker(
             {
                 order.BybitOrderId = recovered.OrderId;
                 order.Status = recovered.Status == "Filled" ? "Filled" : "Submitted";
+                if (order.Status == "Filled") order.FilledAtUtc = recovered.UpdatedAtUtc ?? DateTime.UtcNow;
                 order.Error = null;
             }
             else

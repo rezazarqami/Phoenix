@@ -8,6 +8,138 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 
+Run("Public lifecycle notifications require publication and exclude initial expiry", () =>
+{
+    var sent = new List<string>();
+    var notifier = new PublicSignalNotifier(new("test-token", "test-chat"),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicSignalNotifier>.Instance,
+        new HttpClient(new StubHttpHandler(request =>
+        {
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var json = System.Text.Json.JsonDocument.Parse(body);
+            Equal(123, json.RootElement.GetProperty("reply_parameters").GetProperty("message_id").GetInt32());
+            sent.Add(json.RootElement.GetProperty("text").GetString()!);
+            return new(System.Net.HttpStatusCode.OK) { Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":456}}") };
+        })));
+    var s = new ServerSignal { Symbol = "BTCUSDT", FilledAtUtc = DateTime.UtcNow,
+        CompletedAtUtc = DateTime.UtcNow, Outcome = "Expired", ExpireReason = "TargetAfterActivation" };
+    notifier.OpenedAsync(s, default).GetAwaiter().GetResult();
+    notifier.RiskFreeClosedAsync(s, default).GetAwaiter().GetResult();
+    notifier.ExpiredAsync(s, default).GetAwaiter().GetResult();
+    Equal(0, sent.Count);
+    Equal(0, PublicSignalNotificationWorker.Events(s).Count());
+    s.PublicTelegramMessageId = 123;
+    s.ExpireReason = "InitialBoundary";
+    notifier.ExpiredAsync(s, default).GetAwaiter().GetResult();
+    Equal(0, sent.Count);
+    False(PublicSignalNotificationWorker.Events(s).Any(x => x.Kind == "Expired"));
+    s.ExpireReason = "TargetAfterActivation";
+    notifier.ExpiredAsync(s, default).GetAwaiter().GetResult();
+    notifier.OpenedAsync(s, default).GetAwaiter().GetResult();
+    notifier.RiskFreeClosedAsync(s, default).GetAwaiter().GetResult();
+    Equal(3, sent.Count);
+    True(sent.All(x => !x.Contains("موجودی") && !x.Contains("کیف پول")));
+    True(PublicSignalNotificationWorker.Events(s).Any(x => x.Kind == "Expired"));
+});
+
+Run("Bulk cancellation is direction-filtered and cannot cancel filled or claimed entries", () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "phoenix-bulk-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var store = new ServerOrderStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.db"));
+        var signals = new[] {
+            new ServerSignal { Id = Guid.NewGuid(), Direction = "Long", Status = "Pending" },
+            new ServerSignal { Id = Guid.NewGuid(), Direction = "Short", Status = "Pending" },
+            new ServerSignal { Id = Guid.NewGuid(), Direction = "Long", Status = "Filled" },
+            new ServerSignal { Id = Guid.NewGuid(), Direction = "Long", Status = "Submitting" }
+        };
+        foreach (var s in signals) { s.Symbol = "BTCUSDT"; s.CreatedAtUtc = DateTime.UtcNow; store.AddAsync(s).GetAwaiter().GetResult(); }
+        Equal(1, store.CancelPendingAsync("Long").GetAwaiter().GetResult());
+        False(store.TryClaimSubmissionAsync(signals[0].Id, 100).GetAwaiter().GetResult());
+        store.UpdateAsync(signals[0]).GetAwaiter().GetResult();
+        Equal("Cancelled", store.GetAllAsync().GetAwaiter().GetResult().Single(x => x.Id == signals[0].Id).Status);
+        store.SetEntriesPausedAsync(true).GetAwaiter().GetResult();
+        False(store.TryClaimSubmissionAsync(signals[1].Id, 100).GetAwaiter().GetResult());
+        True(new ServerOrderStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.db")).EntriesPaused);
+        Equal(1, store.CancelPendingAsync("All").GetAwaiter().GetResult());
+        Equal(1, store.GetAllAsync().GetAwaiter().GetResult().Count(x => x.Status == "Filled"));
+        Equal(1, store.GetAllAsync().GetAwaiter().GetResult().Count(x => x.Status == "Submitting"));
+    }
+    finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
+});
+
+Run("Close positions uses paginated exchange quantities and reduce-only market orders", () =>
+{
+    var pages = 0;
+    var closes = 0;
+    var client = new BybitDemoClient(new("test", "test"), new HttpClient(new StubHttpHandler(request =>
+    {
+        if (request.Method == HttpMethod.Get)
+        {
+            pages++;
+            if (pages == 2) True(request.RequestUri!.Query.Contains("cursor=page2"));
+            var body = pages == 1
+                ? "{\"retCode\":0,\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"side\":\"Buy\",\"size\":\"2\",\"positionIdx\":1}],\"nextPageCursor\":\"page2\"}}"
+                : "{\"retCode\":0,\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"side\":\"Sell\",\"size\":\"3\",\"positionIdx\":2}],\"nextPageCursor\":\"\"}}";
+            return new(System.Net.HttpStatusCode.OK) { Content = new StringContent(body) };
+        }
+        closes++;
+        using var json = System.Text.Json.JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        var p = json.RootElement;
+        True(p.GetProperty("reduceOnly").GetBoolean());
+        Equal("Market", p.GetProperty("orderType").GetString()!);
+        Equal(closes == 1 ? "Sell" : "Buy", p.GetProperty("side").GetString()!);
+        Equal(closes, p.GetProperty("positionIdx").GetInt32());
+        Equal(closes == 1 ? "2" : "3", p.GetProperty("qty").GetString()!);
+        False(p.TryGetProperty("takeProfit", out _));
+        return new(System.Net.HttpStatusCode.OK) { Content = new StringContent("{\"retCode\":0,\"result\":{\"orderId\":\"close-test\"}}") };
+    })));
+    var positions = client.GetOpenPositionsAsync().GetAwaiter().GetResult();
+    Equal(2, positions.Count);
+    foreach (var p in positions) client.ClosePositionAsync(p).GetAwaiter().GetResult();
+    Equal(2, closes);
+});
+
+Run("Bulk close requires one-use confirmation, pauses entries and does not assume a fill", () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "phoenix-close-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var orders = 0;
+        var client = new BybitDemoClient(new("test", "test"), new HttpClient(new StubHttpHandler(request =>
+        {
+            if (request.Method == HttpMethod.Post) orders++;
+            return new(System.Net.HttpStatusCode.OK) { Content = new StringContent(request.Method == HttpMethod.Get
+                ? "{\"retCode\":0,\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"side\":\"Buy\",\"size\":\"2\",\"positionIdx\":0}],\"nextPageCursor\":\"\"}}"
+                : "{\"retCode\":0,\"result\":{\"orderId\":\"manual-close\"}}") };
+        })));
+        var store = new ServerOrderStore(Path.Combine(root, "q.json"), Path.Combine(root, "h.db"));
+        var s = new ServerSignal { Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Status = "Filled", CreatedAtUtc = DateTime.UtcNow };
+        store.AddAsync(s).GetAwaiter().GetResult();
+        var service = new BulkPositionService(store, client, new("test", "test"),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BulkPositionService>.Instance);
+        var preview = service.PreviewAsync(default).GetAwaiter().GetResult();
+        Equal(0, orders);
+        False(store.EntriesPaused);
+        var result = service.CloseAsync(preview.Id, default).GetAwaiter().GetResult();
+        True(result.Single().Submitted);
+        Equal(1, orders);
+        True(store.EntriesPaused);
+        var closing = store.GetAllAsync().GetAwaiter().GetResult().Single();
+        Equal("Closing", closing.Status);
+        True(closing.CompletedAtUtc is null);
+        var rejected = false;
+        try { service.CloseAsync(preview.Id, default).GetAwaiter().GetResult(); }
+        catch (InvalidOperationException) { rejected = true; }
+        True(rejected);
+        Equal(1, orders);
+    }
+    finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
+});
+
 Run("Analysis accepts only the shared Phoenix session and preserves roles", () =>
 {
     var previousUser = Environment.GetEnvironmentVariable("PHOENIX_AUTH_USERNAME");
@@ -119,7 +251,7 @@ Run("Long strategy calculates expected levels", () =>
     Near(entry, plan.EntryPrice);
     Near(target, plan.TakeProfit);
     Near(stop, plan.StopLoss1);
-    Near(entry + (target - entry) * 0.25m, plan.StopLoss2!.Value);
+    Near(entry + (target - entry) * 0.50m, plan.StopLoss2!.Value);
     Near(entry + (target - entry) * 0.75m, plan.RiskFreePrice);
 });
 
@@ -134,7 +266,7 @@ Run("Short strategy calculates expected levels", () =>
     Near(entry, plan.EntryPrice);
     Near(target, plan.TakeProfit);
     Near(stop, plan.StopLoss1);
-    Near(entry + (target - entry) * 0.25m, plan.StopLoss2!.Value);
+    Near(entry + (target - entry) * 0.50m, plan.StopLoss2!.Value);
     Near(entry + (target - entry) * 0.75m, plan.RiskFreePrice);
 });
 

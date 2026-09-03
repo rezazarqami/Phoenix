@@ -1062,6 +1062,45 @@ Run("Signal Lab major floor follows the visible chart range", () =>
     Equal(80, visible.RangeCandleCount);
 });
 
+Run("Line proposals are rejected when only a candle wick touched entry", () =>
+{
+    var candles = new[]
+    {
+        new BybitKline(1, 105m, 106m, 104m, 105m, 1m),
+        new BybitKline(2, 105m, 106m, 99.9m, 105m, 1m)
+    };
+    var result = SignalQualityAssessment.PostFormationValidity("Long", 100m, 110m, 1, candles);
+    True(result.Invalid);
+    Equal("EntryTouchedByWick", result.Reason);
+});
+
+Run("Proposal expires after approaching entry and returning to target", () =>
+{
+    var candles = new[]
+    {
+        new BybitKline(2, 104m, 105m, 102.5m, 104m, 1m),
+        new BybitKline(3, 108m, 110m, 107m, 110m, 1m)
+    };
+    var result = SignalQualityAssessment.PostFormationValidity("Long", 100m, 110m, 1, candles);
+    True(result.Invalid);
+    Equal("TargetAfterActivation", result.Reason);
+});
+
+Run("Very weak impulse filter preserves the learned conservative boundary", () =>
+{
+    var candidate = new SignalCandidate("BTCUSDT", "5", "Long", 106m, 100m, 104m,
+        102m, 103m, 101m, null, null, 1m, 1m, 50m, 1, 3, 1, 4, 4, "", false, null);
+    var weak = new[]
+    {
+        new BybitKline(1,100m,101m,99m,100m,1m),
+        new BybitKline(2,200m,201m,199m,200m,1m),
+        new BybitKline(3,0.1m,1m,0.1m,0.1m,1m),
+        new BybitKline(4,106m,107m,105m,106m,1m)
+    };
+    True(SignalQualityAssessment.ImpulseEfficiency(candidate, weak) < 0.06m);
+    True(SignalQualityAssessment.IsVeryWeakImpulse(candidate, weak));
+});
+
 Console.WriteLine($"\nResult: {passed} passed, {failed} failed");
 return failed == 0 ? 0 : 1;
 

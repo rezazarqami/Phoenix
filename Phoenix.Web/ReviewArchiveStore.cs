@@ -36,7 +36,8 @@ public sealed class ReviewArchiveStore
             command.Parameters.AddWithValue("$metadata", JsonSerializer.Serialize(new
             {
                 candidate, timeframe = interval, chartMode = lineMode ? "Line" : "Candles",
-                version = "review-v1", entryDistancePercent = Math.Abs(candidate.LastPrice - candidate.EntryPrice) / candidate.EntryPrice * 100m
+                version = "review-v2", entryDistancePercent = Math.Abs(candidate.LastPrice - candidate.EntryPrice) / candidate.EntryPrice * 100m,
+                impulseEfficiency = SignalQualityAssessment.ImpulseEfficiency(candidate, candles)
             }, Json));
             command.Parameters.AddWithValue("$candles", JsonSerializer.Serialize(candles, Json));
             command.Parameters.AddWithValue("$image", image);

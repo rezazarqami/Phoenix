@@ -6,6 +6,7 @@ namespace Phoenix.Web;
 public sealed class SignalBatchService(
     MarketCapCatalog markets, BybitDemoClient bybit, SignalCandidateFinder finder,
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
+    DedicatedTelegramNotifier dedicatedTelegram,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
     private readonly object _sync = new();
@@ -17,12 +18,19 @@ public sealed class SignalBatchService(
     public BatchState Status { get { lock (_sync) return _state; } }
 
     public bool Start(int target, decimal positionSizeUsdt, string directionFilter, string chartFilter,
-        string timeframeFilter, bool timedMode, int durationMinutes, out string? error)
+        string timeframeFilter, bool timedMode, int durationMinutes, string? requestedByUsername,
+        out string? error)
     {
         lock (_sync)
         {
             if (_runCancellation is not null) { error = "صف قبلی هنوز در حال توقف است؛ چند لحظه دیگر دوباره تلاش کنید."; return false; }
-            if (!telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
+            var dedicatedRoute = dedicatedTelegram.Owns(requestedByUsername);
+            if (dedicatedRoute && !dedicatedTelegram.IsConfigured)
+            {
+                error = "ربات اختصاصی این حساب هنوز تنظیم نشده است.";
+                return false;
+            }
+            if (!dedicatedRoute && !telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
             DateTimeOffset? endsAt = timedMode ? DateTimeOffset.UtcNow.AddMinutes(durationMinutes) : null;
             _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null,
                 directionFilter, chartFilter, timeframeFilter)
@@ -33,7 +41,7 @@ public sealed class SignalBatchService(
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.ApplicationStopping);
             _runCancellation = runCancellation;
             _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, chartFilter,
-                timeframeFilter, endsAt, runCancellation));
+                timeframeFilter, endsAt, requestedByUsername, dedicatedRoute, runCancellation));
             return true;
         }
     }
@@ -64,7 +72,8 @@ public sealed class SignalBatchService(
         return true;
     }
 
-    public async Task<bool> HandleCallbackAsync(string data, string? callbackId, CancellationToken token)
+    public async Task<bool> HandleCallbackAsync(string data, string? callbackId, bool dedicatedRoute,
+        CancellationToken token)
     {
         var parts = data.Split(':');
         if (parts.Length != 3 || parts[0] != "batch" || parts[1] is not ("yes" or "no")) return false;
@@ -83,12 +92,17 @@ public sealed class SignalBatchService(
         catch (Exception exception) { decision.TrySetException(exception); throw; }
         decision.TrySetResult(accepted);
         if (!string.IsNullOrWhiteSpace(callbackId))
-            await telegram.AnswerCallbackAsync(callbackId, accepted ? "سیگنال تأیید شد؛ در حال ثبت…" : "پیشنهاد رد شد؛ مورد بعدی بررسی می‌شود.", token);
+        {
+            var answer = accepted ? "سیگنال تأیید شد؛ در حال ثبت…" : "پیشنهاد رد شد؛ مورد بعدی بررسی می‌شود.";
+            if (dedicatedRoute) await dedicatedTelegram.AnswerCallbackAsync(callbackId, answer, token);
+            else await telegram.AnswerCallbackAsync(callbackId, answer, token);
+        }
         return true;
     }
 
     private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter,
         string chartFilter, string timeframeFilter, DateTimeOffset? endsAt,
+        string? requestedByUsername, bool dedicatedRoute,
         CancellationTokenSource runCancellation)
     {
         var token = runCancellation.Token;
@@ -176,7 +190,9 @@ public sealed class SignalBatchService(
                         Proposed = state.Proposed + 1, CurrentSymbol = selected.Symbol,
                         Message = $"منتظر پاسخ تلگرام برای {selected.Symbol}؛ فاصله تا ورود {Format(option.EntryDistancePercent)}٪"
                     });
-                    var sent = await telegram.SendCandidateAsync(image, caption, key, token);
+                    var sent = dedicatedRoute
+                        ? await dedicatedTelegram.SendCandidateAsync(image, caption, key, token)
+                        : await telegram.SendCandidateAsync(image, caption, key, token);
                     await reviews.MarkDeliveryAsync(key, sent, token);
                     if (!sent)
                         throw new InvalidOperationException("ارسال پیشنهاد به تلگرام ناموفق بود.");
@@ -185,7 +201,8 @@ public sealed class SignalBatchService(
                     if (!accepted) { Update(state => state with { Rejected = state.Rejected + 1 }); continue; }
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
                         selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
-                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image));
+                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image),
+                        requestedByUsername);
                     await reviews.LinkSignalAsync(key, outcome.Signal?.Id, token);
                     if (outcome.Signal is null)
                     {

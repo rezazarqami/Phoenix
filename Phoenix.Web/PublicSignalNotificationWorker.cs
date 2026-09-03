@@ -14,10 +14,12 @@ public sealed class PublicSignalNotificationWorker(
         public HashSet<string> Sent { get; set; } = [];
     }
 
-    public static IEnumerable<(string Kind, DateTime At)> Events(ServerSignal s)
+    public static IEnumerable<(string Kind, DateTime At)> Events(ServerSignal s) => Events(s, false);
+
+    public static IEnumerable<(string Kind, DateTime At)> Events(ServerSignal s, bool resultsOnly)
     {
         if (s.PublicTelegramMessageId is not > 0) yield break;
-        if (s.FilledAtUtc is { } opened) yield return ("Opened", opened);
+        if (!resultsOnly && s.FilledAtUtc is { } opened) yield return ("Opened", opened);
         if (s.RiskFreeReachedAtUtc is { } activated) yield return ("RiskFreeReached", activated);
         if (s.CompletedAtUtc is not { } ended) yield break;
         if (s.Outcome is "Target" or "StopLoss" or "RiskFree") yield return (s.Outcome, ended);
@@ -43,7 +45,7 @@ public sealed class PublicSignalNotificationWorker(
                     ledger = loaded;
                 }
                 foreach (var s in await store.GetAllAsync(token))
-                foreach (var e in Events(s).OrderBy(x => x.At))
+                foreach (var e in Events(s, notifier.IsDedicatedSignal(s)).OrderBy(x => x.At))
                 {
                     var key = $"{s.Id}:{e.Kind}";
                     if (e.At < ledger.SinceUtc || ledger.Sent.Contains(key)) continue;

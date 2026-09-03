@@ -26,6 +26,8 @@ builder.Services.AddSingleton<SignalBatchService>();
 builder.Services.AddSingleton<ReviewArchiveStore>();
 builder.Services.AddSingleton(TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<TelegramNotifier>();
+builder.Services.AddSingleton(DedicatedTelegramOptions.FromEnvironment());
+builder.Services.AddSingleton<DedicatedTelegramNotifier>();
 builder.Services.AddSingleton(PublicSignalTelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<PublicSignalNotifier>();
 builder.Services.AddSingleton(Strategy2Options.FromEnvironment());
@@ -391,7 +393,8 @@ app.MapGet("/api/analysis/reviews/export", async (DateTimeOffset? from, DateTime
     }
     catch (ArgumentException exception) { return Results.BadRequest(new { error = exception.Message }); }
 });
-app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, SignalBatchService batches) =>
+app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, HttpRequest httpRequest,
+    SignalBatchService batches) =>
 {
     if (!request.TimedMode && request.Count is < 1 or > 200)
         return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
@@ -405,8 +408,9 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Sign
     var timeframeFilter = string.IsNullOrWhiteSpace(request.TimeframeFilter) ? "All" : request.TimeframeFilter;
     if (timeframeFilter is not ("All" or "5" or "15" or "60" or "240"))
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
+    PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
     return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
-            timeframeFilter, request.TimedMode, request.DurationMinutes, out var error)
+            timeframeFilter, request.TimedMode, request.DurationMinutes, identity.Username, out var error)
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });
@@ -459,12 +463,13 @@ app.MapGet("/api/analysis/signal-candidate", async (string symbol, string? inter
     catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
 });
 
-app.MapPost("/api/analysis/signals/confirm", async (ConfirmSignalRequest request,
+app.MapPost("/api/analysis/signals/confirm", async (ConfirmSignalRequest request, HttpRequest httpRequest,
     SignalSubmissionService submission, CancellationToken token) =>
 {
     if (!request.Confirmed)
         return Results.BadRequest(new { error = "ثبت سیگنال نیازمند تأیید صریح است." });
-    return await submission.SubmitAsync(request.Signal, token);
+    PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
+    return await submission.SubmitAsync(request.Signal, token, identity.Username);
 });
 
 app.MapPost("/api/analysis/signal-preview", async (SignalRequest request,
@@ -494,7 +499,8 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
     if (!string.IsNullOrWhiteSpace(panelKey) && httpRequest.Headers["X-Phoenix-Key"] != panelKey)
         return Results.Json(new { error = "کلید ورود پنل صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
 
-    return await submission.SubmitAsync(request, token);
+    PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
+    return await submission.SubmitAsync(request, token, identity.Username);
 });
 
 app.MapDelete("/api/signals/{id:guid}", async (Guid id, ServerOrderStore store, BybitDemoClient bybit,

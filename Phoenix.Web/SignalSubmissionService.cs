@@ -14,16 +14,17 @@ public sealed class SignalSubmissionService(
     Strategy2Runtime strategy2,
     Strategy2TelegramNotifier strategy2Telegram)
 {
-    public async Task<IResult> SubmitAsync(SignalRequest request, CancellationToken token)
+    public async Task<IResult> SubmitAsync(SignalRequest request, CancellationToken token,
+        string? requestedByUsername = null)
     {
-        var outcome = await QueueAsync(request, token);
+        var outcome = await QueueAsync(request, token, requestedByUsername: requestedByUsername);
         return outcome.Signal is not null
             ? Results.Created($"/api/signals/{outcome.Signal.Id}", outcome.Signal)
             : Results.BadRequest(new { error = outcome.Error });
     }
 
     public async Task<SignalSubmissionOutcome> QueueAsync(SignalRequest request, CancellationToken token,
-        SignalEvidence? evidence = null)
+        SignalEvidence? evidence = null, string? requestedByUsername = null)
     {
         var error = request.Validate();
         if (error is not null) return new(null, error);
@@ -46,6 +47,7 @@ public sealed class SignalSubmissionService(
                 ?? throw new InvalidOperationException("ساخت موقعیت برنامه‌ریزی‌شده ناموفق بود.");
             var preview = BybitOrderPreviewBuilder.Build(signal.Symbol, position, rules);
             var queued = ServerSignal.FromPreview(signal, preview, signal.TradePlan.Leverage);
+            queued.RequestedByUsername = NormalizeUsername(requestedByUsername);
             queued.Timeframe = evidence?.Timeframe;
             queued.ChartMode = evidence?.ChartMode;
             await store.AddAsync(queued, token, evidence);
@@ -56,6 +58,7 @@ public sealed class SignalSubmissionService(
                 var strategy2Leverage = BybitLeverageRules.Normalize(
                     StrategyCalculator.CalculateLeverage(signal.TradePlan.EntryPrice, signal.TradePlan.TakeProfit, 20m), rules);
                 var strategy2Signal = ServerSignal.FromPreview(signal, preview, strategy2Leverage);
+                strategy2Signal.RequestedByUsername = queued.RequestedByUsername;
                 strategy2Signal.PositionSizeUsdt = 0m;
                 strategy2Signal.Quantity = 0m;
                 strategy2Signal.OrderLinkId = $"s2-{strategy2Signal.Id:N}"[..35];
@@ -68,6 +71,9 @@ public sealed class SignalSubmissionService(
         }
         catch (Exception exception) { return new(null, exception.Message); }
     }
+
+    private static string? NormalizeUsername(string? username) =>
+        string.IsNullOrWhiteSpace(username) ? null : username.Trim().ToLowerInvariant();
 }
 
 public sealed record SignalSubmissionOutcome(ServerSignal? Signal, string? Error);

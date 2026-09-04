@@ -13,16 +13,35 @@ public sealed record PublicSignalTelegramOptions(string? BotToken, string? ChatI
         Environment.GetEnvironmentVariable("PUBLIC_TELEGRAM_CHAT_ID"));
 }
 
-public sealed class PublicSignalNotifier(
-    PublicSignalTelegramOptions options,
-    ILogger<PublicSignalNotifier> logger,
-    HttpClient? httpClient = null)
+public sealed class PublicSignalNotifier
 {
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly PublicSignalTelegramOptions _options;
+    private readonly DedicatedTelegramOptions _dedicatedOptions;
+    private readonly ILogger<PublicSignalNotifier> _logger;
+    private readonly HttpClient? _httpClient;
+
+    public PublicSignalNotifier(PublicSignalTelegramOptions options,
+        ILogger<PublicSignalNotifier> logger, HttpClient? httpClient = null)
+        : this(options, new DedicatedTelegramOptions("arman", null, null), logger, httpClient) { }
+
+    public PublicSignalNotifier(PublicSignalTelegramOptions options,
+        DedicatedTelegramOptions dedicatedOptions,
+        ILogger<PublicSignalNotifier> logger, HttpClient? httpClient = null)
+    {
+        _options = options;
+        _dedicatedOptions = dedicatedOptions;
+        _logger = logger;
+        _httpClient = httpClient;
+    }
+
+    public bool IsDedicatedSignal(ServerSignal signal) =>
+        _dedicatedOptions.Owns(signal.RequestedByUsername);
 
     public async Task<int?> PublishAsync(ServerSignal signal, CancellationToken token)
     {
-        if (!options.IsConfigured || signal.PublicSignalNumber is null) return null;
+        var destination = DestinationFor(signal);
+        if (!destination.IsConfigured || signal.PublicSignalNumber is null) return null;
         var directionIcon = signal.Direction == "Long" ? "🟢" : "🔴";
         var symbol = signal.Symbol.EndsWith("USDT", StringComparison.OrdinalIgnoreCase)
             ? $"{signal.Symbol[..^4]}/USDT"
@@ -46,7 +65,7 @@ public sealed class PublicSignalNotifier(
 
             (‌1%- از کل سرمایه)
             """;
-        return await SendAsync(text, null, token);
+        return await SendAsync(destination, text, null, token);
     }
 
     public Task<int?> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) =>
@@ -71,27 +90,33 @@ public sealed class PublicSignalNotifier(
 
     private Task<int?> ReplyAsync(ServerSignal signal, string text, CancellationToken token) =>
         signal.PublicTelegramMessageId is > 0
-            ? SendAsync(text, signal.PublicTelegramMessageId, token)
+            ? SendAsync(DestinationFor(signal), text, signal.PublicTelegramMessageId, token)
             : Task.FromResult<int?>(null);
 
-    private async Task<int?> SendAsync(string text, int? replyToMessageId, CancellationToken token)
+    private PublicSignalTelegramOptions DestinationFor(ServerSignal signal) =>
+        IsDedicatedSignal(signal)
+            ? new(_dedicatedOptions.BotToken, _dedicatedOptions.ChatId)
+            : _options;
+
+    private async Task<int?> SendAsync(PublicSignalTelegramOptions destination, string text,
+        int? replyToMessageId, CancellationToken token)
     {
-        if (!options.IsConfigured) return null;
+        if (!destination.IsConfigured) return null;
         try
         {
             var payload = new Dictionary<string, object?>
             {
-                ["chat_id"] = options.ChatId,
+                ["chat_id"] = destination.ChatId,
                 ["text"] = text
             };
             if (replyToMessageId is { } messageId)
                 payload["reply_parameters"] = new { message_id = messageId };
-            using var response = await (httpClient ?? Client).PostAsJsonAsync(
-                $"https://api.telegram.org/bot{options.BotToken}/sendMessage", payload, token);
+            using var response = await (_httpClient ?? Client).PostAsJsonAsync(
+                $"https://api.telegram.org/bot{destination.BotToken}/sendMessage", payload, token);
             var body = await response.Content.ReadAsStringAsync(token);
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Public Telegram signal failed: {Status} {Body}", response.StatusCode, body);
+                _logger.LogWarning("Public Telegram signal failed: {Status} {Body}", response.StatusCode, body);
                 return null;
             }
             using var document = JsonDocument.Parse(body);
@@ -99,7 +124,7 @@ public sealed class PublicSignalNotifier(
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Public Telegram signal failed");
+            _logger.LogWarning(exception, "Public Telegram signal failed");
             return null;
         }
     }

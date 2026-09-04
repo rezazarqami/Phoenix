@@ -42,6 +42,62 @@ Run("Public lifecycle notifications require publication and exclude initial expi
     True(PublicSignalNotificationWorker.Events(s).Any(x => x.Kind == "Expired"));
 });
 
+Run("Dedicated account signals use their own bot and results-only lifecycle", () =>
+{
+    var destination = string.Empty;
+    var chatId = string.Empty;
+    var dedicated = new DedicatedTelegramOptions("arman", "dedicated-token", "777");
+    var notifier = new PublicSignalNotifier(new("public-token", "111"), dedicated,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicSignalNotifier>.Instance,
+        new HttpClient(new StubHttpHandler(request =>
+        {
+            destination = request.RequestUri!.ToString();
+            using var json = System.Text.Json.JsonDocument.Parse(
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            chatId = json.RootElement.GetProperty("chat_id").GetString()!;
+            return new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":456}}")
+            };
+        })));
+    var now = DateTime.UtcNow;
+    var signal = new ServerSignal
+    {
+        Symbol = "ETHUSDT", Direction = "Long", RequestedByUsername = "ArMaN",
+        PublicSignalNumber = 9, PublicTelegramMessageId = 456, FilledAtUtc = now,
+        RiskFreeReachedAtUtc = now.AddMinutes(1), CompletedAtUtc = now.AddMinutes(2), Outcome = "Target"
+    };
+    True(dedicated.Owns(signal.RequestedByUsername));
+    True(notifier.IsDedicatedSignal(signal));
+    notifier.PublishAsync(signal, default).GetAwaiter().GetResult();
+    True(destination.Contains("botdedicated-token/sendMessage"));
+    Equal("777", chatId);
+    var events = PublicSignalNotificationWorker.Events(signal, resultsOnly: true).Select(x => x.Kind).ToArray();
+    False(events.Contains("Opened"));
+    True(events.Contains("RiskFreeReached"));
+    True(events.Contains("Target"));
+});
+
+Run("Signal requester survives queue persistence for Telegram routing", () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "phoenix-owner-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var queue = Path.Combine(root, "queue.json");
+        var history = Path.Combine(root, "history.db");
+        var signal = new ServerSignal
+        {
+            Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Status = "Pending",
+            RequestedByUsername = "arman", CreatedAtUtc = DateTime.UtcNow
+        };
+        new ServerOrderStore(queue, history).AddAsync(signal).GetAwaiter().GetResult();
+        var restored = new ServerOrderStore(queue, history).GetAllAsync().GetAwaiter().GetResult().Single();
+        Equal("arman", restored.RequestedByUsername!);
+    }
+    finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
+});
+
 Run("Bulk cancellation is direction-filtered and cannot cancel filled or claimed entries", () =>
 {
     var root = Path.Combine(Path.GetTempPath(), "phoenix-bulk-" + Guid.NewGuid().ToString("N"));

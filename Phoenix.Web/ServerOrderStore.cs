@@ -46,6 +46,7 @@ public sealed class ServerSignal
     public string? ExpireReason { get; set; }
     public int? PublicSignalNumber { get; set; }
     public int? PublicTelegramMessageId { get; set; }
+    public string? RequestedByUsername { get; set; }
     public string? Timeframe { get; set; }
     public string? ChartMode { get; set; }
 
@@ -339,6 +340,7 @@ public sealed class ServerOrderStore
         Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason
         , PublicSignalNumber = signal.PublicSignalNumber,
         PublicTelegramMessageId = signal.PublicTelegramMessageId,
+        RequestedByUsername = signal.RequestedByUsername,
         Timeframe = signal.Timeframe, ChartMode = signal.ChartMode
     };
 }

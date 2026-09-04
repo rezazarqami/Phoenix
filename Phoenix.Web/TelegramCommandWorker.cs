@@ -5,6 +5,7 @@ namespace Phoenix.Web;
 
 public sealed class TelegramCommandWorker(
     TelegramNotifier telegram,
+    DedicatedTelegramNotifier dedicatedTelegram,
     ServerOrderStore store,
     ServerState state,
     BybitDemoOptions options,
@@ -13,7 +14,12 @@ public sealed class TelegramCommandWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!telegram.IsConfigured) return;
+        var dedicatedTask = PollDedicatedAsync(stoppingToken);
+        if (!telegram.IsConfigured)
+        {
+            await dedicatedTask;
+            return;
+        }
         try { await telegram.ConfigureMenuAsync(stoppingToken); }
         catch (Exception exception) { logger.LogWarning(exception, "Telegram menu configuration failed"); }
 
@@ -47,7 +53,7 @@ public sealed class TelegramCommandWorker(
                     }
                     if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
                     {
-                        await batches.HandleCallbackAsync(command.Command, command.CallbackId, stoppingToken);
+                        await batches.HandleCallbackAsync(command.Command, command.CallbackId, false, stoppingToken);
                         continue;
                     }
                     await telegram.SendCommandReplyAsync(command.ChatId,
@@ -59,6 +65,49 @@ public sealed class TelegramCommandWorker(
             {
                 logger.LogWarning(exception, "Telegram command polling failed");
                 await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+            }
+        }
+    }
+
+    private async Task PollDedicatedAsync(CancellationToken token)
+    {
+        if (!dedicatedTelegram.IsConfigured) return;
+        long offset;
+        try { offset = await dedicatedTelegram.GetInitialUpdateOffsetAsync(token); }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Dedicated Telegram initial update offset failed");
+            offset = 0;
+        }
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                var commands = await dedicatedTelegram.GetCommandsAsync(offset, token);
+                foreach (var command in commands)
+                {
+                    offset = Math.Max(offset, command.UpdateId + 1);
+                    if (!dedicatedTelegram.IsAuthorized(command))
+                    {
+                        if (command.CallbackId is not null)
+                            await dedicatedTelegram.AnswerCallbackAsync(command.CallbackId,
+                                "این ربات فقط برای حساب اختصاصی تنظیم شده است.", token);
+                        continue;
+                    }
+                    if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
+                    {
+                        await batches.HandleCallbackAsync(command.Command, command.CallbackId, true, token);
+                        continue;
+                    }
+                    if (command.Command is "/start" or "/help")
+                        await dedicatedTelegram.SendWelcomeAsync(token);
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Dedicated Telegram command polling failed");
+                await Task.Delay(TimeSpan.FromSeconds(3), token);
             }
         }
     }

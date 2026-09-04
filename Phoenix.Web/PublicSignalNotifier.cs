@@ -40,8 +40,8 @@ public sealed class PublicSignalNotifier
 
     public async Task<int?> PublishAsync(ServerSignal signal, CancellationToken token)
     {
-        var destination = DestinationFor(signal);
-        if (!destination.IsConfigured || signal.PublicSignalNumber is null) return null;
+        if (signal.PublicSignalNumber is null) return null;
+        if (IsDedicatedSignal(signal) ? !_dedicatedOptions.IsConfigured : !_options.IsConfigured) return null;
         var directionIcon = signal.Direction == "Long" ? "🟢" : "🔴";
         var symbol = signal.Symbol.EndsWith("USDT", StringComparison.OrdinalIgnoreCase)
             ? $"{signal.Symbol[..^4]}/USDT"
@@ -65,7 +65,9 @@ public sealed class PublicSignalNotifier
 
             (‌1%- از کل سرمایه)
             """;
-        return await SendAsync(destination, text, null, token);
+        return IsDedicatedSignal(signal)
+            ? await SendDedicatedAsync(text, token)
+            : await SendAsync(_options, text, null, token);
     }
 
     public Task<int?> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) =>
@@ -88,15 +90,25 @@ public sealed class PublicSignalNotifier
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.", token);
 
-    private Task<int?> ReplyAsync(ServerSignal signal, string text, CancellationToken token) =>
-        signal.PublicTelegramMessageId is > 0
-            ? SendAsync(DestinationFor(signal), text, signal.PublicTelegramMessageId, token)
-            : Task.FromResult<int?>(null);
+    private Task<int?> ReplyAsync(ServerSignal signal, string text, CancellationToken token)
+    {
+        if (signal.PublicTelegramMessageId is not > 0) return Task.FromResult<int?>(null);
+        return IsDedicatedSignal(signal)
+            ? SendDedicatedAsync(text, token)
+            : SendAsync(_options, text, signal.PublicTelegramMessageId, token);
+    }
 
-    private PublicSignalTelegramOptions DestinationFor(ServerSignal signal) =>
-        IsDedicatedSignal(signal)
-            ? new(_dedicatedOptions.BotToken, _dedicatedOptions.ChatId)
-            : _options;
+    private async Task<int?> SendDedicatedAsync(string text, CancellationToken token)
+    {
+        int? firstMessageId = null;
+        foreach (var chatId in _dedicatedOptions.GetChatIds())
+        {
+            var messageId = await SendAsync(
+                new PublicSignalTelegramOptions(_dedicatedOptions.BotToken, chatId), text, null, token);
+            firstMessageId ??= messageId;
+        }
+        return firstMessageId;
+    }
 
     private async Task<int?> SendAsync(PublicSignalTelegramOptions destination, string text,
         int? replyToMessageId, CancellationToken token)

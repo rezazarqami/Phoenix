@@ -78,6 +78,52 @@ Run("Dedicated account signals use their own bot and results-only lifecycle", ()
     True(events.Contains("Target"));
 });
 
+Run("Dedicated bot securely pairs one second chat and sends both copies", () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "phoenix-dedicated-chat-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var chats = new List<string>();
+        var options = new DedicatedTelegramOptions("arman", "dedicated-token", "777", "pair-123",
+            Path.Combine(root, "chats.json"));
+        var dedicated = new DedicatedTelegramNotifier(options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DedicatedTelegramNotifier>.Instance,
+            new HttpClient(new StubHttpHandler(_ => new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":456}}")
+            })));
+        var paired = dedicated.TryPairAsync(
+            new TelegramCommand(1, "888", 888, "arman", "Arman", "/start pair-123", null), default)
+            .GetAwaiter().GetResult();
+        True(paired);
+        True(dedicated.IsAuthorized(new TelegramCommand(2, "777", 777, null, "Owner", "/start", null)));
+        True(dedicated.IsAuthorized(new TelegramCommand(3, "888", 888, null, "Arman", "/start", null)));
+
+        var notifier = new PublicSignalNotifier(new("public-token", "111"), options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicSignalNotifier>.Instance,
+            new HttpClient(new StubHttpHandler(request =>
+            {
+                using var json = System.Text.Json.JsonDocument.Parse(
+                    request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+                chats.Add(json.RootElement.GetProperty("chat_id").GetString()!);
+                return new(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":456}}")
+                };
+            })));
+        notifier.PublishAsync(new ServerSignal
+        {
+            Symbol = "BTCUSDT", Direction = "Long", RequestedByUsername = "arman",
+            PublicSignalNumber = 10, EntryPrice = 1, TakeProfit = 2, StopLoss = 0.5m
+        }, default).GetAwaiter().GetResult();
+        Equal(2, chats.Count);
+        True(chats.Contains("777"));
+        True(chats.Contains("888"));
+    }
+    finally { Directory.Delete(root, true); }
+});
+
 Run("Signal requester survives queue persistence for Telegram routing", () =>
 {
     var root = Path.Combine(Path.GetTempPath(), "phoenix-owner-" + Guid.NewGuid().ToString("N"));

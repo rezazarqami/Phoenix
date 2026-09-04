@@ -87,6 +87,15 @@ public sealed class TelegramCommandWorker(
                 foreach (var command in commands)
                 {
                     offset = Math.Max(offset, command.UpdateId + 1);
+                    if (command.Command.StartsWith("/start ", StringComparison.Ordinal))
+                    {
+                        if (await dedicatedTelegram.TryPairAsync(command, token))
+                            await dedicatedTelegram.SendWelcomeAsync(command.ChatId, token);
+                        else
+                            await dedicatedTelegram.SendCommandReplyAsync(command.ChatId,
+                                "کد اتصال معتبر نیست یا ظرفیت ربات تکمیل شده است.", token);
+                        continue;
+                    }
                     if (!dedicatedTelegram.IsAuthorized(command))
                     {
                         if (command.CallbackId is not null)
@@ -100,7 +109,7 @@ public sealed class TelegramCommandWorker(
                         continue;
                     }
                     if (command.Command is "/start" or "/help")
-                        await dedicatedTelegram.SendWelcomeAsync(token);
+                        await dedicatedTelegram.SendWelcomeAsync(command.ChatId, token);
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }

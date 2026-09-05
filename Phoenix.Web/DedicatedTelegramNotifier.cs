@@ -68,10 +68,13 @@ public sealed class DedicatedTelegramNotifier(
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(chatId), "chat_id");
         content.Add(new StringContent(caption), "caption");
-        content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] { new[] {
-            new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
-            new { text = "❌ رد", callback_data = $"batch:no:{key}" }
-        } } })), "reply_markup");
+        content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
+            new[] {
+                new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
+                new { text = "❌ رد", callback_data = $"batch:no:{key}" }
+            },
+            new[] { new { text = "✍️ رد با دلیل", callback_data = $"batch:reason:{key}" } }
+        } })), "reply_markup");
         var photo = new ByteArrayContent(image);
         photo.Headers.ContentType = new("image/png");
         content.Add(photo, "photo", $"signal-{key}.png");
@@ -111,19 +114,23 @@ public sealed class DedicatedTelegramNotifier(
                 !message.TryGetProperty("text", out var textElement) ||
                 !message.TryGetProperty("chat", out chat)) continue;
             var text = textElement.GetString();
-            if (string.IsNullOrWhiteSpace(text) || !text.StartsWith('/')) continue;
+            if (string.IsNullOrWhiteSpace(text)) continue;
             var command = text.Trim();
-            var separator = command.IndexOf(' ');
-            var head = separator >= 0 ? command[..separator] : command;
-            var suffix = separator >= 0 ? command[separator..] : string.Empty;
-            var mention = head.IndexOf('@');
-            if (mention >= 0) head = head[..mention];
+            if (command.StartsWith('/'))
+            {
+                var separator = command.IndexOf(' ');
+                var head = separator >= 0 ? command[..separator] : command;
+                var suffix = separator >= 0 ? command[separator..] : string.Empty;
+                var mention = head.IndexOf('@');
+                if (mention >= 0) head = head[..mention];
+                command = (head + suffix).ToLowerInvariant();
+            }
             result.Add(new TelegramCommand(update.GetProperty("update_id").GetInt64(),
                 chat.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture),
                 message.TryGetProperty("from", out from) ? from.GetProperty("id").GetInt64() : 0,
                 message.TryGetProperty("from", out from) ? GetOptionalString(from, "username") : null,
                 message.TryGetProperty("from", out from) ? GetDisplayName(from) : "Telegram user",
-                (head + suffix).ToLowerInvariant(), null));
+                command, null));
         }
         return result;
     }

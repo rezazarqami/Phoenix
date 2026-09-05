@@ -318,7 +318,7 @@ Run("Review archive preserves rejected, approved and unanswered images across re
             archive.MarkDeliveryAsync(key, true, default).GetAwaiter().GetResult();
         }
         True(archive.DecideAsync("approved", true, default).GetAwaiter().GetResult());
-        True(archive.DecideAsync("rejected", false, default).GetAwaiter().GetResult());
+        True(archive.DecideAsync("rejected", false, "موج محرک ضعیف است", default).GetAwaiter().GetResult());
         False(archive.DecideAsync("rejected", true, default).GetAwaiter().GetResult());
         False(archive.DecideAsync("unknown", true, default).GetAwaiter().GetResult());
         var zip = new ReviewArchiveStore(path).ExportAsync(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1), default).GetAwaiter().GetResult();
@@ -334,6 +334,9 @@ Run("Review archive preserves rejected, approved and unanswered images across re
         using var manifestReader = new StreamReader(result.GetEntry("manifest.json")!.Open());
         var manifest = manifestReader.ReadToEnd();
         True(manifest.Contains("Rejected")); True(manifest.Contains("timeframe"));
+        using var rejectedReader = new StreamReader(result.GetEntry("Rejected/rejected.json")!.Open());
+        using var rejectedJson = System.Text.Json.JsonDocument.Parse(rejectedReader.ReadToEnd());
+        Equal("موج محرک ضعیف است", rejectedJson.RootElement.GetProperty("rejectionReason").GetString());
     }
     finally
     {

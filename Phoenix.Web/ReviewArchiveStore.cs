@@ -49,10 +49,26 @@ public sealed class ReviewArchiveStore
     public async Task MarkDeliveryAsync(string key, bool sent, CancellationToken token) =>
         await ChangeAsync(key, "UPDATE reviews SET delivery=$value WHERE id=$id", sent ? "Sent" : "Failed", token);
 
-    public async Task<bool> DecideAsync(string key, bool accepted, CancellationToken token) =>
-        await ChangeAsync(key,
-            "UPDATE reviews SET decision=$value,decided_utc=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=$id AND decision='Unanswered'",
-            accepted ? "Approved" : "Rejected", token) > 0;
+    public Task<bool> DecideAsync(string key, bool accepted, CancellationToken token) =>
+        DecideAsync(key, accepted, null, token);
+
+    public async Task<bool> DecideAsync(string key, bool accepted, string? rejectionReason,
+        CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE reviews SET decision=$decision,rejection_reason=$reason,decided_utc=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=$id AND decision='Unanswered'";
+            command.Parameters.AddWithValue("$id", key);
+            command.Parameters.AddWithValue("$decision", accepted ? "Approved" : "Rejected");
+            command.Parameters.AddWithValue("$reason", accepted || string.IsNullOrWhiteSpace(rejectionReason)
+                ? DBNull.Value : rejectionReason.Trim());
+            return await command.ExecuteNonQueryAsync(token) > 0;
+        }
+        finally { _gate.Release(); }
+    }
 
     public async Task LinkSignalAsync(string key, Guid? signalId, CancellationToken token) =>
         await ChangeAsync(key, "UPDATE reviews SET signal_id=$value WHERE id=$id", signalId?.ToString() ?? "SubmissionFailed", token);
@@ -81,7 +97,7 @@ public sealed class ReviewArchiveStore
         {
             await using var connection = await OpenAsync(token);
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT id,created_utc,delivery,decision,decided_utc,metadata,candles,image,signal_id FROM reviews WHERE created_utc >= $from AND created_utc < $to ORDER BY created_utc LIMIT 2001";
+            command.CommandText = "SELECT id,created_utc,delivery,decision,decided_utc,metadata,candles,image,signal_id,rejection_reason FROM reviews WHERE created_utc >= $from AND created_utc < $to ORDER BY created_utc LIMIT 2001";
             command.Parameters.AddWithValue("$from", fromUtc.ToUniversalTime().ToString("O"));
             command.Parameters.AddWithValue("$to", toUtc.ToUniversalTime().ToString("O"));
             using var output = new MemoryStream();
@@ -108,6 +124,7 @@ public sealed class ReviewArchiveStore
                         id, createdAtUtc = reader.GetString(1), delivery = reader.GetString(2), decision,
                         decidedAtUtc = reader.IsDBNull(4) ? null : reader.GetString(4),
                         signalId = reader.IsDBNull(8) ? null : reader.GetString(8), metadata,
+                        rejectionReason = reader.IsDBNull(9) ? null : reader.GetString(9),
                         image = folder + ".png", candles = folder + "-candles.json"
                     };
                     Write(archive, folder + ".json", JsonSerializer.SerializeToUtf8Bytes(item, Json));
@@ -115,7 +132,7 @@ public sealed class ReviewArchiveStore
                 }
                 Write(archive, "manifest.json", JsonSerializer.SerializeToUtf8Bytes(manifest, Json));
                 Write(archive, "README.txt", Encoding.UTF8.GetBytes(
-                    "Phoenix review dataset v1\nApproved/Rejected are user preference labels, NOT trading profitability.\nUnanswered is not a rejection; Prepared/Failed delivery must not be treated as reviewed.\nImages and candles capture proposal-time data. Do not use later outcome information as input features.\nSplit evaluation chronologically and group repeated symbol/anchor proposals to prevent leakage.\nDevelop any filter in shadow mode first; no automatic filter is enabled by this archive.\n"));
+                    "Phoenix review dataset v2\nApproved/Rejected are user preference labels, NOT trading profitability.\nRejected records may include rejectionReason supplied by the reviewer.\nUnanswered is not a rejection; Prepared/Failed delivery must not be treated as reviewed.\nImages and candles capture proposal-time data. Do not use later outcome information as input features.\nSplit evaluation chronologically and group repeated symbol/anchor proposals to prevent leakage.\nDevelop any filter in shadow mode first; no automatic filter is enabled by this archive.\n"));
             }
             return output.ToArray();
         }
@@ -138,10 +155,19 @@ public sealed class ReviewArchiveStore
             CREATE TABLE IF NOT EXISTS reviews(
                 id TEXT PRIMARY KEY, created_utc TEXT NOT NULL, delivery TEXT NOT NULL,
                 decision TEXT NOT NULL, decided_utc TEXT NULL, metadata TEXT NOT NULL,
-                candles TEXT NOT NULL, image BLOB NOT NULL, signal_id TEXT NULL);
+                candles TEXT NOT NULL, image BLOB NOT NULL, signal_id TEXT NULL,
+                rejection_reason TEXT NULL);
             CREATE INDEX IF NOT EXISTS ix_review_created ON reviews(created_utc);
             """;
         await command.ExecuteNonQueryAsync(token);
+        using var columns = connection.CreateCommand();
+        columns.CommandText = "SELECT 1 FROM pragma_table_info('reviews') WHERE name='rejection_reason'";
+        if (await columns.ExecuteScalarAsync(token) is null)
+        {
+            using var migration = connection.CreateCommand();
+            migration.CommandText = "ALTER TABLE reviews ADD COLUMN rejection_reason TEXT NULL";
+            await migration.ExecuteNonQueryAsync(token);
+        }
         return connection;
     }
 }

@@ -125,14 +125,15 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
                 !message.TryGetProperty("text", out var textElement) ||
                 !message.TryGetProperty("chat", out var chat)) continue;
             var text = textElement.GetString();
-            if (string.IsNullOrWhiteSpace(text) || !text.StartsWith('/')) continue;
+            if (string.IsNullOrWhiteSpace(text)) continue;
+            var command = NormalizeCommandText(text);
             result.Add(new TelegramCommand(
                 update.GetProperty("update_id").GetInt64(),
                 chat.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture),
                 message.TryGetProperty("from", out var from) ? from.GetProperty("id").GetInt64() : 0,
                 message.TryGetProperty("from", out from) ? GetOptionalString(from, "username") : null,
                 message.TryGetProperty("from", out from) ? GetDisplayName(from) : "Telegram user",
-                text.Split('@', 2)[0].Split(' ', 2)[0].ToLowerInvariant(), null));
+                command, null));
         }
         return result;
     }
@@ -145,10 +146,13 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(chatId), "chat_id");
         content.Add(new StringContent(caption), "caption");
-        content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] { new[] {
-            new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
-            new { text = "❌ رد", callback_data = $"batch:no:{key}" }
-        } } })), "reply_markup");
+        content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
+            new[] {
+                new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
+                new { text = "❌ رد", callback_data = $"batch:no:{key}" }
+            },
+            new[] { new { text = "✍️ رد با دلیل", callback_data = $"batch:reason:{key}" } }
+        } })), "reply_markup");
         var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png"); content.Add(photo, "photo", $"signal-{key}.png");
         using var response = await _httpClient.PostAsync($"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
         return response.IsSuccessStatusCode;
@@ -268,6 +272,18 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
     {
         var name = $"{GetOptionalString(user, "first_name")} {GetOptionalString(user, "last_name")}".Trim();
         return string.IsNullOrWhiteSpace(name) ? "Telegram user" : name;
+    }
+
+    private static string NormalizeCommandText(string text)
+    {
+        var value = text.Trim();
+        if (!value.StartsWith('/')) return value;
+        var separator = value.IndexOf(' ');
+        var head = separator >= 0 ? value[..separator] : value;
+        var suffix = separator >= 0 ? value[separator..] : string.Empty;
+        var mention = head.IndexOf('@');
+        if (mention >= 0) head = head[..mention];
+        return (head + suffix).ToLowerInvariant();
     }
 }
 

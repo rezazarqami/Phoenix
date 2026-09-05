@@ -14,6 +14,7 @@ public sealed class SignalBatchService(
     private TaskCompletionSource<bool>? _decision;
     private string? _decisionKey;
     private CancellationTokenSource? _runCancellation;
+    private readonly Dictionary<string, string> _pendingReasons = new(StringComparer.Ordinal);
 
     public BatchState Status { get { lock (_sync) return _state; } }
 
@@ -59,6 +60,7 @@ public sealed class SignalBatchService(
             cancellation = _runCancellation;
             _decision = null;
             _decisionKey = null;
+            _pendingReasons.Clear();
             _state = _state with
             {
                 Running = false,
@@ -72,16 +74,39 @@ public sealed class SignalBatchService(
         return true;
     }
 
-    public async Task<bool> HandleCallbackAsync(string data, string? callbackId, bool dedicatedRoute,
+    public async Task<bool> HandleCallbackAsync(TelegramCommand command, bool dedicatedRoute,
         CancellationToken token)
     {
+        var data = command.Command;
         var parts = data.Split(':');
-        if (parts.Length != 3 || parts[0] != "batch" || parts[1] is not ("yes" or "no")) return false;
+        if (parts.Length != 3 || parts[0] != "batch" || parts[1] is not ("yes" or "no" or "reason"))
+            return false;
+        if (parts[1] == "reason")
+        {
+            lock (_sync)
+            {
+                if (_decision is null || _decisionKey != parts[2]) return false;
+                _pendingReasons[ReviewerKey(command, dedicatedRoute)] = parts[2];
+            }
+            if (!string.IsNullOrWhiteSpace(command.CallbackId))
+            {
+                if (dedicatedRoute)
+                    await dedicatedTelegram.AnswerCallbackAsync(command.CallbackId,
+                        "دلیل رد را در پیام بعدی بنویسید.", token);
+                else
+                    await telegram.AnswerCallbackAsync(command.CallbackId,
+                        "دلیل رد را در پیام بعدی بنویسید.", token);
+            }
+            await SendReviewReplyAsync(command.ChatId,
+                "✍️ دلیل رد این پیشنهاد را در یک پیام بنویسید. پیام بعدی شما همراه عکس در آرشیو ذخیره می‌شود.",
+                dedicatedRoute, token);
+            return true;
+        }
         TaskCompletionSource<bool>? decision;
         lock (_sync)
         {
             if (_decision is null || _decisionKey != parts[2]) return false;
-            decision = _decision; _decision = null; _decisionKey = null;
+            decision = _decision; _decision = null; _decisionKey = null; _pendingReasons.Clear();
         }
         var accepted = parts[1] == "yes";
         try
@@ -91,14 +116,54 @@ public sealed class SignalBatchService(
         }
         catch (Exception exception) { decision.TrySetException(exception); throw; }
         decision.TrySetResult(accepted);
-        if (!string.IsNullOrWhiteSpace(callbackId))
+        if (!string.IsNullOrWhiteSpace(command.CallbackId))
         {
             var answer = accepted ? "سیگنال تأیید شد؛ در حال ثبت…" : "پیشنهاد رد شد؛ مورد بعدی بررسی می‌شود.";
-            if (dedicatedRoute) await dedicatedTelegram.AnswerCallbackAsync(callbackId, answer, token);
-            else await telegram.AnswerCallbackAsync(callbackId, answer, token);
+            if (dedicatedRoute) await dedicatedTelegram.AnswerCallbackAsync(command.CallbackId, answer, token);
+            else await telegram.AnswerCallbackAsync(command.CallbackId, answer, token);
         }
         return true;
     }
+
+    public async Task<bool> HandleReasonAsync(TelegramCommand command, bool dedicatedRoute,
+        CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(command.Command) || command.Command.StartsWith('/')) return false;
+        TaskCompletionSource<bool>? decision;
+        string key;
+        lock (_sync)
+        {
+            var reviewer = ReviewerKey(command, dedicatedRoute);
+            if (!_pendingReasons.Remove(reviewer, out key!) || _decision is null || _decisionKey != key)
+                return false;
+            decision = _decision;
+            _decision = null;
+            _decisionKey = null;
+            _pendingReasons.Clear();
+        }
+        var reason = command.Command.Trim();
+        if (reason.Length > 1500) reason = reason[..1500];
+        try
+        {
+            if (!await reviews.DecideAsync(key, false, reason, token))
+                throw new InvalidOperationException("ثبت دلیل رد در آرشیو پیشنهادها ناموفق بود.");
+        }
+        catch (Exception exception) { decision.TrySetException(exception); throw; }
+        decision.TrySetResult(false);
+        await SendReviewReplyAsync(command.ChatId,
+            "✅ پیشنهاد رد شد و دلیل آن همراه عکس در آرشیو ذخیره شد.", dedicatedRoute, token);
+        return true;
+    }
+
+    private async Task SendReviewReplyAsync(string chatId, string text, bool dedicatedRoute,
+        CancellationToken token)
+    {
+        if (dedicatedRoute) await dedicatedTelegram.SendCommandReplyAsync(chatId, text, token);
+        else await telegram.SendCommandReplyAsync(chatId, text, token);
+    }
+
+    private static string ReviewerKey(TelegramCommand command, bool dedicatedRoute) =>
+        $"{(dedicatedRoute ? 'D' : 'M')}|{command.ChatId}|{command.UserId}";
 
     private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter,
         string chartFilter, string timeframeFilter, DateTimeOffset? endsAt,
@@ -238,6 +303,7 @@ public sealed class SignalBatchService(
                 {
                     _decision = null;
                     _decisionKey = null;
+                    _pendingReasons.Clear();
                     _runCancellation = null;
                 }
             }

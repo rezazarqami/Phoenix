@@ -51,11 +51,13 @@ public sealed class TelegramCommandWorker(
                                 "شما اجازه انجام این عملیات را ندارید.", stoppingToken);
                         continue;
                     }
+                    if (await batches.HandleReasonAsync(command, false, stoppingToken)) continue;
                     if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
                     {
-                        await batches.HandleCallbackAsync(command.Command, command.CallbackId, false, stoppingToken);
+                        await batches.HandleCallbackAsync(command, false, stoppingToken);
                         continue;
                     }
+                    if (!command.Command.StartsWith('/')) continue;
                     await telegram.SendCommandReplyAsync(command.ChatId,
                         await BuildReplyAsync(command.Command, stoppingToken), stoppingToken);
                 }
@@ -103,11 +105,13 @@ public sealed class TelegramCommandWorker(
                                 "این ربات فقط برای حساب اختصاصی تنظیم شده است.", token);
                         continue;
                     }
+                    if (await batches.HandleReasonAsync(command, true, token)) continue;
                     if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
                     {
-                        await batches.HandleCallbackAsync(command.Command, command.CallbackId, true, token);
+                        await batches.HandleCallbackAsync(command, true, token);
                         continue;
                     }
+                    if (!command.Command.StartsWith('/')) continue;
                     if (command.Command is "/start" or "/help")
                         await dedicatedTelegram.SendWelcomeAsync(command.ChatId, token);
                 }

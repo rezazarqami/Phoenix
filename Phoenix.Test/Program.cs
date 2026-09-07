@@ -42,11 +42,12 @@ Run("Public lifecycle notifications require publication and exclude initial expi
     True(PublicSignalNotificationWorker.Events(s).Any(x => x.Kind == "Expired"));
 });
 
-Run("Dedicated account signals use their own bot and results-only lifecycle", () =>
+Run("Dedicated account signals use their own bot for every lifecycle event", () =>
 {
     var destination = string.Empty;
     var chatId = string.Empty;
-    var dedicated = new DedicatedTelegramOptions("arman", "dedicated-token", "777");
+    var dedicated = new DedicatedTelegramOptions("arman", "dedicated-token", "777", ChatStorePath:
+        Path.Combine(Path.GetTempPath(), "phoenix-no-chats-" + Guid.NewGuid().ToString("N") + ".json"));
     var notifier = new PublicSignalNotifier(new("public-token", "111"), dedicated,
         Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicSignalNotifier>.Instance,
         new HttpClient(new StubHttpHandler(request =>
@@ -72,10 +73,37 @@ Run("Dedicated account signals use their own bot and results-only lifecycle", ()
     notifier.PublishAsync(signal, default).GetAwaiter().GetResult();
     True(destination.Contains("botdedicated-token/sendMessage"));
     Equal("777", chatId);
-    var events = PublicSignalNotificationWorker.Events(signal, resultsOnly: true).Select(x => x.Kind).ToArray();
-    False(events.Contains("Opened"));
+    var events = PublicSignalNotificationWorker.Events(signal, dedicatedRoute: true).Select(x => x.Kind).ToArray();
+    True(events.Contains("Opened"));
     True(events.Contains("RiskFreeReached"));
     True(events.Contains("Target"));
+    var initialExpiry = new ServerSignal
+    {
+        Symbol = "XRPUSDT", RequestedByUsername = "arman", Outcome = "Expired",
+        ExpireReason = "InitialBoundary", CompletedAtUtc = now
+    };
+    True(PublicSignalNotificationWorker.Events(initialExpiry, dedicatedRoute: true)
+        .Any(x => x.Kind == "Expired"));
+    False(PublicSignalNotificationWorker.Events(initialExpiry).Any());
+    notifier.ExpiredAsync(initialExpiry, default).GetAwaiter().GetResult();
+    True(destination.Contains("botdedicated-token/sendMessage"));
+    Equal("777", chatId);
+    var cancelled = new ServerSignal
+    {
+        Symbol = "SOLUSDT", RequestedByUsername = "arman", Outcome = "Cancelled",
+        CompletedAtUtc = now
+    };
+    True(PublicSignalNotificationWorker.Events(cancelled, dedicatedRoute: true)
+        .Any(x => x.Kind == "Cancelled"));
+    False(PublicSignalNotificationWorker.Events(cancelled).Any());
+    var manuallyClosed = new ServerSignal
+    {
+        Symbol = "ADAUSDT", RequestedByUsername = "arman", Outcome = "ManualClosed",
+        CompletedAtUtc = now
+    };
+    True(PublicSignalNotificationWorker.Events(manuallyClosed, dedicatedRoute: true)
+        .Any(x => x.Kind == "ManualClosed"));
+    False(PublicSignalNotificationWorker.Events(manuallyClosed).Any());
 });
 
 Run("Dedicated bot securely pairs one second chat and sends both copies", () =>

@@ -79,10 +79,21 @@ public sealed class PublicSignalNotifier
     public Task<int?> StopLossReachedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"🛑 سیگنال {signal.Symbol} به استاپ‌لاس رسید.", token);
 
-    public Task<int?> ExpiredAsync(ServerSignal signal, CancellationToken token) =>
-        signal.ExpireReason == "TargetAfterActivation"
+    public Task<int?> ExpiredAsync(ServerSignal signal, CancellationToken token)
+    {
+        if (IsDedicatedSignal(signal))
+        {
+            var text = signal.ExpireReason == "InitialBoundary"
+                ? $"⌛ سیگنال {signal.Symbol} پیش از ورود اکسپایر شد."
+                : signal.ExpireReason == "TargetAfterActivation"
+                    ? $"⌛ سیگنال {signal.Symbol} پس از نزدیک‌شدن به ورود و بازگشت به تارگت اکسپایر شد."
+                    : $"⌛ سیگنال {signal.Symbol} اکسپایر شد.";
+            return ReplyAsync(signal, text, token);
+        }
+        return signal.ExpireReason == "TargetAfterActivation"
             ? ReplyAsync(signal, $"⌛ سیگنال {signal.Symbol} پس از نزدیک‌شدن به ورود و بازگشت به تارگت اکسپایر شد.", token)
             : Task.FromResult<int?>(null);
+    }
 
     public Task<int?> OpenedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"▶️ معامله {signal.Symbol} باز شد.", token);
@@ -90,12 +101,22 @@ public sealed class PublicSignalNotifier
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.", token);
 
+    public Task<int?> ManuallyClosedAsync(ServerSignal signal, CancellationToken token) =>
+        IsDedicatedSignal(signal)
+            ? ReplyAsync(signal, $"⏹ معامله {signal.Symbol} به‌صورت دستی بسته شد.", token)
+            : Task.FromResult<int?>(null);
+
+    public Task<int?> CancelledAsync(ServerSignal signal, CancellationToken token) =>
+        IsDedicatedSignal(signal)
+            ? ReplyAsync(signal, $"⏹ سیگنال {signal.Symbol} لغو شد.", token)
+            : Task.FromResult<int?>(null);
+
     private Task<int?> ReplyAsync(ServerSignal signal, string text, CancellationToken token)
     {
-        if (signal.PublicTelegramMessageId is not > 0) return Task.FromResult<int?>(null);
-        return IsDedicatedSignal(signal)
-            ? SendDedicatedAsync(text, token)
-            : SendAsync(_options, text, signal.PublicTelegramMessageId, token);
+        if (IsDedicatedSignal(signal)) return SendDedicatedAsync(text, token);
+        return signal.PublicTelegramMessageId is > 0
+            ? SendAsync(_options, text, signal.PublicTelegramMessageId, token)
+            : Task.FromResult<int?>(null);
     }
 
     private async Task<int?> SendDedicatedAsync(string text, CancellationToken token)

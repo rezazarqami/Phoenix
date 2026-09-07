@@ -16,15 +16,16 @@ public sealed class PublicSignalNotificationWorker(
 
     public static IEnumerable<(string Kind, DateTime At)> Events(ServerSignal s) => Events(s, false);
 
-    public static IEnumerable<(string Kind, DateTime At)> Events(ServerSignal s, bool resultsOnly)
+    public static IEnumerable<(string Kind, DateTime At)> Events(ServerSignal s, bool dedicatedRoute)
     {
-        if (s.PublicTelegramMessageId is not > 0) yield break;
-        if (!resultsOnly && s.FilledAtUtc is { } opened) yield return ("Opened", opened);
+        if (!dedicatedRoute && s.PublicTelegramMessageId is not > 0) yield break;
+        if (s.FilledAtUtc is { } opened) yield return ("Opened", opened);
         if (s.RiskFreeReachedAtUtc is { } activated) yield return ("RiskFreeReached", activated);
         if (s.CompletedAtUtc is not { } ended) yield break;
         if (s.Outcome is "Target" or "StopLoss" or "RiskFree") yield return (s.Outcome, ended);
-        if (s.Outcome == "Expired" && s.ExpireReason == "TargetAfterActivation")
+        if (s.Outcome == "Expired" && (dedicatedRoute || s.ExpireReason == "TargetAfterActivation"))
             yield return ("Expired", ended);
+        if (dedicatedRoute && s.Outcome is "Cancelled" or "ManualClosed") yield return (s.Outcome, ended);
     }
 
     protected override async Task ExecuteAsync(CancellationToken token)
@@ -56,7 +57,9 @@ public sealed class PublicSignalNotificationWorker(
                         "Target" => await notifier.TargetReachedAsync(s, token),
                         "StopLoss" => await notifier.StopLossReachedAsync(s, token),
                         "RiskFree" => await notifier.RiskFreeClosedAsync(s, token),
-                        _ => await notifier.ExpiredAsync(s, token)
+                        "Expired" => await notifier.ExpiredAsync(s, token),
+                        "ManualClosed" => await notifier.ManuallyClosedAsync(s, token),
+                        _ => await notifier.CancelledAsync(s, token)
                     };
                     if (messageId is null) break; // Retry, preserving per-signal event order.
                     ledger.Sent.Add(key);

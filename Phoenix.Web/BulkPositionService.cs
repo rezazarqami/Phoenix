@@ -83,11 +83,14 @@ public sealed class BulkPositionService(ServerOrderStore store, BybitDemoClient 
                         {
                             if (positions.Any(x => x.Symbol == s.Symbol &&
                                 x.Side == (s.Direction == "Long" ? "Buy" : "Sell"))) continue;
-                            if (!string.IsNullOrWhiteSpace(s.StopLoss2OrderId))
+                            foreach (var protectionOrderId in new[]
+                                     { s.StopLoss2OrderId, s.RiskFreeStopMarketOrderId })
                             {
-                                var sl2 = await client.GetOrderStatusAsync(s.StopLoss2OrderId, token);
-                                if (sl2 is not null && sl2.Status is not ("Filled" or "Cancelled" or "Deactivated" or "Rejected"))
-                                    await client.CancelOrderAsync(s.Symbol, s.StopLoss2OrderId, token);
+                                if (string.IsNullOrWhiteSpace(protectionOrderId)) continue;
+                                var protection = await client.GetOrderStatusAsync(protectionOrderId, token);
+                                if (protection is not null && protection.Status is not
+                                    ("Filled" or "Cancelled" or "Deactivated" or "Rejected"))
+                                    await client.CancelOrderAsync(s.Symbol, protectionOrderId, token);
                             }
                             s.Status = "Completed";
                             s.Outcome = "ManualClosed";

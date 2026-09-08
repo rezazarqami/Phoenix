@@ -20,6 +20,7 @@ public sealed class ServerSignal
     public decimal TakeProfit { get; set; }
     public decimal StopLoss { get; set; }
     public decimal? StopLoss2 { get; set; }
+    public decimal? RiskFreeStopMarket { get; set; }
     public decimal? RiskFreePrice { get; set; }
     public decimal? LastPrice { get; set; }
     public decimal ExpirePrice { get; set; }
@@ -38,6 +39,7 @@ public sealed class ServerSignal
     public DateTime? RiskFreeReachedAtUtc { get; set; }
     public DateTime? RiskFreeClosedAtUtc { get; set; }
     public string? StopLoss2OrderId { get; set; }
+    public string? RiskFreeStopMarketOrderId { get; set; }
     public DateTime? StopLossReachedAtUtc { get; set; }
     public DateTime? ExpireAdjustedAtUtc { get; set; }
     public DateTime? ExpiredAtUtc { get; set; }
@@ -327,8 +329,10 @@ public sealed class ServerOrderStore
         StopLoss = signal.StopLoss, LastPrice = signal.LastPrice, Status = signal.Status,
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,
         ExpireStage = signal.ExpireStage,
-        StopLoss2 = signal.StopLoss2, RiskFreePrice = signal.RiskFreePrice,
+        StopLoss2 = signal.StopLoss2, RiskFreeStopMarket = signal.RiskFreeStopMarket,
+        RiskFreePrice = signal.RiskFreePrice,
         StopLoss2OrderId = signal.StopLoss2OrderId,
+        RiskFreeStopMarketOrderId = signal.RiskFreeStopMarketOrderId,
         OrderLinkId = signal.OrderLinkId, BybitOrderId = signal.BybitOrderId, Error = signal.Error,
         CreatedAtUtc = signal.CreatedAtUtc, SubmittedAtUtc = signal.SubmittedAtUtc,
         FilledAtUtc = signal.FilledAtUtc, AverageFillPrice = signal.AverageFillPrice,

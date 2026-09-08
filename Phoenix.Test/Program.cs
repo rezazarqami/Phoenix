@@ -672,6 +672,35 @@ Run("Bybit SL2 is a reduce-only conditional stop-limit order", () =>
     True(requests[1].Contains("\"triggerDirection\":1", StringComparison.Ordinal));
 });
 
+Run("Risk-free backup is a reduce-only stop-market at twenty-five percent", () =>
+{
+    Near(102.5m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 110m));
+    Near(97.5m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 90m));
+    var requests = new List<string>();
+    var handler = new StubHttpHandler(request =>
+    {
+        requests.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"rfm-123\",\"orderLinkId\":\"rfm-test\"}}")
+        };
+    });
+    var client = new BybitDemoClient(new BybitDemoOptions("key", "secret"), new HttpClient(handler));
+    client.PlaceStopMarketAsync("BTCUSDT", "Long", 0.01m, 102.54m, 0.1m, "rfm-test")
+        .GetAwaiter().GetResult();
+    True(requests[0].Contains("\"side\":\"Sell\"", StringComparison.Ordinal));
+    True(requests[0].Contains("\"orderType\":\"Market\"", StringComparison.Ordinal));
+    False(requests[0].Contains("\"price\":", StringComparison.Ordinal));
+    True(requests[0].Contains("\"triggerPrice\":\"102.5\"", StringComparison.Ordinal));
+    True(requests[0].Contains("\"triggerDirection\":2", StringComparison.Ordinal));
+    True(requests[0].Contains("\"reduceOnly\":true", StringComparison.Ordinal));
+    True(requests[0].Contains("\"closeOnTrigger\":true", StringComparison.Ordinal));
+    client.PlaceStopMarketAsync("BTCUSDT", "Short", 0.01m, 97.46m, 0.1m, "rfm-short")
+        .GetAwaiter().GetResult();
+    True(requests[1].Contains("\"side\":\"Buy\"", StringComparison.Ordinal));
+    True(requests[1].Contains("\"triggerDirection\":1", StringComparison.Ordinal));
+});
+
 Run("Server signal queue persists across application restarts", () =>
 {
     var path = Path.Combine(Path.GetTempPath(), $"phoenix-server-queue-{Guid.NewGuid():N}.json");
@@ -686,6 +715,7 @@ Run("Server signal queue persists across application restarts", () =>
         {
             Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Quantity = 0.001m,
             EntryPrice = 100m, TakeProfit = 110m, StopLoss = 90m, Leverage = 12m,
+            RiskFreeStopMarket = 102.5m, RiskFreeStopMarketOrderId = "rfm-persisted",
             OrderLinkId = "phoenix-server-test", CreatedAtUtc = DateTime.UtcNow
         };
         new ServerOrderStore().AddAsync(signal).GetAwaiter().GetResult();
@@ -694,6 +724,8 @@ Run("Server signal queue persists across application restarts", () =>
         Equal("phoenix-server-test", restored[0].OrderLinkId);
         Equal("Pending", restored[0].Status);
         Equal(12m, restored[0].Leverage!.Value);
+        Equal(102.5m, restored[0].RiskFreeStopMarket!.Value);
+        Equal("rfm-persisted", restored[0].RiskFreeStopMarketOrderId!);
         True(new ServerOrderStore().RemoveAsync(signal.Id).GetAwaiter().GetResult());
         Equal(0, new ServerOrderStore().GetAllAsync().GetAwaiter().GetResult().Count);
         var history = new ServerOrderStore().GetHistoryAsync().GetAwaiter().GetResult();

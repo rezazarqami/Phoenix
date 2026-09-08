@@ -417,6 +417,42 @@ public sealed partial class BybitDemoClient
             symbol, side, quantity, price);
     }
 
+    public async Task<BybitOrderResult> PlaceStopMarketAsync(
+        string symbol, string direction, decimal quantity, decimal stopPrice,
+        decimal tickSize, string orderLinkId, int positionIndex = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var price = BybitOrderPreviewBuilder.RoundToStep(stopPrice, tickSize);
+        var isLong = string.Equals(direction, "Long", StringComparison.OrdinalIgnoreCase);
+        var side = isLong ? "Sell" : "Buy";
+        var body = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["category"] = "linear",
+            ["symbol"] = NormalizeSymbol(symbol),
+            ["side"] = side,
+            ["orderType"] = "Market",
+            ["qty"] = FormatDecimal(quantity),
+            ["triggerPrice"] = FormatDecimal(price),
+            ["triggerDirection"] = isLong ? 2 : 1,
+            ["triggerBy"] = "MarkPrice",
+            ["positionIdx"] = positionIndex,
+            ["orderLinkId"] = orderLinkId,
+            ["reduceOnly"] = true,
+            ["closeOnTrigger"] = true
+        });
+        using var request = CreateSignedPostRequest("/v5/order/create", body);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+        var result = document.RootElement.GetProperty("result");
+        return new BybitOrderResult(
+            result.GetProperty("orderId").GetString() ?? string.Empty,
+            result.GetProperty("orderLinkId").GetString() ?? orderLinkId,
+            symbol, side, quantity, price);
+    }
+
     public async Task<BybitOrderStatus?> GetOrderStatusAsync(
         string orderId,
         CancellationToken cancellationToken = default)

@@ -246,7 +246,7 @@ public sealed class SignalBatchService(
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
-                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمودار: {(option.LineMode ? "خطی (Close)" : "کندل‌استیک")}\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT\n\nآیا این سیگنال ثبت شود؟";
+                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT\n\nآیا این سیگنال ثبت شود؟";
                     var image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
                         TimeframeBadge(chartInterval));
                     await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);

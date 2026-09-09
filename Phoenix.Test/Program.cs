@@ -983,6 +983,8 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
 
 Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
 {
+    Near(0.5m, (decimal)SignalChartRenderer.LogarithmicYFraction(100m, 400m, 200m));
+    True(SignalChartRenderer.LogarithmicYFraction(100m, 400m, 250m) < 0.5d);
     var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.08m).ToArray();
     for (var offset = -3; offset <= 3; offset++)
     {

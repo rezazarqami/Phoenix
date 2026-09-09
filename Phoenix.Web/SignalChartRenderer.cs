@@ -26,9 +26,9 @@ public static class SignalChartRenderer
         var max = candles.Max(x => lineMode ? x.Close : x.High);
         min = Math.Min(min, Math.Min(candidate.Floor, Math.Min(candidate.TakeProfit, candidate.StopLoss)));
         max = Math.Max(max, Math.Max(candidate.Ceiling, Math.Max(candidate.TakeProfit, candidate.StopLoss)));
-        var span = Math.Max(max - min, 0.00000001m);
         int X(int index) => left + (int)Math.Round(index * (width - left - right - 1d) / Math.Max(1, candles.Count - 1));
-        int Y(decimal price) => top + (int)Math.Round((double)((max - price) / span) * (height - top - bottom - 1));
+        int Y(decimal price) => top + (int)Math.Round(
+            LogarithmicYFraction(min, max, price) * (height - top - bottom - 1));
         for (var grid = 1; grid < 6; grid++) DrawLine(pixels, width, height, left, top + grid * (height - top - bottom) / 6, width - right, top + grid * (height - top - bottom) / 6, 235, 239, 237);
         if (lineMode)
             for (var i = 1; i < candles.Count; i++) DrawLine(pixels, width, height, X(i - 1), Y(candles[i - 1].Close), X(i), Y(candles[i].Close), 14, 125, 96, 2);
@@ -42,10 +42,22 @@ public static class SignalChartRenderer
             }
         Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
-        if (!string.IsNullOrWhiteSpace(timeframeBadge)) DrawBadge(pixels, width, height, timeframeBadge);
+        DrawBadge(pixels, width, height,
+            string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG");
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);
+    }
+
+    public static double LogarithmicYFraction(decimal min, decimal max, decimal price)
+    {
+        if (min <= 0m || max < min || price <= 0m)
+            throw new ArgumentOutOfRangeException(nameof(price), "Logarithmic chart prices must be positive.");
+        if (max == min) return 0.5d;
+        var logMin = Math.Log((double)min);
+        var logMax = Math.Log((double)max);
+        var fraction = (logMax - Math.Log((double)price)) / (logMax - logMin);
+        return Math.Clamp(fraction, 0d, 1d);
     }
 
     private static int FindNearestIndex(IReadOnlyList<BybitKline> candles, long time)
@@ -100,6 +112,8 @@ public static class SignalChartRenderer
         '6' => [14, 16, 16, 30, 17, 17, 14], '7' => [31, 1, 2, 4, 8, 8, 8],
         '8' => [14, 17, 17, 14, 17, 17, 14], '9' => [14, 17, 17, 15, 1, 1, 14],
         'M' => [17, 27, 21, 21, 17, 17, 17], 'H' => [17, 17, 17, 31, 17, 17, 17],
+        'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],
+        'G' => [14, 17, 16, 23, 17, 17, 15],
         _ => [0, 0, 0, 0, 0, 0, 0]
     };
     private static byte[] EncodePng(byte[] pixels, int width, int height)

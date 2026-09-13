@@ -24,6 +24,28 @@ const telegramAccessForm = document.querySelector('#telegramAccessForm');
 const telegramAccessMessage = document.querySelector('#telegramAccessMessage');
 let instruments = [];
 
+document.querySelector('#aiParseButton').addEventListener('click', async () => {
+  const button = document.querySelector('#aiParseButton');
+  const note = document.querySelector('#aiSignalMessage');
+  const text = document.querySelector('#aiSignalText').value.trim();
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/ai/parse-signal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error((data.errors || [data.error || 'استخراج اطلاعات ناموفق بود.']).join(' '));
+    if (!instruments.includes(data.signal.symbol)) throw new Error('نماد استخراج‌شده در بازار فعال Bybit وجود ندارد.');
+    selectSymbol(data.signal.symbol);
+    document.querySelector(`#${data.signal.direction.toLowerCase()}`).checked = true;
+    form.elements.ceiling.value = data.signal.ceiling;
+    form.elements.floor.value = data.signal.floor;
+    form.elements.positionSizeUsdt.value = data.signal.positionSizeUsdt;
+    note.textContent = 'اطلاعات استخراج شد. آن‌ها را بررسی کنید و سپس دکمه ثبت را بزنید.';
+  } catch (error) { note.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
 async function loadSession() {
   const response = await fetch('/api/auth/me', { cache: 'no-store' });
   const session = await response.json();

@@ -126,6 +126,23 @@ Evaluate future rules chronologically, group duplicate proposals, and test in
 shadow mode before suppressing candidates. Approval is not proof of profitability.
 No automatic archive deletion is configured; include this database in backups.
 
+## Optional AI signal input
+
+The main panel can use the OpenAI Responses API with Structured Outputs to extract
+the five required fields from a Persian or English signal message. AI never
+calculates, recommends, submits, or changes a trade. The normal Phoenix validator,
+calculator, Bybit instrument checks, and explicit submit button remain authoritative.
+
+Configure the server outside source control:
+
+```text
+OPENAI_API_KEY=<server-side API key>
+PHOENIX_OPENAI_MODEL=gpt-5-mini
+```
+
+`PHOENIX_OPENAI_MODEL` is optional. Never put the API key in browser JavaScript,
+source control, or a public environment variable.
+
 Private Phoenix and Strategy 2 completion notifications query their own account's
 USDT `walletBalance` (not available USD balance or equity). The bounded five-second
 lookup cannot prevent a result notification on API failure. The amount is labelled

@@ -263,7 +263,7 @@ public sealed class SignalBatchService(
                     };
                     var similarityResult = await similarity.CalculateAsync(similarityCandidate, token);
                     var similarityLines = similarityResult.TargetPercent.HasValue || similarityResult.StopPercent.HasValue
-                        ? $"\n\n🟢 <b>امتیاز شباهت مستقل به تارگت: {Format(similarityResult.TargetPercent)} از ۱۰۰</b>\n🔴 <b>امتیاز شباهت مستقل به استاپ: {Format(similarityResult.StopPercent)} از ۱۰۰</b>\n📊 الگوهای فنی آموخته‌شده: {similarityResult.SampleCount}"
+                        ? $"\n\n🟢 <b>امتیاز شباهت مستقل به تارگت: {(similarityResult.TargetPercent.HasValue ? Format(similarityResult.TargetPercent.Value) : "—")} از ۱۰۰</b>\n🔴 <b>امتیاز شباهت مستقل به استاپ: {(similarityResult.StopPercent.HasValue ? Format(similarityResult.StopPercent.Value) : "—")} از ۱۰۰</b>\n📊 الگوهای فنی آموخته‌شده: {similarityResult.SampleCount}"
                         : $"\n📊 شباهت تاریخی: دادهٔ کافی نیست\nتعداد نمونه‌های موجود: {similarityResult.SampleCount}";
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     var image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,

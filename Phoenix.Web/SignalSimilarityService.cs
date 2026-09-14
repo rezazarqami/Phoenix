@@ -1,62 +1,62 @@
 namespace Phoenix.Web;
 
-/// <summary>Produces two independent technical-pattern similarity scores.</summary>
+/// <summary>Predicts the mutually-exclusive Target/StopLoss outcome from the technical state.</summary>
 public sealed class SignalSimilarityService(SignalLearningService learning)
 {
+    private const int NeighbourLimit = 30;
+    private const double PriorStrength = 8d;
+
     public async Task<SignalSimilarityResult> CalculateAsync(ServerSignal candidate,
         CancellationToken token = default)
     {
+        if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
-        var targets = snapshot.Patterns.Where(x => x.Outcome == "Target").ToArray();
-        var stops = snapshot.Patterns.Where(x => x.Outcome == "StopLoss").ToArray();
-        return new(Score(candidate, targets), Score(candidate, stops),
-            snapshot.Patterns.Count, targets.Length, stops.Length);
-    }
-
-    private static decimal? Score(ServerSignal candidate, IReadOnlyCollection<LearnedSignalPattern> patterns)
-    {
-        if (candidate.TechnicalFeatures is null || patterns.Count == 0) return null;
-        var nearest = patterns
-            .Select(x => Similarity(candidate, x.Signal, candidate.TechnicalFeatures, x.Features))
-            .OrderByDescending(x => x)
-            .Take(Math.Min(12, patterns.Count))
+        var targetCount = snapshot.Patterns.Count(x => x.Outcome == "Target");
+        var stopCount = snapshot.Patterns.Count - targetCount;
+        var neighbours = snapshot.Patterns
+            .Select(x => new { Pattern = x, Similarity = TechnicalSimilarity(candidate, x.Signal,
+                candidate.TechnicalFeatures, x.Features) })
+            .OrderByDescending(x => x.Similarity)
+            .Take(NeighbourLimit)
             .ToArray();
-        if (nearest.Length == 0) return null;
-        var weighted = 0d;
-        var weights = 0d;
-        for (var i = 0; i < nearest.Length; i++)
+
+        // Shrink early predictions toward a deterministic technical prior. Relevant
+        // completed results progressively outweigh it as the labelled history grows.
+        var targetEvidence = TechnicalPrior(candidate) * PriorStrength;
+        var evidenceWeight = PriorStrength;
+        foreach (var neighbour in neighbours)
         {
-            var rankWeight = Math.Exp(-i / 4d);
-            weighted += nearest[i] * rankWeight;
-            weights += rankWeight;
+            var relevance = Math.Pow(neighbour.Similarity, 4d);
+            if (relevance < 0.05d) continue;
+            targetEvidence += (neighbour.Pattern.Outcome == "Target" ? 1d : 0d) * relevance;
+            evidenceWeight += relevance;
         }
-        return Math.Round((decimal)(100d * weighted / weights), 1);
+        var probability = Math.Clamp(targetEvidence / evidenceWeight, 0.05d, 0.95d);
+        var targetPercent = Math.Round((decimal)(probability * 100d), 1);
+        return new(targetPercent, 100m - targetPercent, snapshot.Patterns.Count, targetCount, stopCount);
     }
 
-    internal static double Similarity(ServerSignal candidate, ServerSignal sample,
-        TechnicalFeatureSnapshot? candidateFeatures = null, TechnicalFeatureSnapshot? sampleFeatures = null)
+    // Trade geometry (target, stop, range and position size) is deliberately excluded.
+    internal static double TechnicalSimilarity(ServerSignal candidate, ServerSignal sample,
+        TechnicalFeatureSnapshot candidateFeatures, TechnicalFeatureSnapshot sampleFeatures)
     {
+        var left = Directional(candidate, candidateFeatures);
+        var right = Directional(sample, sampleFeatures);
         var weighted = 0d;
         var totalWeight = 0d;
-        Add(candidate.Direction == sample.Direction ? 1d : 0d, 8d);
-        AddOptionalText(candidate.Timeframe, sample.Timeframe, 3d);
-        Add(Closeness(RangeRatio(candidate), RangeRatio(sample)), 3d);
-        Add(Closeness(TargetRatio(candidate), TargetRatio(sample)), 2d);
-        Add(Closeness(StopRatio(candidate), StopRatio(sample)), 2d);
-        if (candidateFeatures is not null && sampleFeatures is not null)
-        {
-            Add(Near(candidateFeatures.Rsi14, sampleFeatures.Rsi14, 1m), 8d);
-            Add(Near(candidateFeatures.AtrPercent, sampleFeatures.AtrPercent, 5m), 7d);
-            Add(Near(candidateFeatures.TrendStrength, sampleFeatures.TrendStrength, 2m), 10d);
-            Add(Near(candidateFeatures.IchimokuPosition, sampleFeatures.IchimokuPosition, 2m), 10d);
-            Add(Near(candidateFeatures.IchimokuCloudBias, sampleFeatures.IchimokuCloudBias, 2m), 7d);
-            Add(Near(candidateFeatures.SupportDistanceAtr, sampleFeatures.SupportDistanceAtr, 10m), 9d);
-            Add(Near(candidateFeatures.ResistanceDistanceAtr, sampleFeatures.ResistanceDistanceAtr, 10m), 9d);
-            Add(Near(candidateFeatures.FibonacciAlignment, sampleFeatures.FibonacciAlignment, 1m), 8d);
-            Add(Near(candidateFeatures.PriceActionScore, sampleFeatures.PriceActionScore, 1m), 9d);
-            Add(Near(candidateFeatures.VolumeRatio, sampleFeatures.VolumeRatio, 3m), 5d);
-            Add(Near(candidateFeatures.ImpulseEfficiency, sampleFeatures.ImpulseEfficiency, 1m), 8d);
-        }
+        Add(Near(left.Rsi, right.Rsi, 1m), 8d);
+        Add(Near(candidateFeatures.AtrPercent, sampleFeatures.AtrPercent, 5m), 7d);
+        Add(Near(left.Trend, right.Trend, 2m), 12d);
+        Add(Near(left.CloudPosition, right.CloudPosition, 2m), 11d);
+        Add(Near(left.CloudBias, right.CloudBias, 2m), 9d);
+        Add(Near(left.SupportRoom, right.SupportRoom, 10m), 9d);
+        Add(Near(left.ResistanceRoom, right.ResistanceRoom, 10m), 9d);
+        Add(Near(candidateFeatures.FibonacciAlignment, sampleFeatures.FibonacciAlignment, 1m), 8d);
+        Add(Near(candidateFeatures.PriceActionScore, sampleFeatures.PriceActionScore, 1m), 12d);
+        Add(Near(candidateFeatures.VolumeRatio, sampleFeatures.VolumeRatio, 3m), 6d);
+        Add(Near(candidateFeatures.ImpulseEfficiency, sampleFeatures.ImpulseEfficiency, 1m), 9d);
+        if (!string.IsNullOrWhiteSpace(candidate.Timeframe) && !string.IsNullOrWhiteSpace(sample.Timeframe))
+            Add(candidate.Timeframe.Equals(sample.Timeframe, StringComparison.OrdinalIgnoreCase) ? 1d : 0.65d, 3d);
         return totalWeight == 0d ? 0d : weighted / totalWeight;
 
         void Add(double value, double weight)
@@ -64,24 +64,37 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             weighted += Math.Clamp(value, 0d, 1d) * weight;
             totalWeight += weight;
         }
-        void AddOptionalText(string? left, string? right, double weight)
-        {
-            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return;
-            Add(left.Equals(right, StringComparison.OrdinalIgnoreCase) ? 1d : 0d, weight);
-        }
-        static double Near(decimal left, decimal right, decimal scale) =>
-            (double)Math.Clamp(1m - Math.Abs(left - right) / scale, 0m, 1m);
     }
 
-    private static double RangeRatio(ServerSignal x) => Ratio(x.Ceiling - x.Floor, x.EntryPrice);
-    private static double TargetRatio(ServerSignal x) => Ratio(Math.Abs(x.TakeProfit - x.EntryPrice), x.EntryPrice);
-    private static double StopRatio(ServerSignal x) => Ratio(Math.Abs(x.StopLoss - x.EntryPrice), x.EntryPrice);
-    private static double Ratio(decimal value, decimal basis) => basis <= 0m ? 0d : (double)(value / basis);
-    private static double Closeness(double left, double right)
+    private static double TechnicalPrior(ServerSignal signal)
     {
-        var scale = Math.Max(Math.Max(Math.Abs(left), Math.Abs(right)), 0.000001d);
-        return 1d / (1d + Math.Abs(left - right) / (scale * 0.35d));
+        var f = signal.TechnicalFeatures!;
+        var d = Directional(signal, f);
+        var score = (double)d.Trend * 0.75d + (double)d.CloudPosition * 0.55d +
+            (double)d.CloudBias * 0.45d + ((double)f.PriceActionScore - 0.5d) * 1.4d +
+            ((double)f.FibonacciAlignment - 0.5d) * 0.45d +
+            ((double)f.ImpulseEfficiency - 0.5d) * 0.75d +
+            Math.Clamp(((double)f.VolumeRatio - 1d) / 2d, -0.5d, 0.5d) * 0.35d +
+            Math.Clamp(((double)d.ResistanceRoom - (double)d.SupportRoom) / 10d, -1d, 1d) * 0.45d +
+            Math.Clamp(((double)d.Rsi - 0.5d) * 2d, -1d, 1d) * 0.25d;
+        return 1d / (1d + Math.Exp(-score));
     }
+
+    private static DirectionalFeatures Directional(ServerSignal signal, TechnicalFeatureSnapshot f)
+    {
+        var isLong = signal.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase);
+        var sign = isLong ? 1m : -1m;
+        return new(isLong ? f.Rsi14 : 1m - f.Rsi14, f.TrendStrength * sign,
+            f.IchimokuPosition * sign, f.IchimokuCloudBias * sign,
+            isLong ? f.SupportDistanceAtr : f.ResistanceDistanceAtr,
+            isLong ? f.ResistanceDistanceAtr : f.SupportDistanceAtr);
+    }
+
+    private static double Near(decimal left, decimal right, decimal scale) =>
+        (double)Math.Clamp(1m - Math.Abs(left - right) / scale, 0m, 1m);
+
+    private sealed record DirectionalFeatures(decimal Rsi, decimal Trend, decimal CloudPosition,
+        decimal CloudBias, decimal SupportRoom, decimal ResistanceRoom);
 }
 
 public sealed record SignalSimilarityResult(decimal? TargetPercent, decimal? StopPercent,

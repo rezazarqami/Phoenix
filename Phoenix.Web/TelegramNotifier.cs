@@ -150,9 +150,12 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
             new[] {
                 new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
-                new { text = "❌ رد", callback_data = $"batch:no:{key}" }
+                new { text = "👁 فقط تأیید", callback_data = $"batch:observe:{key}" }
             },
-            new[] { new { text = "✍️ رد با دلیل", callback_data = $"batch:reason:{key}" } }
+            new[] {
+                new { text = "❌ رد", callback_data = $"batch:no:{key}" },
+                new { text = "✍️ رد با دلیل", callback_data = $"batch:reason:{key}" }
+            }
         } })), "reply_markup");
         var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png"); content.Add(photo, "photo", $"signal-{key}.png");
         using var response = await _httpClient.PostAsync($"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);

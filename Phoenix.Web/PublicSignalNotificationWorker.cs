@@ -50,12 +50,14 @@ public sealed class PublicSignalNotificationWorker(
                 {
                     var key = $"{s.Id}:{e.Kind}";
                     if (e.At < ledger.SinceUtc || ledger.Sent.Contains(key)) continue;
+                    var resultImage = e.Kind is "Target" or "StopLoss"
+                        ? await store.GetHistoryImageAsync(s.Id, token) : null;
                     var messageId = e.Kind switch
                     {
                         "Opened" => await notifier.OpenedAsync(s, token),
                         "RiskFreeReached" => await notifier.RiskFreeReachedAsync(s, token),
-                        "Target" => await notifier.TargetReachedAsync(s, token),
-                        "StopLoss" => await notifier.StopLossReachedAsync(s, token),
+                        "Target" => await notifier.TargetReachedAsync(s, resultImage, token),
+                        "StopLoss" => await notifier.StopLossReachedAsync(s, resultImage, token),
                         "RiskFree" => await notifier.RiskFreeClosedAsync(s, token),
                         "Expired" => await notifier.ExpiredAsync(s, token),
                         "ManualClosed" => await notifier.ManuallyClosedAsync(s, token),

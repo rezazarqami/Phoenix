@@ -6,7 +6,7 @@ namespace Phoenix.Web;
 public static class SignalChartRenderer
 {
     public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode,
-        string? timeframeBadge = null)
+        string? timeframeBadge = null, decimal? targetSimilarity = null, decimal? stopSimilarity = null)
     {
         const int width = 1000, height = 600, left = 30, right = 25, top = 25, bottom = 35;
         var ceilingIndex = FindNearestIndex(candles, candidate.CeilingTime);
@@ -44,6 +44,11 @@ public static class SignalChartRenderer
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
         DrawBadge(pixels, width, height,
             string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG");
+        if (targetSimilarity.HasValue && stopSimilarity.HasValue)
+        {
+            DrawMetricBadge(pixels, width, height, 18, 14, $"TP {targetSimilarity.Value:0.0}%", 12, 104, 72, 56, 211, 159);
+            DrawMetricBadge(pixels, width, height, 18, 62, $"SL {stopSimilarity.Value:0.0}%", 111, 27, 39, 255, 97, 117);
+        }
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);
@@ -103,6 +108,32 @@ public static class SignalChartRenderer
             cursor += (glyphWidth + gap) * scale;
         }
     }
+    private static void DrawMetricBadge(byte[] pixels, int width, int height, int x, int y, string text,
+        byte backgroundR, byte backgroundG, byte backgroundB, byte textR, byte textG, byte textB)
+    {
+        const int scale = 4, glyphWidth = 5, gap = 1, padding = 9;
+        var badgeWidth = padding * 2 + text.Length * glyphWidth * scale + Math.Max(0, text.Length - 1) * gap * scale;
+        var badgeHeight = padding * 2 + 7 * scale;
+        FillRect(pixels, width, height, x, y, badgeWidth, badgeHeight, backgroundR, backgroundG, backgroundB);
+        for (var border = 0; border < 2; border++)
+        {
+            DrawLine(pixels, width, height, x + border, y + border, x + badgeWidth - 1 - border, y + border, textR, textG, textB);
+            DrawLine(pixels, width, height, x + border, y + badgeHeight - 1 - border, x + badgeWidth - 1 - border, y + badgeHeight - 1 - border, textR, textG, textB);
+            DrawLine(pixels, width, height, x + border, y + border, x + border, y + badgeHeight - 1 - border, textR, textG, textB);
+            DrawLine(pixels, width, height, x + badgeWidth - 1 - border, y + border, x + badgeWidth - 1 - border, y + badgeHeight - 1 - border, textR, textG, textB);
+        }
+        var cursor = x + padding;
+        foreach (var character in text.ToUpperInvariant())
+        {
+            var rows = Glyph(character);
+            for (var row = 0; row < rows.Length; row++)
+                for (var column = 0; column < glyphWidth; column++)
+                    if ((rows[row] & (1 << (glyphWidth - 1 - column))) != 0)
+                        FillRect(pixels, width, height, cursor + column * scale, y + padding + row * scale,
+                            scale, scale, textR, textG, textB);
+            cursor += (glyphWidth + gap) * scale;
+        }
+    }
 
     private static int[] Glyph(char character) => character switch
     {
@@ -113,7 +144,10 @@ public static class SignalChartRenderer
         '8' => [14, 17, 17, 14, 17, 17, 14], '9' => [14, 17, 17, 15, 1, 1, 14],
         'M' => [17, 27, 21, 21, 17, 17, 17], 'H' => [17, 17, 17, 31, 17, 17, 17],
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],
-        'G' => [14, 17, 16, 23, 17, 17, 15],
+        'G' => [14, 17, 16, 23, 17, 17, 15], 'T' => [31, 4, 4, 4, 4, 4, 4],
+        'P' => [30, 17, 17, 30, 16, 16, 16], 'S' => [15, 16, 16, 14, 1, 1, 30],
+        '%' => [17, 2, 4, 8, 17, 0, 0], '.' => [0, 0, 0, 0, 0, 12, 12],
+        ' ' => [0, 0, 0, 0, 0, 0, 0],
         _ => [0, 0, 0, 0, 0, 0, 0]
     };
     private static byte[] EncodePng(byte[] pixels, int width, int height)

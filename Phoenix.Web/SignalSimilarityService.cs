@@ -4,7 +4,7 @@ namespace Phoenix.Web;
 /// Compares a new signal with completed target/stop signals. The result is a
 /// historical similarity indicator, not a prediction or trading decision.
 /// </summary>
-public sealed class SignalSimilarityService(ServerOrderStore store)
+public sealed class SignalSimilarityService(ServerOrderStore store, ReviewArchiveStore reviews)
 {
     public async Task<SignalSimilarityResult> CalculateAsync(ServerSignal candidate,
         CancellationToken token = default)
@@ -14,6 +14,8 @@ public sealed class SignalSimilarityService(ServerOrderStore store)
             .Where(x => x.Outcome is "Target" or "StopLoss")
             .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
             .ToArray();
+
+        var archivedFeatures = await reviews.GetTechnicalFeaturesAsync(samples.Select(x => x.Id).ToArray(), token);
 
         var targetCount = samples.Count(x => x.Outcome == "Target");
         var stopCount = samples.Length - targetCount;
@@ -25,7 +27,9 @@ public sealed class SignalSimilarityService(ServerOrderStore store)
         foreach (var sample in samples)
         {
             // Raising the score makes the closest historical setups matter most.
-            var weight = Math.Pow(Similarity(candidate, sample), 4);
+            var sampleFeatures = sample.TechnicalFeatures ??
+                (archivedFeatures.TryGetValue(sample.Id, out var archived) ? archived : null);
+            var weight = Math.Pow(Similarity(candidate, sample, candidate.TechnicalFeatures, sampleFeatures), 4);
             if (sample.Outcome == "Target") targetWeight += weight;
             else stopWeight += weight;
         }
@@ -36,17 +40,32 @@ public sealed class SignalSimilarityService(ServerOrderStore store)
         return new(targetPercent, 100m - targetPercent, samples.Length, targetCount, stopCount);
     }
 
-    internal static double Similarity(ServerSignal candidate, ServerSignal sample)
+    internal static double Similarity(ServerSignal candidate, ServerSignal sample,
+        TechnicalFeatureSnapshot? candidateFeatures = null, TechnicalFeatureSnapshot? sampleFeatures = null)
     {
         var weighted = 0d;
         var totalWeight = 0d;
-        Add(candidate.Direction == sample.Direction ? 1d : 0d, 22d);
-        Add(candidate.Symbol.Equals(sample.Symbol, StringComparison.OrdinalIgnoreCase) ? 1d : 0d, 18d);
-        Add(Closeness(RangeRatio(candidate), RangeRatio(sample)), 22d);
-        Add(Closeness(TargetRatio(candidate), TargetRatio(sample)), 16d);
-        Add(Closeness(StopRatio(candidate), StopRatio(sample)), 12d);
-        AddOptionalText(candidate.Timeframe, sample.Timeframe, 6d);
-        AddOptionalText(candidate.ChartMode, sample.ChartMode, 4d);
+        Add(candidate.Direction == sample.Direction ? 1d : 0d, 9d);
+        Add(candidate.Symbol.Equals(sample.Symbol, StringComparison.OrdinalIgnoreCase) ? 1d : 0d, 3d);
+        Add(Closeness(RangeRatio(candidate), RangeRatio(sample)), 7d);
+        Add(Closeness(TargetRatio(candidate), TargetRatio(sample)), 4d);
+        Add(Closeness(StopRatio(candidate), StopRatio(sample)), 4d);
+        AddOptionalText(candidate.Timeframe, sample.Timeframe, 4d);
+        AddOptionalText(candidate.ChartMode, sample.ChartMode, 2d);
+        if (candidateFeatures is not null && sampleFeatures is not null)
+        {
+            Add(Near(candidateFeatures.Rsi14, sampleFeatures.Rsi14, 1m), 8d);
+            Add(Near(candidateFeatures.AtrPercent, sampleFeatures.AtrPercent, 5m), 7d);
+            Add(Near(candidateFeatures.TrendStrength, sampleFeatures.TrendStrength, 2m), 9d);
+            Add(Near(candidateFeatures.IchimokuPosition, sampleFeatures.IchimokuPosition, 2m), 9d);
+            Add(Near(candidateFeatures.IchimokuCloudBias, sampleFeatures.IchimokuCloudBias, 2m), 6d);
+            Add(Near(candidateFeatures.SupportDistanceAtr, sampleFeatures.SupportDistanceAtr, 10m), 7d);
+            Add(Near(candidateFeatures.ResistanceDistanceAtr, sampleFeatures.ResistanceDistanceAtr, 10m), 7d);
+            Add(Near(candidateFeatures.FibonacciAlignment, sampleFeatures.FibonacciAlignment, 1m), 7d);
+            Add(Near(candidateFeatures.PriceActionScore, sampleFeatures.PriceActionScore, 1m), 7d);
+            Add(Near(candidateFeatures.VolumeRatio, sampleFeatures.VolumeRatio, 3m), 4d);
+            Add(Near(candidateFeatures.ImpulseEfficiency, sampleFeatures.ImpulseEfficiency, 1m), 7d);
+        }
         return totalWeight == 0d ? 0d : weighted / totalWeight;
 
         void Add(double value, double weight)
@@ -60,6 +79,9 @@ public sealed class SignalSimilarityService(ServerOrderStore store)
             if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return;
             Add(left.Equals(right, StringComparison.OrdinalIgnoreCase) ? 1d : 0d, weight);
         }
+
+        static double Near(decimal left, decimal right, decimal scale) =>
+            (double)Math.Clamp(1m - Math.Abs(left - right) / scale, 0m, 1m);
     }
 
     private static double RangeRatio(ServerSignal x) => Ratio(x.Ceiling - x.Floor, x.EntryPrice);

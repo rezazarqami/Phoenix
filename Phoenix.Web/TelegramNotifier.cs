@@ -14,7 +14,7 @@ public sealed record TelegramOptions(string? BotToken, string? ChatId)
 }
 
 public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions bybitOptions,
-    TelegramAccessStore access, BybitDemoClient bybit,
+    TelegramAccessStore access, BybitDemoClient bybit, ServerOrderStore store,
     ILogger<TelegramNotifier> logger)
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
@@ -41,8 +41,8 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
     public Task<bool> OrderSubmittedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"✅ سفارش در Bybit {bybitOptions.EnvironmentName} پذیرفته شد\n{Describe(signal)}\nشناسه سفارش: {signal.BybitOrderId}", token);
 
-    public async Task<bool> TargetReachedAsync(ServerSignal signal, CancellationToken token) => await SendAsync(
-        $"🏆 قیمت به تارگت رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}" + await WalletNotification.ReadAsync(bybit, token), token);
+    public async Task<bool> TargetReachedAsync(ServerSignal signal, CancellationToken token) => await SendResultAsync(
+        signal, $"🏆 <b>قیمت به تارگت رسید</b>\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
     public Task<bool> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🛡️ مرحله ریسک‌فری فعال شد\n{Describe(signal)}\nSL2 Limit (50%): {Format(signal.StopLoss2)}\nStop Market (25%): {Format(signal.RiskFreeStopMarket)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
@@ -50,8 +50,8 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
     public async Task<bool> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) => await SendAsync(
         $"💚 معامله با محافظ ریسک‌فری بسته شد\n{Describe(signal)}\nSL2 Limit: {Format(signal.StopLoss2)}\nStop Market: {Format(signal.RiskFreeStopMarket)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
-    public async Task<bool> StopLossReachedAsync(ServerSignal signal, CancellationToken token) => await SendAsync(
-        $"🛑 قیمت به سطح استاپ‌لاس رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}" + await WalletNotification.ReadAsync(bybit, token), token);
+    public async Task<bool> StopLossReachedAsync(ServerSignal signal, CancellationToken token) => await SendResultAsync(
+        signal, $"🛑 <b>قیمت به سطح استاپ‌لاس رسید</b>\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
     public Task<bool> OrderErrorAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"⚠️ خطای ارسال سفارش {bybitOptions.EnvironmentName}\n{Describe(signal)}\nخطا: {signal.Error}", token);
@@ -146,6 +146,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(chatId), "chat_id");
         content.Add(new StringContent(caption), "caption");
+        content.Add(new StringContent("HTML"), "parse_mode");
         content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
             new[] {
                 new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },
@@ -197,6 +198,25 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
             logger.LogWarning(exception, "Telegram notification failed");
             return false;
         }
+    }
+
+    private async Task<bool> SendResultAsync(ServerSignal signal, string text, CancellationToken token)
+    {
+        var similarity = SimilarityText(signal);
+        var image = await store.GetHistoryImageAsync(signal.Id, token);
+        if (image is null) return await SendAsync(StripHtml(text + similarity), token);
+        var chatId = await ResolveChatIdAsync(token);
+        if (string.IsNullOrWhiteSpace(chatId)) return false;
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(chatId), "chat_id");
+        content.Add(new StringContent(text + similarity), "caption");
+        content.Add(new StringContent("HTML"), "parse_mode");
+        var photo = new ByteArrayContent(image);
+        photo.Headers.ContentType = new("image/png");
+        content.Add(photo, "photo", $"result-{signal.Id:N}.png");
+        using var response = await _httpClient.PostAsync(
+            $"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
+        return response.IsSuccessStatusCode;
     }
 
     private async Task<bool> SendToChatAsync(string chatId, string text, CancellationToken token)
@@ -263,6 +283,12 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
 
     private static string Describe(ServerSignal signal) =>
         $"نماد: {signal.Symbol}\nجهت: {signal.Direction}\nورود: {Format(signal.EntryPrice)}\nتارگت: {Format(signal.TakeProfit)}\nاستاپ: {Format(signal.StopLoss)}\nمقدار ورودی: {Format(signal.PositionSizeUsdt)} USDT";
+
+    private static string SimilarityText(ServerSignal signal) => signal.TargetSimilarityPercent.HasValue
+        ? $"\n\n🟢 <b>درصد تارگت زمان صدور: {Format(signal.TargetSimilarityPercent)}٪</b>\n🔴 <b>درصد استاپ زمان صدور: {Format(signal.StopSimilarityPercent)}٪</b>"
+        : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود";
+
+    private static string StripHtml(string text) => text.Replace("<b>", string.Empty).Replace("</b>", string.Empty);
 
     private static string Format(decimal? value) => value?.ToString("0.################", CultureInfo.InvariantCulture) ?? "—";
     private static string FormatTime(DateTime value) => value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);

@@ -51,6 +51,7 @@ public sealed class SignalSubmissionService(
             queued.RequestedByUsername = NormalizeUsername(requestedByUsername);
             queued.Timeframe = evidence?.Timeframe;
             queued.ChartMode = evidence?.ChartMode;
+            queued.TechnicalFeatures = evidence?.TechnicalFeatures;
             var similarityResult = await similarity.CalculateAsync(queued, token);
             queued.TargetSimilarityPercent = similarityResult.TargetPercent;
             queued.StopSimilarityPercent = similarityResult.StopPercent;

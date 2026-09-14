@@ -54,6 +54,7 @@ public sealed class ServerSignal
     public decimal? TargetSimilarityPercent { get; set; }
     public decimal? StopSimilarityPercent { get; set; }
     public int SimilaritySampleCount { get; set; }
+    public TechnicalFeatureSnapshot? TechnicalFeatures { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {
@@ -348,9 +349,14 @@ public sealed class ServerOrderStore
         , PublicSignalNumber = signal.PublicSignalNumber,
         PublicTelegramMessageId = signal.PublicTelegramMessageId,
         RequestedByUsername = signal.RequestedByUsername,
-        Timeframe = signal.Timeframe, ChartMode = signal.ChartMode
+        Timeframe = signal.Timeframe, ChartMode = signal.ChartMode,
+        TargetSimilarityPercent = signal.TargetSimilarityPercent,
+        StopSimilarityPercent = signal.StopSimilarityPercent,
+        SimilaritySampleCount = signal.SimilaritySampleCount,
+        TechnicalFeatures = signal.TechnicalFeatures
     };
 }
 
 public enum ExclusiveClaimResult { Unavailable, PositionBusy, Claimed }
-public sealed record SignalEvidence(string Timeframe, string ChartMode, byte[] Image);
+public sealed record SignalEvidence(string Timeframe, string ChartMode, byte[] Image,
+    TechnicalFeatureSnapshot? TechnicalFeatures = null);

@@ -247,7 +247,8 @@ public sealed class SignalBatchService(
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
-                    var similarityResult = await similarity.CalculateAsync(new ServerSignal
+                    var technicalFeatures = TechnicalFeatureExtractor.Calculate(option.Candles, selected);
+                    var similarityCandidate = new ServerSignal
                     {
                         Symbol = selected.Symbol,
                         Direction = selected.Direction,
@@ -257,14 +258,16 @@ public sealed class SignalBatchService(
                         TakeProfit = selected.TakeProfit,
                         StopLoss = selected.StopLoss,
                         Timeframe = option.Interval,
-                        ChartMode = option.LineMode ? "Line" : "Candles"
-                    }, token);
+                        ChartMode = option.LineMode ? "Line" : "Candles",
+                        TechnicalFeatures = technicalFeatures
+                    };
+                    var similarityResult = await similarity.CalculateAsync(similarityCandidate, token);
                     var similarityLines = similarityResult.TargetPercent.HasValue && similarityResult.StopPercent.HasValue
-                        ? $"\n🎯 شباهت تاریخی به تارگت: {Format(similarityResult.TargetPercent.Value)}٪\n🛑 شباهت تاریخی به استاپ: {Format(similarityResult.StopPercent.Value)}٪\n📊 تعداد نمونه‌های بررسی‌شده: {similarityResult.SampleCount}"
+                        ? $"\n\n🟢 <b>شباهت فنی به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت فنی به استاپ: {Format(similarityResult.StopPercent.Value)}٪</b>\n📊 نمونه‌های نتیجه‌دار: {similarityResult.SampleCount}"
                         : $"\n📊 شباهت تاریخی: دادهٔ کافی نیست\nتعداد نمونه‌های موجود: {similarityResult.SampleCount}";
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     var image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
-                        TimeframeBadge(chartInterval));
+                        TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent);
                     await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
                     Update(state => state with
                     {
@@ -282,7 +285,7 @@ public sealed class SignalBatchService(
                     if (!accepted) { Update(state => state with { Rejected = state.Rejected + 1 }); continue; }
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
                         selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
-                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image),
+                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image, technicalFeatures),
                         requestedByUsername);
                     await reviews.LinkSignalAsync(key, outcome.Signal?.Id, token);
                     if (outcome.Signal is null)

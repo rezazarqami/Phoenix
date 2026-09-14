@@ -73,6 +73,37 @@ public sealed class ReviewArchiveStore
     public async Task LinkSignalAsync(string key, Guid? signalId, CancellationToken token) =>
         await ChangeAsync(key, "UPDATE reviews SET signal_id=$value WHERE id=$id", signalId?.ToString() ?? "SubmissionFailed", token);
 
+    public async Task<IReadOnlyDictionary<Guid, TechnicalFeatureSnapshot>> GetTechnicalFeaturesAsync(
+        IReadOnlyCollection<Guid> signalIds, CancellationToken token)
+    {
+        if (signalIds.Count == 0) return new Dictionary<Guid, TechnicalFeatureSnapshot>();
+        var wanted = signalIds.ToHashSet();
+        var result = new Dictionary<Guid, TechnicalFeatureSnapshot>();
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT signal_id,metadata,candles FROM reviews WHERE signal_id IS NOT NULL";
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                if (!Guid.TryParse(reader.GetString(0), out var signalId) || !wanted.Contains(signalId)) continue;
+                try
+                {
+                    using var metadata = JsonDocument.Parse(reader.GetString(1));
+                    var candidate = metadata.RootElement.GetProperty("candidate").Deserialize<SignalCandidate>(Json);
+                    var candles = JsonSerializer.Deserialize<BybitKline[]>(reader.GetString(2), Json);
+                    if (candidate is not null && candles is { Length: >= 52 })
+                        result[signalId] = TechnicalFeatureExtractor.Calculate(candles, candidate);
+                }
+                catch { /* A damaged legacy review must not disable similarity. */ }
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
     private async Task<int> ChangeAsync(string key, string sql, string value, CancellationToken token)
     {
         await _gate.WaitAsync(token);

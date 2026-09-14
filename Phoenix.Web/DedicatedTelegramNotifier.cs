@@ -68,6 +68,7 @@ public sealed class DedicatedTelegramNotifier(
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(chatId), "chat_id");
         content.Add(new StringContent(caption), "caption");
+        content.Add(new StringContent("HTML"), "parse_mode");
         content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
             new[] {
                 new { text = "✅ تأیید و ثبت", callback_data = $"batch:yes:{key}" },

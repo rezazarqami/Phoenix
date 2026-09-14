@@ -1,0 +1,25 @@
+name: Deploy Phoenix
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: phoenix-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 91.216.104.210
+          username: phoenix-deploy
+          key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
+          command_timeout: 12m
+          script: |
+            sudo /usr/local/sbin/deploy-phoenix

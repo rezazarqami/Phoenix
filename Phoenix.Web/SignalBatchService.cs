@@ -8,11 +8,12 @@ public sealed class SignalBatchService(
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     SignalSimilarityService similarity,
+    ShadowSignalRuntime shadow,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
     private readonly object _sync = new();
     private BatchState _state = BatchState.Idle;
-    private TaskCompletionSource<bool>? _decision;
+    private TaskCompletionSource<BatchDecision>? _decision;
     private string? _decisionKey;
     private CancellationTokenSource? _runCancellation;
     private readonly Dictionary<string, string> _pendingReasons = new(StringComparer.Ordinal);
@@ -81,7 +82,7 @@ public sealed class SignalBatchService(
     {
         var data = command.Command;
         var parts = data.Split(':');
-        if (parts.Length != 3 || parts[0] != "batch" || parts[1] is not ("yes" or "no" or "reason"))
+        if (parts.Length != 3 || parts[0] != "batch" || parts[1] is not ("yes" or "no" or "reason" or "observe"))
             return false;
         if (parts[1] == "reason")
         {
@@ -104,23 +105,36 @@ public sealed class SignalBatchService(
                 dedicatedRoute, token);
             return true;
         }
-        TaskCompletionSource<bool>? decision;
+        TaskCompletionSource<BatchDecision>? decision;
         lock (_sync)
         {
             if (_decision is null || _decisionKey != parts[2]) return false;
             decision = _decision; _decision = null; _decisionKey = null; _pendingReasons.Clear();
         }
-        var accepted = parts[1] == "yes";
+        var selected = parts[1] switch
+        {
+            "yes" => BatchDecision.Register,
+            "observe" => BatchDecision.Observe,
+            _ => BatchDecision.Reject
+        };
         try
         {
-            if (!await reviews.DecideAsync(parts[2], accepted, token))
+            var saved = selected == BatchDecision.Observe
+                ? await reviews.ObserveAsync(parts[2], token)
+                : await reviews.DecideAsync(parts[2], selected == BatchDecision.Register, token);
+            if (!saved)
                 throw new InvalidOperationException("ثبت پاسخ در آرشیو پیشنهادها ناموفق بود.");
         }
         catch (Exception exception) { decision.TrySetException(exception); throw; }
-        decision.TrySetResult(accepted);
+        decision.TrySetResult(selected);
         if (!string.IsNullOrWhiteSpace(command.CallbackId))
         {
-            var answer = accepted ? "سیگنال تأیید شد؛ در حال ثبت…" : "پیشنهاد رد شد؛ مورد بعدی بررسی می‌شود.";
+            var answer = selected switch
+            {
+                BatchDecision.Register => "سیگنال تأیید شد؛ در حال ثبت…",
+                BatchDecision.Observe => "برای پایش بدون معامله ثبت شد 👁",
+                _ => "پیشنهاد رد شد؛ مورد بعدی بررسی می‌شود."
+            };
             if (dedicatedRoute) await dedicatedTelegram.AnswerCallbackAsync(command.CallbackId, answer, token);
             else await telegram.AnswerCallbackAsync(command.CallbackId, answer, token);
         }
@@ -131,7 +145,7 @@ public sealed class SignalBatchService(
         CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(command.Command) || command.Command.StartsWith('/')) return false;
-        TaskCompletionSource<bool>? decision;
+        TaskCompletionSource<BatchDecision>? decision;
         string key;
         lock (_sync)
         {
@@ -151,7 +165,7 @@ public sealed class SignalBatchService(
                 throw new InvalidOperationException("ثبت دلیل رد در آرشیو پیشنهادها ناموفق بود.");
         }
         catch (Exception exception) { decision.TrySetException(exception); throw; }
-        decision.TrySetResult(false);
+        decision.TrySetResult(BatchDecision.Reject);
         await SendReviewReplyAsync(command.ChatId,
             "✅ پیشنهاد رد شد و دلیل آن همراه عکس در آرشیو ذخیره شد.", dedicatedRoute, token);
         return true;
@@ -249,7 +263,7 @@ public sealed class SignalBatchService(
                     if (!ShouldContinue()) break;
                     var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N");
-                    var decision = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    var decision = new TaskCompletionSource<BatchDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
                     lock (_sync) { _decision = decision; _decisionKey = key; }
                     var chartInterval = ReviewChartInterval(option.Interval);
                     var chartCandles = chartInterval == option.Interval
@@ -279,8 +293,25 @@ public sealed class SignalBatchService(
                     if (!sent)
                         throw new InvalidOperationException("ارسال پیشنهاد به تلگرام ناموفق بود.");
                     proposedKeys.Add(option.ProposalKey);
-                    var accepted = await decision.Task.WaitAsync(token);
-                    if (!accepted) { Update(state => state with { Rejected = state.Rejected + 1 }); continue; }
+                    var selectedDecision = await decision.Task.WaitAsync(token);
+                    if (selectedDecision == BatchDecision.Reject)
+                    {
+                        Update(state => state with { Rejected = state.Rejected + 1 });
+                        continue;
+                    }
+                    if (selectedDecision == BatchDecision.Observe)
+                    {
+                        var observed = await shadow.AddAsync(selected, option.Interval, option.LineMode,
+                            image, technicalFeatures, similarityResult, requestedByUsername, token);
+                        await reviews.LinkSignalAsync(key, observed.Id, token);
+                        proposedKeys.Add(option.ProposalKey);
+                        Update(state => state with
+                        {
+                            Observed = state.Observed + 1,
+                            Message = $"{selected.Symbol} فقط برای پایش ثبت شد؛ در حال رفتن به مورد بعدی…"
+                        });
+                        continue;
+                    }
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
                         selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
                         new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image, technicalFeatures),
@@ -346,6 +377,7 @@ public sealed record BatchState(bool Running, int Target, int Approved, int Reje
     string TimeframeFilter)
 {
     public int Proposed { get; init; }
+    public int Observed { get; init; }
     public bool TimedMode { get; init; }
     public int DurationMinutes { get; init; }
     public DateTimeOffset? EndsAtUtc { get; init; }
@@ -356,3 +388,5 @@ public sealed record BatchState(bool Running, int Target, int Approved, int Reje
 public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt, string? DirectionFilter,
     string? ChartFilter, string? TimeframeFilter, decimal MinimumTargetProbability = 0m,
     bool TimedMode = false, int DurationMinutes = 30);
+
+public enum BatchDecision { Reject, Register, Observe }

@@ -44,11 +44,10 @@ public static class SignalChartRenderer
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
         DrawBadge(pixels, width, height,
             string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG");
-        if (targetSimilarity.HasValue && stopSimilarity.HasValue)
-        {
-            DrawMetricBadge(pixels, width, height, 18, 14, $"TP {targetSimilarity.Value:0.0}%", 12, 104, 72, 56, 211, 159);
-            DrawMetricBadge(pixels, width, height, 18, 62, $"SL {stopSimilarity.Value:0.0}%", 111, 27, 39, 255, 97, 117);
-        }
+        if (targetSimilarity.HasValue)
+            DrawSimilarityBar(pixels, width, height, 18, 14, "TP", targetSimilarity.Value, 31, 170, 118);
+        if (stopSimilarity.HasValue)
+            DrawSimilarityBar(pixels, width, height, 18, 64, "SL", stopSimilarity.Value, 220, 55, 82);
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);
@@ -131,6 +130,32 @@ public static class SignalChartRenderer
                     if ((rows[row] & (1 << (glyphWidth - 1 - column))) != 0)
                         FillRect(pixels, width, height, cursor + column * scale, y + padding + row * scale,
                             scale, scale, textR, textG, textB);
+            cursor += (glyphWidth + gap) * scale;
+        }
+    }
+
+    private static void DrawSimilarityBar(byte[] pixels, int width, int height, int x, int y,
+        string label, decimal score, byte fillR, byte fillG, byte fillB)
+    {
+        const int barWidth = 340, barHeight = 42, scale = 3, glyphWidth = 5, gap = 1;
+        score = Math.Clamp(score, 0m, 100m);
+        FillRect(pixels, width, height, x, y, barWidth, barHeight, 24, 28, 34);
+        var fillWidth = (int)Math.Round((barWidth - 4) * (double)score / 100d);
+        FillRect(pixels, width, height, x + 2, y + 2, fillWidth, barHeight - 4, fillR, fillG, fillB);
+        DrawLine(pixels, width, height, x, y, x + barWidth, y, 238, 238, 238);
+        DrawLine(pixels, width, height, x, y + barHeight, x + barWidth, y + barHeight, 238, 238, 238);
+        DrawLine(pixels, width, height, x, y, x, y + barHeight, 238, 238, 238);
+        DrawLine(pixels, width, height, x + barWidth, y, x + barWidth, y + barHeight, 238, 238, 238);
+        var text = $"{label} {score:0.0}%";
+        var cursor = x + 10;
+        foreach (var character in text)
+        {
+            var rows = Glyph(character);
+            for (var row = 0; row < rows.Length; row++)
+                for (var column = 0; column < glyphWidth; column++)
+                    if ((rows[row] & (1 << (glyphWidth - 1 - column))) != 0)
+                        FillRect(pixels, width, height, cursor + column * scale, y + 10 + row * scale,
+                            scale, scale, 255, 255, 255);
             cursor += (glyphWidth + gap) * scale;
         }
     }

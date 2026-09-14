@@ -129,7 +129,7 @@ public sealed class PublicSignalNotifier
         CancellationToken token)
     {
         var scores = signal.TargetSimilarityPercent.HasValue
-            ? $"\n\n🟢 <b>درصد تارگت زمان صدور: {Format(signal.TargetSimilarityPercent.Value)}٪</b>\n🔴 <b>درصد استاپ زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)}٪</b>"
+            ? $"\n\n🟢 <b>امتیاز تارگت زمان صدور: {Format(signal.TargetSimilarityPercent.Value)} از ۱۰۰</b>\n🔴 <b>امتیاز استاپ زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)} از ۱۰۰</b>"
             : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود";
         var text = headline + scores;
         if (image is null) return ReplyAsync(signal, text.Replace("<b>", "").Replace("</b>", ""), token);

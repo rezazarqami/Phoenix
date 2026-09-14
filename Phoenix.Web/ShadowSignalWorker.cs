@@ -1,3 +1,5 @@
+using Phoenix.Engine.Exchanges.Bybit;
+
 namespace Phoenix.Web;
 
 /// <summary>Observes prices only; it never submits orders and never sends notifications.</summary>

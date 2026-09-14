@@ -20,6 +20,7 @@ builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
+builder.Services.AddSingleton<SignalLearningService>();
 builder.Services.AddSingleton<SignalSimilarityService>();
 builder.Services.AddSingleton<SignalSubmissionService>();
 builder.Services.AddSingleton<SignalPlanPreviewer>();
@@ -43,6 +44,7 @@ builder.Services.AddHttpClient<AiSignalParser>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddHostedService<DemoOrderWorker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<SignalLearningService>());
 builder.Services.AddHostedService<PublicSignalNotificationWorker>();
 builder.Services.AddSingleton<BulkPositionService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<BulkPositionService>());

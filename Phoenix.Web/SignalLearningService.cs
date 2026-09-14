@@ -12,6 +12,7 @@ public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> 
 /// <summary>Prepares completed-signal technical fingerprints before proposals are requested.</summary>
 public sealed class SignalLearningService(
     ServerOrderStore store,
+    ShadowSignalRuntime shadow,
     ReviewArchiveStore reviews,
     ILogger<SignalLearningService> logger) : BackgroundService
 {
@@ -41,7 +42,8 @@ public sealed class SignalLearningService(
         await _refreshGate.WaitAsync(token);
         try
         {
-            var history = await store.GetHistoryAsync(3650, 5000, token);
+            var history = (await store.GetHistoryAsync(3650, 5000, token))
+                .Concat(await shadow.Store.GetHistoryAsync(3650, 5000, token));
             var completed = history.Select(x => x.Signal)
                 .Where(x => x.Outcome is "Target" or "StopLoss")
                 .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)

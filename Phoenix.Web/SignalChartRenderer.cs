@@ -8,7 +8,8 @@ public static class SignalChartRenderer
     public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode,
         string? timeframeBadge = null, decimal? targetSimilarity = null, decimal? stopSimilarity = null)
     {
-        const int width = 1000, height = 600, left = 30, right = 25, top = 25, bottom = 35;
+        const int width = 1000, height = 730, left = 30, right = 25, top = 25, bottom = 165;
+        var footerTop = height - bottom + 14;
         var ceilingIndex = FindNearestIndex(candles, candidate.CeilingTime);
         var floorIndex = FindNearestIndex(candles, candidate.FloorTime);
         var firstAnchor = Math.Min(ceilingIndex, floorIndex);
@@ -42,12 +43,13 @@ public static class SignalChartRenderer
             }
         Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
+        DrawLine(pixels, width, height, 0, footerTop - 8, width - 1, footerTop - 8, 218, 222, 225, 2);
         DrawBadge(pixels, width, height,
-            string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG");
+            string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG", footerTop + 28);
         if (targetSimilarity.HasValue)
-            DrawSimilarityBar(pixels, width, height, 18, 14, "TP", targetSimilarity.Value, 31, 170, 118);
+            DrawSimilarityBar(pixels, width, height, 18, footerTop, "TP", targetSimilarity.Value, 31, 170, 118);
         if (stopSimilarity.HasValue)
-            DrawSimilarityBar(pixels, width, height, 18, 64, "SL", stopSimilarity.Value, 220, 55, 82);
+            DrawSimilarityBar(pixels, width, height, 18, footerTop + 52, "SL", stopSimilarity.Value, 220, 55, 82);
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);
@@ -79,14 +81,13 @@ public static class SignalChartRenderer
         while (true) { FillRect(p, w, h, x0 - thickness / 2, y0 - thickness / 2, thickness, thickness, r, g, b); if (x0 == x1 && y0 == y1) break; var twice = 2 * error; if (twice >= dy) { error += dy; x0 += sx; } if (twice <= dx) { error += dx; y0 += sy; } }
     }
     private static void Put(byte[] p, int w, int h, int x, int y, byte r, byte g, byte b) { if (x < 0 || y < 0 || x >= w || y >= h) return; var i = (y * w + x) * 3; p[i] = r; p[i + 1] = g; p[i + 2] = b; }
-    private static void DrawBadge(byte[] pixels, int width, int height, string text)
+    private static void DrawBadge(byte[] pixels, int width, int height, string text, int y)
     {
         const int scale = 4, glyphWidth = 5, gap = 1, padding = 9;
         text = text.ToUpperInvariant();
         var badgeWidth = padding * 2 + text.Length * glyphWidth * scale + Math.Max(0, text.Length - 1) * gap * scale;
         var badgeHeight = padding * 2 + 7 * scale;
         var x = width - badgeWidth - 18;
-        const int y = 14;
         FillRect(pixels, width, height, x, y, badgeWidth, badgeHeight, 19, 16, 10);
         for (var border = 0; border < 2; border++)
         {

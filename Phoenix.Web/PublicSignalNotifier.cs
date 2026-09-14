@@ -77,13 +77,13 @@ public sealed class PublicSignalNotifier
         ReplyAsync(signal, $"🏆 سیگنال {signal.Symbol} به تارگت رسید.", token);
 
     public Task<int?> TargetReachedAsync(ServerSignal signal, byte[]? image, CancellationToken token) =>
-        ReplyResultAsync(signal, $"🏆 <b>سیگنال {signal.Symbol} به تارگت رسید.</b>", image, token);
+        ReplyResultAsync(signal, $"🏆 <b>سیگنال {signal.Symbol} به تارگت رسید.</b>\n🖼 تصویر مربوط به لحظه صدور سیگنال است.", image, token);
 
     public Task<int?> StopLossReachedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"🛑 سیگنال {signal.Symbol} به استاپ‌لاس رسید.", token);
 
     public Task<int?> StopLossReachedAsync(ServerSignal signal, byte[]? image, CancellationToken token) =>
-        ReplyResultAsync(signal, $"🛑 <b>سیگنال {signal.Symbol} به استاپ‌لاس رسید.</b>", image, token);
+        ReplyResultAsync(signal, $"🛑 <b>سیگنال {signal.Symbol} به استاپ‌لاس رسید.</b>\n🖼 تصویر مربوط به لحظه صدور سیگنال است.", image, token);
 
     public Task<int?> ExpiredAsync(ServerSignal signal, CancellationToken token)
     {

@@ -20,6 +20,7 @@ builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
+builder.Services.AddSingleton<ShadowSignalRuntime>();
 builder.Services.AddSingleton<SignalLearningService>();
 builder.Services.AddSingleton<SignalSimilarityService>();
 builder.Services.AddSingleton<SignalSubmissionService>();
@@ -44,6 +45,7 @@ builder.Services.AddHttpClient<AiSignalParser>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddHostedService<DemoOrderWorker>();
+builder.Services.AddHostedService<ShadowSignalWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<SignalLearningService>());
 builder.Services.AddHostedService<PublicSignalNotificationWorker>();
 builder.Services.AddSingleton<BulkPositionService>();
@@ -410,6 +412,35 @@ app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderS
 });
 
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
+app.MapGet("/api/analysis/shadow-signals", async (ShadowSignalRuntime shadow, CancellationToken token) =>
+{
+    var signals = (await shadow.Store.GetAllAsync(token)).OrderByDescending(x => x.CreatedAtUtc).ToArray();
+    return Results.Ok(new
+    {
+        summary = new
+        {
+            total = signals.Length,
+            waitingEntry = signals.Count(x => x.Status == "Pending"),
+            entered = signals.Count(x => x.Status == "Filled"),
+            target = signals.Count(x => x.Outcome == "Target"),
+            stopLoss = signals.Count(x => x.Outcome == "StopLoss")
+        },
+        signals = signals.Take(100).Select(x => new
+        {
+            x.Id, x.Symbol, x.Direction, x.Status, x.Outcome, x.CreatedAtUtc, x.CompletedAtUtc,
+            x.EntryPrice, x.TakeProfit, x.StopLoss, x.LastPrice, x.Timeframe,
+            targetProbability = x.TargetSimilarityPercent,
+            stopProbability = x.StopSimilarityPercent,
+            imageUrl = $"/api/analysis/shadow-signals/{x.Id}/image"
+        })
+    });
+});
+app.MapGet("/api/analysis/shadow-signals/{id:guid}/image", async (Guid id,
+    ShadowSignalRuntime shadow, CancellationToken token) =>
+{
+    var image = await shadow.Store.GetHistoryImageAsync(id, token);
+    return image is null ? Results.NotFound() : Results.File(image, "image/png");
+});
 app.MapGet("/api/analysis/reviews/export", async (DateTimeOffset? from, DateTimeOffset? to,
     HttpRequest request, ReviewArchiveStore reviews, CancellationToken token) =>
 {

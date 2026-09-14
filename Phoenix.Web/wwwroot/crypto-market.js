@@ -120,6 +120,19 @@ function renderBatch(state) {
 }
 async function pollBatch() { try { const response = await fetch('/api/analysis/signal-batch', { cache: 'no-store' }); if (response.ok) renderBatch(await response.json()); } catch {} }
 setInterval(pollBatch, 4000); pollBatch();
+const shadowStatus = s => s.outcome === 'Target' ? 'تارگت ✅' : s.outcome === 'StopLoss' ? 'استاپ ❌' : s.status === 'Filled' ? 'ورود فعال شده' : 'منتظر ورود';
+async function loadShadowSignals() {
+  try {
+    const response = await fetch('/api/analysis/shadow-signals', { cache: 'no-store' });
+    if (!response.ok) throw new Error('دریافت صف فقط تأیید ناموفق بود.');
+    const data = await response.json(), summary = data.summary;
+    document.querySelector('#shadowCount').textContent = faMarket.format(summary.total);
+    document.querySelector('#shadowSummary').textContent = `منتظر ورود ${faMarket.format(summary.waitingEntry)} · ورود فعال ${faMarket.format(summary.entered)} · تارگت ${faMarket.format(summary.target)} · استاپ ${faMarket.format(summary.stopLoss)}`;
+    document.querySelector('#shadowRows').innerHTML = data.signals.length ? data.signals.map(s => `<a class="shadow-row" href="${s.imageUrl}" target="_blank"><b>${s.symbol}</b><span>${s.direction} · ${s.timeframe || '—'}</span><span>${shadowStatus(s)}</span><span>TP ${faMarket.format(s.targetProbability ?? 0)}٪ / SL ${faMarket.format(s.stopProbability ?? 0)}٪</span></a>`).join('') : '<div class="results-empty">هنوز سیگنالی در این صف نیست.</div>';
+  } catch (error) { document.querySelector('#shadowSummary').textContent = error.message; }
+}
+document.querySelector('#refreshShadow').addEventListener('click', loadShadowSignals);
+document.querySelector('.shadow-signals').addEventListener('toggle', event => { if (event.target.open) loadShadowSignals(); });
 const reportPrice = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 12, useGrouping: false });
 const dateInputValue = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const reportToday = new Date();

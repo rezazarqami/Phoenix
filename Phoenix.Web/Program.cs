@@ -20,6 +20,7 @@ builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
+builder.Services.AddSingleton<SignalSimilarityService>();
 builder.Services.AddSingleton<SignalSubmissionService>();
 builder.Services.AddSingleton<SignalPlanPreviewer>();
 builder.Services.AddSingleton<SignalBatchService>();
@@ -35,6 +36,12 @@ builder.Services.AddSingleton<Strategy2Runtime>();
 builder.Services.AddSingleton(Strategy2TelegramOptions.FromEnvironment());
 builder.Services.AddSingleton<Strategy2TelegramNotifier>();
 builder.Services.AddSingleton<StrategyCalculator>();
+builder.Services.AddSingleton(OpenAiOptions.FromEnvironment());
+builder.Services.AddHttpClient<AiSignalParser>(client =>
+{
+    client.BaseAddress = new Uri("https://api.openai.com/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 builder.Services.AddHostedService<DemoOrderWorker>();
 builder.Services.AddHostedService<PublicSignalNotificationWorker>();
 builder.Services.AddSingleton<BulkPositionService>();
@@ -263,10 +270,19 @@ app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, Telegram
     error = state.Error,
     panelLocked = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PHOENIX_PANEL_KEY")),
     tradingEnabled = DemoOrderWorker.IsTradingEnabled(options),
-    telegramConfigured = telegram.IsConfigured
+    telegramConfigured = telegram.IsConfigured,
+    aiConfigured = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"))
 }));
 
-app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit, CancellationToken token) =>
+app.MapPost("/api/ai/parse-signal", async (AiSignalTextRequest request, AiSignalParser parser,
+    CancellationToken token) =>
+{
+    var result = await parser.ParseAsync(request.Text, token);
+    return result.Complete ? Results.Ok(result) : Results.BadRequest(result);
+});
+
+app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
+    SignalSimilarityService similarity, CancellationToken token) =>
 {
     var signals = await store.GetAllAsync(token);
     foreach (var signal in signals.Where(x => x.Status == "Pending" && x.LeverageSource != "PhoenixFormula"))
@@ -278,6 +294,18 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
             await store.UpdateAsync(signal, token);
         }
         catch { /* A temporary Bybit failure must not make the signal panel unavailable. */ }
+    }
+    foreach (var signal in signals.Where(x => x.CompletedAtUtc is null && x.TargetSimilarityPercent is null))
+    {
+        try
+        {
+            var result = await similarity.CalculateAsync(signal, token);
+            signal.TargetSimilarityPercent = result.TargetPercent;
+            signal.StopSimilarityPercent = result.StopPercent;
+            signal.SimilaritySampleCount = result.SampleCount;
+            await store.UpdateAsync(signal, token);
+        }
+        catch { /* Similarity must never make the live signal panel unavailable. */ }
     }
     return Results.Ok(signals.OrderByDescending(x => x.CreatedAtUtc));
 });

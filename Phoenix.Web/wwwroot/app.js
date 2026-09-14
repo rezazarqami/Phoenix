@@ -24,6 +24,28 @@ const telegramAccessForm = document.querySelector('#telegramAccessForm');
 const telegramAccessMessage = document.querySelector('#telegramAccessMessage');
 let instruments = [];
 
+document.querySelector('#aiParseButton').addEventListener('click', async () => {
+  const button = document.querySelector('#aiParseButton');
+  const note = document.querySelector('#aiSignalMessage');
+  const text = document.querySelector('#aiSignalText').value.trim();
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/ai/parse-signal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error((data.errors || [data.error || 'استخراج اطلاعات ناموفق بود.']).join(' '));
+    if (!instruments.includes(data.signal.symbol)) throw new Error('نماد استخراج‌شده در بازار فعال Bybit وجود ندارد.');
+    selectSymbol(data.signal.symbol);
+    document.querySelector(`#${data.signal.direction.toLowerCase()}`).checked = true;
+    form.elements.ceiling.value = data.signal.ceiling;
+    form.elements.floor.value = data.signal.floor;
+    form.elements.positionSizeUsdt.value = data.signal.positionSizeUsdt;
+    note.textContent = 'اطلاعات استخراج شد. آن‌ها را بررسی کنید و سپس دکمه ثبت را بزنید.';
+  } catch (error) { note.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
 async function loadSession() {
   const response = await fetch('/api/auth/me', { cache: 'no-store' });
   const session = await response.json();
@@ -280,6 +302,7 @@ async function refreshSignals() {
     document.querySelector('#orders').innerHTML = active.length ? active.map(s => `
       <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
       <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
+      <div class="similarity ${s.targetSimilarityPercent == null ? 'insufficient' : ''}">${s.targetSimilarityPercent == null ? `برای محاسبه شباهت، سابقه تارگت و استاپ کافی نیست (${fa.format(s.similaritySampleCount || 0)} نمونه)` : `<span class="target-similarity">شباهت تاریخی به تارگت: <b>${fa.format(s.targetSimilarityPercent)}٪</b></span><span class="stop-similarity">شباهت تاریخی به استاپ: <b>${fa.format(s.stopSimilarityPercent)}٪</b></span><small>${fa.format(s.similaritySampleCount)} نتیجه قبلی</small>`}</div>
       <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'حذف از صف'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
   } catch { /* status indicator already reports connectivity */ }
 }

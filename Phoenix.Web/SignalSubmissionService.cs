@@ -11,6 +11,7 @@ public sealed class SignalSubmissionService(
     BybitDemoClient bybit,
     BybitInstrumentCatalog catalog,
     TelegramNotifier telegram,
+    SignalSimilarityService similarity,
     Strategy2Runtime strategy2,
     Strategy2TelegramNotifier strategy2Telegram)
 {
@@ -50,6 +51,10 @@ public sealed class SignalSubmissionService(
             queued.RequestedByUsername = NormalizeUsername(requestedByUsername);
             queued.Timeframe = evidence?.Timeframe;
             queued.ChartMode = evidence?.ChartMode;
+            var similarityResult = await similarity.CalculateAsync(queued, token);
+            queued.TargetSimilarityPercent = similarityResult.TargetPercent;
+            queued.StopSimilarityPercent = similarityResult.StopPercent;
+            queued.SimilaritySampleCount = similarityResult.SampleCount;
             await store.AddAsync(queued, token, evidence);
             await telegram.SignalQueuedAsync(queued, token);
 

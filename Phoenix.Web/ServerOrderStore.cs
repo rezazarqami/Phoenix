@@ -51,6 +51,9 @@ public sealed class ServerSignal
     public string? RequestedByUsername { get; set; }
     public string? Timeframe { get; set; }
     public string? ChartMode { get; set; }
+    public decimal? TargetSimilarityPercent { get; set; }
+    public decimal? StopSimilarityPercent { get; set; }
+    public int SimilaritySampleCount { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {

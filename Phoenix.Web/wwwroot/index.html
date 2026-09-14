@@ -38,6 +38,13 @@
         <form id="signalForm" novalidate>
           <label id="keyField">کلید ورود پنل<input name="panelKey" type="password" autocomplete="current-password" placeholder="کلید خصوصی پنل"></label>
 
+          <div class="ai-signal-box">
+            <label for="aiSignalText">ورود سریع با AI</label>
+            <textarea id="aiSignalText" rows="3" maxlength="2000" placeholder="مثال: BTCUSDT لانگ، سقف ۶۵۰۰۰، کف ۶۲۰۰۰، ورودی ۲۵ تتر"></textarea>
+            <button id="aiParseButton" class="security-button" type="button">استخراج اطلاعات سیگنال</button>
+            <small id="aiSignalMessage" class="field-hint">AI فقط اطلاعات نوشته‌شده را استخراج می‌کند؛ ثبت سفارش همچنان با تأیید شما انجام می‌شود.</small>
+          </div>
+
           <label class="symbol-label">نماد Bybit Futures
             <div id="symbolPicker" class="symbol-picker">
               <div class="symbol-input-wrap"><span class="search-icon">⌕</span><input id="symbolSearch" type="text" value="BTCUSDT" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="symbolMenu" aria-expanded="false" placeholder="جست‌وجو؛ مثال BTC"><span class="chevron">⌄</span></div>
@@ -127,7 +134,7 @@
     </form>
   </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
   <script src="/bulk-controls.js?v=1"></script>
 </body>
 </html>

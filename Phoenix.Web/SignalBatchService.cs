@@ -20,7 +20,7 @@ public sealed class SignalBatchService(
     public BatchState Status { get { lock (_sync) return _state; } }
 
     public bool Start(int target, decimal positionSizeUsdt, string directionFilter, string chartFilter,
-        string timeframeFilter, bool timedMode, int durationMinutes, string? requestedByUsername,
+        string timeframeFilter, decimal minimumTargetProbability, bool timedMode, int durationMinutes, string? requestedByUsername,
         out string? error)
     {
         lock (_sync)
@@ -37,13 +37,14 @@ public sealed class SignalBatchService(
             _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null,
                 directionFilter, chartFilter, timeframeFilter)
             {
+                MinimumTargetProbability = minimumTargetProbability,
                 TimedMode = timedMode, DurationMinutes = timedMode ? durationMinutes : 0, EndsAtUtc = endsAt
             };
             error = null;
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.ApplicationStopping);
             _runCancellation = runCancellation;
             _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, chartFilter,
-                timeframeFilter, endsAt, requestedByUsername, dedicatedRoute, runCancellation));
+                timeframeFilter, minimumTargetProbability, endsAt, requestedByUsername, dedicatedRoute, runCancellation));
             return true;
         }
     }
@@ -167,7 +168,7 @@ public sealed class SignalBatchService(
         $"{(dedicatedRoute ? 'D' : 'M')}|{command.ChatId}|{command.UserId}";
 
     private async Task RunAsync(int target, decimal positionSizeUsdt, string directionFilter,
-        string chartFilter, string timeframeFilter, DateTimeOffset? endsAt,
+        string chartFilter, string timeframeFilter, decimal minimumTargetProbability, DateTimeOffset? endsAt,
         string? requestedByUsername, bool dedicatedRoute,
         CancellationTokenSource runCancellation)
     {
@@ -226,8 +227,18 @@ public sealed class SignalBatchService(
                                 continue;
                             var distance = Math.Abs(candidate.LastPrice - candidate.EntryPrice) / candidate.EntryPrice * 100m;
                             var proposalKey = ProposalKey(candidate, interval, lineMode);
-                            if (!proposedKeys.Contains(proposalKey))
-                                options.Add(new(candidate, candles, interval, lineMode, distance, proposalKey));
+                            if (proposedKeys.Contains(proposalKey)) continue;
+                            var features = TechnicalFeatureExtractor.Calculate(candles, candidate);
+                            var prediction = await similarity.CalculateAsync(new ServerSignal
+                            {
+                                Symbol = candidate.Symbol, Direction = candidate.Direction,
+                                Timeframe = interval, ChartMode = lineMode ? "Line" : "Candles",
+                                TechnicalFeatures = features
+                            }, token);
+                            if (!prediction.TargetPercent.HasValue ||
+                                prediction.TargetPercent.Value < minimumTargetProbability) continue;
+                            options.Add(new(candidate, candles, interval, lineMode, distance, proposalKey,
+                                features, prediction));
                         }
                     }
                     var closest = options.MinBy(x => x.EntryDistancePercent);
@@ -247,21 +258,8 @@ public sealed class SignalBatchService(
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
-                    var technicalFeatures = TechnicalFeatureExtractor.Calculate(option.Candles, selected);
-                    var similarityCandidate = new ServerSignal
-                    {
-                        Symbol = selected.Symbol,
-                        Direction = selected.Direction,
-                        Ceiling = selected.Ceiling,
-                        Floor = selected.Floor,
-                        EntryPrice = selected.EntryPrice,
-                        TakeProfit = selected.TakeProfit,
-                        StopLoss = selected.StopLoss,
-                        Timeframe = option.Interval,
-                        ChartMode = option.LineMode ? "Line" : "Candles",
-                        TechnicalFeatures = technicalFeatures
-                    };
-                    var similarityResult = await similarity.CalculateAsync(similarityCandidate, token);
+                    var technicalFeatures = option.TechnicalFeatures;
+                    var similarityResult = option.Prediction;
                     var similarityLines = similarityResult.TargetPercent.HasValue
                         ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {Format(similarityResult.StopPercent!.Value)}٪</b>\n🧠 نتایج فنی آموخته‌شده: {similarityResult.SampleCount}"
                         : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
@@ -339,7 +337,8 @@ public sealed class SignalBatchService(
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";
     private sealed record RankedCandidate(SignalCandidate Candidate, IReadOnlyList<BybitKline> Candles,
-        string Interval, bool LineMode, decimal EntryDistancePercent, string ProposalKey);
+        string Interval, bool LineMode, decimal EntryDistancePercent, string ProposalKey,
+        TechnicalFeatureSnapshot TechnicalFeatures, SignalSimilarityResult Prediction);
 }
 
 public sealed record BatchState(bool Running, int Target, int Approved, int Rejected, int Checked,
@@ -350,8 +349,10 @@ public sealed record BatchState(bool Running, int Target, int Approved, int Reje
     public bool TimedMode { get; init; }
     public int DurationMinutes { get; init; }
     public DateTimeOffset? EndsAtUtc { get; init; }
+    public decimal MinimumTargetProbability { get; init; }
     public static BatchState Idle => new(false, 0, 0, 0, 0, null, "صفی فعال نیست.", null, "All", "All", "All");
 }
 
 public sealed record StartSignalBatchRequest(int Count, decimal PositionSizeUsdt, string? DirectionFilter,
-    string? ChartFilter, string? TimeframeFilter, bool TimedMode = false, int DurationMinutes = 30);
+    string? ChartFilter, string? TimeframeFilter, decimal MinimumTargetProbability = 0m,
+    bool TimedMode = false, int DurationMinutes = 30);

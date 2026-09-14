@@ -52,6 +52,9 @@ public sealed class ReviewArchiveStore
     public Task<bool> DecideAsync(string key, bool accepted, CancellationToken token) =>
         DecideAsync(key, accepted, null, token);
 
+    public async Task<bool> ObserveAsync(string key, CancellationToken token) =>
+        await ChangeAsync(key, "UPDATE reviews SET decision='Observed',decided_utc=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=$id AND decision='Unanswered'", "", token) > 0;
+
     public async Task<bool> DecideAsync(string key, bool accepted, string? rejectionReason,
         CancellationToken token)
     {

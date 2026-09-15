@@ -131,7 +131,9 @@ public sealed class PublicSignalNotifier
         var scores = signal.TargetSimilarityPercent.HasValue
             ? $"\n\n🟢 <b>احتمال تارگت در زمان صدور: {Format(signal.TargetSimilarityPercent.Value)}٪</b>\n🔴 <b>احتمال استاپ در زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)}٪</b>"
             : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود";
-        var text = headline + scores;
+        var failure = signal.Outcome == "StopLoss" && !string.IsNullOrWhiteSpace(signal.FailureReason)
+            ? $"\nعلت فنی محتمل: {signal.FailureReason}" : string.Empty;
+        var text = headline + scores + failure;
         if (image is null) return ReplyAsync(signal, text.Replace("<b>", "").Replace("</b>", ""), token);
         return IsDedicatedSignal(signal)
             ? SendDedicatedPhotoAsync(text, image, token)

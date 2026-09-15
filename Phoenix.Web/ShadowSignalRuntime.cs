@@ -15,7 +15,7 @@ public sealed class ShadowSignalRuntime
     }
 
     public async Task<ServerSignal> AddAsync(SignalCandidate candidate, string timeframe, bool lineMode,
-        byte[] image, TechnicalFeatureSnapshot features, SignalSimilarityResult prediction,
+        byte[] image, ProfessionalSignalAnalysis analysis,
         string? requestedByUsername, CancellationToken token)
     {
         var id = Guid.NewGuid();
@@ -28,13 +28,16 @@ public sealed class ShadowSignalRuntime
             ExpirePrice = candidate.Direction == "Long" ? candidate.Ceiling : candidate.Floor,
             Status = "Pending", OrderLinkId = $"observe-{id:N}"[..36], CreatedAtUtc = DateTime.UtcNow,
             RequestedByUsername = requestedByUsername, Timeframe = timeframe,
-            ChartMode = lineMode ? "Line" : "Candles", TechnicalFeatures = features,
-            TargetSimilarityPercent = prediction.TargetPercent,
-            StopSimilarityPercent = prediction.StopPercent,
-            SimilaritySampleCount = prediction.SampleCount
+            ChartMode = lineMode ? "Line" : "Candles", TechnicalFeatures = analysis.Features,
+            AnalysisSummary = string.Join(" | ", analysis.Strengths.Concat(analysis.Risks)),
+            MarketRegime = analysis.MarketRegime,
+            TargetSimilarityPercent = analysis.Prediction.TargetPercent,
+            StopSimilarityPercent = analysis.Prediction.StopPercent,
+            SimilaritySampleCount = analysis.Prediction.SampleCount
         };
         await Store.AddAsync(signal, token,
-            new SignalEvidence(timeframe, signal.ChartMode, image, features));
+            new SignalEvidence(timeframe, signal.ChartMode, image, analysis.Features,
+                signal.AnalysisSummary, signal.MarketRegime));
         return signal;
     }
 }

@@ -52,6 +52,8 @@ public sealed class SignalSubmissionService(
             queued.Timeframe = evidence?.Timeframe;
             queued.ChartMode = evidence?.ChartMode;
             queued.TechnicalFeatures = evidence?.TechnicalFeatures;
+            queued.AnalysisSummary = evidence?.AnalysisSummary;
+            queued.MarketRegime = evidence?.MarketRegime;
             var similarityResult = await similarity.CalculateAsync(queued, token);
             queued.TargetSimilarityPercent = similarityResult.TargetPercent;
             queued.StopSimilarityPercent = similarityResult.StopPercent;

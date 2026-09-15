@@ -7,7 +7,7 @@ public sealed class SignalBatchService(
     MarketCapCatalog markets, BybitDemoClient bybit, SignalCandidateFinder finder,
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
-    SignalSimilarityService similarity,
+    ProfessionalSignalAnalysisService professional,
     ShadowSignalRuntime shadow,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
@@ -242,25 +242,26 @@ public sealed class SignalBatchService(
                             var distance = Math.Abs(candidate.LastPrice - candidate.EntryPrice) / candidate.EntryPrice * 100m;
                             var proposalKey = ProposalKey(candidate, interval, lineMode);
                             if (proposedKeys.Contains(proposalKey)) continue;
-                            var features = TechnicalFeatureExtractor.Calculate(candles, candidate);
-                            var prediction = await similarity.CalculateAsync(new ServerSignal
-                            {
-                                Symbol = candidate.Symbol, Direction = candidate.Direction,
-                                Timeframe = interval, ChartMode = lineMode ? "Line" : "Candles",
-                                TechnicalFeatures = features
-                            }, token);
-                            if (!prediction.TargetPercent.HasValue ||
-                                prediction.TargetPercent.Value < minimumTargetProbability) continue;
-                            options.Add(new(candidate, candles, interval, lineMode, distance, proposalKey,
-                                features, prediction));
+                            options.Add(new(candidate, candles, interval, lineMode, distance, proposalKey));
                         }
                     }
                     var closest = options.MinBy(x => x.EntryDistancePercent);
                     if (closest is not null) pool.Add(closest);
                 }
-                foreach (var option in pool.OrderBy(x => x.EntryDistancePercent))
+                var ranked = pool.OrderBy(x => x.EntryDistancePercent).ToArray();
+                Task<ProfessionalSignalAnalysis>? prepared = null;
+                for (var optionIndex = 0; optionIndex < ranked.Length; optionIndex++)
                 {
                     if (!ShouldContinue()) break;
+                    var option = ranked[optionIndex];
+                    prepared ??= professional.AnalyzeAsync(option.Candidate, option.Candles, option.Interval, token);
+                    var analysis = await prepared;
+                    prepared = optionIndex + 1 < ranked.Length
+                        ? professional.AnalyzeAsync(ranked[optionIndex + 1].Candidate,
+                            ranked[optionIndex + 1].Candles, ranked[optionIndex + 1].Interval, token)
+                        : null;
+                    if (!analysis.Prediction.TargetPercent.HasValue ||
+                        analysis.Prediction.TargetPercent.Value < minimumTargetProbability) continue;
                     var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N");
                     var decision = new TaskCompletionSource<BatchDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -272,10 +273,14 @@ public sealed class SignalBatchService(
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
-                    var technicalFeatures = option.TechnicalFeatures;
-                    var similarityResult = option.Prediction;
+                    var technicalFeatures = analysis.Features;
+                    var similarityResult = analysis.Prediction;
+                    var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
+                        : string.Join("\n", analysis.Strengths.Select(x => $"• {x}"));
+                    var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
+                        : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
                     var similarityLines = similarityResult.TargetPercent.HasValue
-                        ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {Format(similarityResult.StopPercent!.Value)}٪</b>\n🧠 نتایج فنی آموخته‌شده: {similarityResult.SampleCount}"
+                        ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {Format(similarityResult.StopPercent!.Value)}٪</b>\n🌐 رژیم بازار: {analysis.MarketRegime}\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های کالیبراسیون: {similarityResult.CalibrationSampleCount}"
                         : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     var image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
@@ -302,7 +307,7 @@ public sealed class SignalBatchService(
                     if (selectedDecision == BatchDecision.Observe)
                     {
                         var observed = await shadow.AddAsync(selected, option.Interval, option.LineMode,
-                            image, technicalFeatures, similarityResult, requestedByUsername, token);
+                            image, analysis, requestedByUsername, token);
                         await reviews.LinkSignalAsync(key, observed.Id, token);
                         proposedKeys.Add(option.ProposalKey);
                         Update(state => state with
@@ -314,7 +319,8 @@ public sealed class SignalBatchService(
                     }
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
                         selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
-                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image, technicalFeatures),
+                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image,
+                            technicalFeatures, string.Join(" | ", analysis.Strengths.Concat(analysis.Risks)), analysis.MarketRegime),
                         requestedByUsername);
                     await reviews.LinkSignalAsync(key, outcome.Signal?.Id, token);
                     if (outcome.Signal is null)
@@ -368,8 +374,7 @@ public sealed class SignalBatchService(
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";
     private sealed record RankedCandidate(SignalCandidate Candidate, IReadOnlyList<BybitKline> Candles,
-        string Interval, bool LineMode, decimal EntryDistancePercent, string ProposalKey,
-        TechnicalFeatureSnapshot TechnicalFeatures, SignalSimilarityResult Prediction);
+        string Interval, bool LineMode, decimal EntryDistancePercent, string ProposalKey);
 }
 
 public sealed record BatchState(bool Running, int Target, int Approved, int Rejected, int Checked,

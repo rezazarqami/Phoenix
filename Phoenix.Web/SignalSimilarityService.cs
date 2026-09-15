@@ -32,8 +32,19 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             evidenceWeight += relevance;
         }
         var probability = Math.Clamp(targetEvidence / evidenceWeight, 0.05d, 0.95d);
+        var calibration = snapshot.Patterns.Where(x => x.Signal.TargetSimilarityPercent.HasValue &&
+                Math.Abs((double)x.Signal.TargetSimilarityPercent.Value - probability * 100d) <= 12d)
+            .Take(100).ToArray();
+        if (calibration.Length >= 8)
+        {
+            var observed = calibration.Count(x => x.Outcome == "Target") / (double)calibration.Length;
+            var calibrationWeight = Math.Min(0.45d, calibration.Length / 150d);
+            probability = probability * (1d - calibrationWeight) + observed * calibrationWeight;
+        }
+        probability = Math.Clamp(probability, 0.05d, 0.95d);
         var targetPercent = Math.Round((decimal)(probability * 100d), 1);
-        return new(targetPercent, 100m - targetPercent, snapshot.Patterns.Count, targetCount, stopCount);
+        return new(targetPercent, 100m - targetPercent, snapshot.Patterns.Count, targetCount, stopCount,
+            calibration.Length);
     }
 
     // Trade geometry (target, stop, range and position size) is deliberately excluded.
@@ -55,6 +66,14 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         Add(Near(candidateFeatures.PriceActionScore, sampleFeatures.PriceActionScore, 1m), 12d);
         Add(Near(candidateFeatures.VolumeRatio, sampleFeatures.VolumeRatio, 3m), 6d);
         Add(Near(candidateFeatures.ImpulseEfficiency, sampleFeatures.ImpulseEfficiency, 1m), 9d);
+        if (!string.IsNullOrWhiteSpace(sample.AnalysisSummary))
+        {
+            Add(Near(candidateFeatures.HigherTimeframeAlignment, sampleFeatures.HigherTimeframeAlignment, 2m), 14d);
+            Add(Near(candidateFeatures.BitcoinMarketAlignment, sampleFeatures.BitcoinMarketAlignment, 2m), 10d);
+            Add(Near(candidateFeatures.MarketRegimeScore, sampleFeatures.MarketRegimeScore, 1m), 7d);
+            Add(Near(candidateFeatures.StructureScore, sampleFeatures.StructureScore, 1m), 12d);
+            Add(Near(candidateFeatures.LiquiditySweepScore, sampleFeatures.LiquiditySweepScore, 1m), 9d);
+        }
         if (!string.IsNullOrWhiteSpace(candidate.Timeframe) && !string.IsNullOrWhiteSpace(sample.Timeframe))
             Add(candidate.Timeframe.Equals(sample.Timeframe, StringComparison.OrdinalIgnoreCase) ? 1d : 0.65d, 3d);
         return totalWeight == 0d ? 0d : weighted / totalWeight;
@@ -77,6 +96,10 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             Math.Clamp(((double)f.VolumeRatio - 1d) / 2d, -0.5d, 0.5d) * 0.35d +
             Math.Clamp(((double)d.ResistanceRoom - (double)d.SupportRoom) / 10d, -1d, 1d) * 0.45d +
             Math.Clamp(((double)d.Rsi - 0.5d) * 2d, -1d, 1d) * 0.25d;
+        score += (double)f.HigherTimeframeAlignment * 0.85d;
+        score += (double)f.BitcoinMarketAlignment * 0.45d;
+        score += ((double)f.StructureScore - 0.5d) * 1.0d;
+        score += ((double)f.LiquiditySweepScore - 0.5d) * 0.65d;
         return 1d / (1d + Math.Exp(-score));
     }
 
@@ -98,4 +121,4 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
 }
 
 public sealed record SignalSimilarityResult(decimal? TargetPercent, decimal? StopPercent,
-    int SampleCount, int TargetSampleCount, int StopSampleCount);
+    int SampleCount, int TargetSampleCount, int StopSampleCount, int CalibrationSampleCount = 0);

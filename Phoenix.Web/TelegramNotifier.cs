@@ -51,7 +51,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         $"💚 معامله با محافظ ریسک‌فری بسته شد\n{Describe(signal)}\nSL2 Limit: {Format(signal.StopLoss2)}\nStop Market: {Format(signal.RiskFreeStopMarket)}" + await WalletNotification.ReadAsync(bybit, token), token);
 
     public async Task<bool> StopLossReachedAsync(ServerSignal signal, CancellationToken token) => await SendResultAsync(
-        signal, $"🛑 <b>قیمت به سطح استاپ‌لاس رسید</b>\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}\n\n🖼 تصویر: نمودار و درصدهای ثبت‌شده در لحظه صدور سیگنال" + await WalletNotification.ReadAsync(bybit, token), token);
+        signal, $"🛑 <b>قیمت به سطح استاپ‌لاس رسید</b>\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}\nعلت فنی محتمل: {signal.FailureReason ?? "نامشخص"}\n\n🖼 تصویر: نمودار و درصدهای ثبت‌شده در لحظه صدور سیگنال" + await WalletNotification.ReadAsync(bybit, token), token);
 
     public Task<bool> OrderErrorAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"⚠️ خطای ارسال سفارش {bybitOptions.EnvironmentName}\n{Describe(signal)}\nخطا: {signal.Error}", token);

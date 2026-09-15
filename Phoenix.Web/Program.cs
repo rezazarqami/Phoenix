@@ -23,6 +23,7 @@ builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<ShadowSignalRuntime>();
 builder.Services.AddSingleton<SignalLearningService>();
 builder.Services.AddSingleton<SignalSimilarityService>();
+builder.Services.AddSingleton<ProfessionalSignalAnalysisService>();
 builder.Services.AddSingleton<SignalSubmissionService>();
 builder.Services.AddSingleton<SignalPlanPreviewer>();
 builder.Services.AddSingleton<SignalBatchService>();
@@ -379,6 +380,7 @@ app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset?
             item.Signal.CreatedAtUtc, item.Signal.CompletedAtUtc, item.Signal.EntryPrice, item.Signal.TakeProfit,
             item.Signal.StopLoss, item.Signal.AverageFillPrice, item.Signal.Leverage, item.Signal.PositionSizeUsdt,
             item.Signal.Timeframe, item.Signal.ChartMode, item.HasImage,
+            item.Signal.MarketRegime, item.Signal.AnalysisSummary, item.Signal.FailureReason,
             imageUrl = item.HasImage ? $"/api/analysis/results/{item.Signal.Id}/image" : null
         });
     return Results.Ok(new
@@ -401,6 +403,10 @@ app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset?
         byOutcome = signals.Where(signal => !string.IsNullOrWhiteSpace(signal.Outcome))
             .GroupBy(signal => signal.Outcome == "Expired" && signal.ExpireReason == "TargetAfterActivation"
                 ? "ExpiredNearEntry" : signal.Outcome!)
+            .Select(group => new { key = group.Key, count = group.Count() }),
+        byFailureReason = signals.Where(signal => signal.Outcome == "StopLoss" &&
+                !string.IsNullOrWhiteSpace(signal.FailureReason))
+            .GroupBy(signal => signal.FailureReason!).OrderByDescending(group => group.Count())
             .Select(group => new { key = group.Key, count = group.Count() }),
         details
     });

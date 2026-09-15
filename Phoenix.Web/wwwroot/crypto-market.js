@@ -146,7 +146,7 @@ function renderResults(data) {
   document.querySelectorAll('#resultsSummary b').forEach((node, index) => { node.textContent = faMarket.format(values[index] || 0); });
   const label = key => ({ Long:'Long', Short:'Short', Target:'تارگت', StopLoss:'استاپ‌لاس', RiskFree:'ریسک‌فری', Expired:'اکسپایر', ExpiredNearEntry:'اکسپایر نزدیک ورود', 5:'5M', 15:'15M', 60:'1H', 240:'4H' })[key] || key;
   const group = (title, items) => `<section><strong>${title}</strong><div>${(items || []).map(item => `<span>${escapeMarket(label(item.key))}<b>${faMarket.format(item.count)}</b></span>`).join('') || '<small>داده‌ای نیست</small>'}</div></section>`;
-  document.querySelector('#resultsBreakdown').innerHTML = group('بر اساس جهت', data.byDirection) + group('بر اساس تایم‌فریم', data.byTimeframe) + group('بر اساس نتیجه', data.byOutcome);
+  document.querySelector('#resultsBreakdown').innerHTML = group('بر اساس جهت', data.byDirection) + group('بر اساس تایم‌فریم', data.byTimeframe) + group('بر اساس نتیجه', data.byOutcome) + group('علت‌های پرتکرار استاپ', data.byFailureReason);
   const rows = data.details || [];
   document.querySelector('#resultsRows').innerHTML = rows.length ? rows.map(signal => {
     const result = signal.outcome === 'Target' ? 'تارگت' : signal.outcome === 'StopLoss' ? 'استاپ‌لاس' : signal.outcome === 'RiskFree' ? 'ریسک‌فری' : 'اکسپایر نزدیک ورود';
@@ -154,7 +154,8 @@ function renderResults(data) {
     const direction = signal.direction === 'Long' ? 'LONG' : 'SHORT';
     const ended = signal.completedAtUtc ? new Date(signal.completedAtUtc).toLocaleString('fa-IR') : '—';
     const image = signal.imageUrl ? `<a class="result-image" href="${signal.imageUrl}" target="_blank"><img src="${signal.imageUrl}" alt="نمودار ${escapeMarket(signal.symbol)}"><span>مشاهده تصویر</span></a>` : '';
-    return `<article class="result-row"><div class="result-symbol">${image}<strong>${escapeMarket(signal.symbol)}</strong></div><span>${direction}</span><b class="${resultClass}">${result}</b><span class="result-levels"><b>${escapeMarket(label(signal.timeframe || 'نامشخص'))} · ${escapeMarket(signal.chartMode || '')}</b>ENTRY ${reportPrice.format(signal.entryPrice)} · TP ${reportPrice.format(signal.takeProfit)} · SL ${reportPrice.format(signal.stopLoss)}</span><span>${signal.leverage ? faMarket.format(signal.leverage) + '×' : '—'}</span><time>${ended}</time></article>`;
+    const failure = signal.failureReason ? `<small>علت محتمل: ${escapeMarket(signal.failureReason)}</small>` : '';
+    return `<article class="result-row"><div class="result-symbol">${image}<strong>${escapeMarket(signal.symbol)}</strong></div><span>${direction}</span><b class="${resultClass}">${result}${failure}</b><span class="result-levels"><b>${escapeMarket(label(signal.timeframe || 'نامشخص'))} · ${escapeMarket(signal.chartMode || '')}</b>ENTRY ${reportPrice.format(signal.entryPrice)} · TP ${reportPrice.format(signal.takeProfit)} · SL ${reportPrice.format(signal.stopLoss)}</span><span>${signal.leverage ? faMarket.format(signal.leverage) + '×' : '—'}</span><time>${ended}</time></article>`;
   }).join('') : '<div class="results-empty">در این فیلتر نتیجه‌ای برای نمایش وجود ندارد.</div>';
 }
 

@@ -51,7 +51,11 @@ public sealed class ShadowSignalWorker(
         }
 
         if (DemoOrderWorker.TargetReached(signal, price)) Complete(signal, "Target");
-        else if (DemoOrderWorker.StopLossReached(signal, price)) Complete(signal, "StopLoss");
+        else if (DemoOrderWorker.StopLossReached(signal, price))
+        {
+            Complete(signal, "StopLoss");
+            signal.FailureReason = ProfessionalSignalAnalysisService.ExplainStop(signal.TechnicalFeatures);
+        }
         await runtime.Store.UpdateAsync(signal, token);
     }
 

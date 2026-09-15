@@ -271,6 +271,7 @@ public sealed class DemoOrderWorker(
         if (order.StopLossReachedAtUtc is null && StopLossReached(order, price))
         {
             Complete(order, "StopLoss", DateTime.UtcNow);
+            order.FailureReason = ProfessionalSignalAnalysisService.ExplainStop(order.TechnicalFeatures);
             await CancelRiskFreeProtectionAsync(order, token);
             await telegram.StopLossReachedAsync(order, token);
         }

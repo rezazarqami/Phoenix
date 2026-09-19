@@ -979,9 +979,52 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
     True(analysis.Scenarios.Count > 0);
     Equal("Bullish", analysis.Scenarios[0].Direction);
     True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3-shortest").Passed);
-    Equal("2.0", analysis.RuleSetVersion);
+    Equal("3.0-pdf", analysis.RuleSetVersion);
     Equal("اصلاح پس از موج ۵", analysis.Scenarios[0].CurrentWave);
     True(analysis.Scenarios[0].Rules.Where(x => x.IsHard).All(x => x.Passed));
+    True(analysis.Scenarios[0].CoveragePercent >= 18m);
+});
+
+Run("Elliott pivots use Close and ignore wick-only false waves", () =>
+{
+    var closes = Enumerable.Range(0, 100).Select(i => 100m + i * .01m).ToArray();
+    void Shape(int center, decimal price, bool high)
+    {
+        for (var offset = -3; offset <= 3; offset++)
+            closes[center + offset] = high ? price - Math.Abs(offset) : price + Math.Abs(offset);
+    }
+    Shape(8, 100m, false); Shape(22, 120m, true); Shape(36, 110m, false);
+    Shape(50, 145m, true); Shape(65, 130m, false); Shape(82, 155m, true);
+    var candles = closes.Select((close, i) => new BybitKline(i * 60_000L, close,
+        i == 72 ? 999m : close + .1m, i == 73 ? 1m : close - .1m, close, 1m)).ToArray();
+    var analysis = new ElliottWaveAnalyzer().Analyze(candles, 3, 2m);
+    True(analysis.Scenarios.Count > 0);
+    True(analysis.Pivots.All(x => x.Price != 999m && x.Price != 1m));
+});
+
+Run("Elliott hard rules reject invalid impulse counts", () =>
+{
+    ElliottAnalysis Analyze(params decimal[] turns)
+    {
+        var values = Enumerable.Repeat(turns[0] + 10m, 120).ToArray();
+        var centers = new[] { 5, 23, 41, 59, 77, 95 };
+        for (var turn = 0; turn < turns.Length; turn++)
+            for (var offset = -3; offset <= 3; offset++)
+            {
+                var risingExtreme = turn % 2 == 1;
+                values[centers[turn] + offset] = risingExtreme
+                    ? turns[turn] - Math.Abs(offset)
+                    : turns[turn] + Math.Abs(offset);
+            }
+        return new ElliottWaveAnalyzer().Analyze(values.Select((price, i) =>
+            new BybitKline(i * 60_000L, price, price, price, price, 1m)).ToArray(), 3, 2m);
+    }
+    bool HasOriginImpulse(ElliottAnalysis value) => value.Scenarios.Any(x =>
+        (x.Pattern is "Impulse" or "TruncatedImpulse") && x.Waves[0].Time == 5 * 60_000L);
+
+    True(!HasOriginImpulse(Analyze(100m, 120m, 90m, 135m, 112m, 145m))); // wave 2 passed origin
+    True(!HasOriginImpulse(Analyze(100m, 120m, 110m, 125m, 115m, 150m))); // wave 3 shortest
+    True(!HasOriginImpulse(Analyze(100m, 120m, 110m, 145m, 115m, 155m))); // wave 4 overlap
 });
 
 Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>

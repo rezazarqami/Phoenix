@@ -102,14 +102,18 @@ PHOENIX_AUTH_USERNAME=<username>
 PHOENIX_AUTH_PASSWORD=<strong password>
 ```
 
-Elliott ruleset 2.0 reads public Bybit linear-market candles, detects
-configurable swing pivots, separates unbreakable rules from Fibonacci
-guidelines, and ranks impulse, developing impulse, truncated fifth,
-diagonal, zigzag, flat and triangle scenarios. It reports the probable
-current wave, alternatives and invalidation levels. The leading count is
-also drawn over Telegram review and entry-time charts. It does not place
-orders and does not use exchange API credentials. The executable rule map
-is documented in `docs/elliott-rules-fa.md`.
+Elliott ruleset 3.0-pdf derives every pivot from the Close line regardless
+of whether the requested presentation is line or candlesticks. It scans the
+full visible history, prefers counts that explain a material part of the
+chart, and renders the parent degree separately from validated lower-degree
+subwaves. Supported candidates include impulse, developing impulse, truncated
+fifth, diagonal, zigzag, flat, irregular/expanded flat, contracting or
+expanding triangle, W-X-Y and W-X-Y-X-Z. Unbreakable rules invalidate a count;
+Fibonacci ratios and alternation only rank surviving alternatives. The leading
+count, its coverage, lower-degree count and invalidation are included in the
+Telegram review. It does not place orders and does not use exchange API
+credentials. The executable rule map is documented in
+`docs/elliott-rules-fa.md`.
 
 ## Review dataset and completion notifications
 

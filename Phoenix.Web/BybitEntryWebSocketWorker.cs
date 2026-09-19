@@ -12,6 +12,7 @@ public sealed class BybitEntryWebSocketWorker(
     BybitDemoOptions options,
     ServerOrderStore store,
     TelegramNotifier telegram,
+    EntrySignalReviewService entryReview,
     ILogger<BybitEntryWebSocketWorker> logger) : BackgroundService
 {
     private static readonly Uri StreamUri = new("wss://stream.bybit.com/v5/public/linear");
@@ -122,7 +123,12 @@ public sealed class BybitEntryWebSocketWorker(
     private async Task SubmitClaimedAsync(ServerSignal order, CancellationToken token)
     {
         order.Status = "Submitting";
-        await telegram.EntryReachedAsync(order, token);
+        await entryReview.RefreshAndNotifyAsync(order, token);
+        await store.UpdateAsync(order, token);
+        await Task.Delay(TimeSpan.FromSeconds(15), token);
+        var reviewed = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == order.Id);
+        if (reviewed is null || reviewed.Status != "Submitting") return;
+        order = reviewed;
         try
         {
             if (order.LeverageSource != "PhoenixFormula")

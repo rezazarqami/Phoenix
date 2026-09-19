@@ -216,6 +216,25 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    public async Task<bool> CancelEntryReviewAsync(Guid id, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is null || signal.Status is "Filled" or "Closing" || signal.CompletedAtUtc is not null)
+                return false;
+            signal.Status = "Cancelled";
+            signal.Outcome = "Cancelled";
+            signal.CompletedAtUtc = DateTime.UtcNow;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "CancelledAtEntryReview", token);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<bool> TryClaimSubmissionAsync(Guid id, decimal price, CancellationToken token = default)
     {
         await _gate.WaitAsync(token);

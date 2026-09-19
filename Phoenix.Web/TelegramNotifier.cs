@@ -38,6 +38,26 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
     public Task<bool> EntryReachedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"🎯 قیمت به نقطه ورود رسید\n{Describe(signal)}\nقیمت لحظه‌ای: {Format(signal.LastPrice)}", token);
 
+    public async Task<bool> SendEntryReviewAsync(byte[] image, string caption, Guid signalId,
+        CancellationToken token)
+    {
+        if (!options.HasToken) return false;
+        var chatId = await ResolveChatIdAsync(token);
+        if (string.IsNullOrWhiteSpace(chatId)) return false;
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(chatId), "chat_id");
+        content.Add(new StringContent(caption), "caption");
+        content.Add(new StringContent("HTML"), "parse_mode");
+        content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
+            new[] { new { text = "🚫 لغو سیگنال", callback_data = $"entry:cancel:{signalId:N}" } }
+        } })), "reply_markup");
+        var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png");
+        content.Add(photo, "photo", $"entry-{signalId:N}.png");
+        using var response = await _httpClient.PostAsync(
+            $"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
+        return response.IsSuccessStatusCode;
+    }
+
     public Task<bool> OrderSubmittedAsync(ServerSignal signal, CancellationToken token) => SendAsync(
         $"✅ سفارش در Bybit {bybitOptions.EnvironmentName} پذیرفته شد\n{Describe(signal)}\nشناسه سفارش: {signal.BybitOrderId}", token);
 

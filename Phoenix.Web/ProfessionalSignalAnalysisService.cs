@@ -13,7 +13,8 @@ public sealed record ProfessionalSignalAnalysis(
 /// <summary>Cached multi-timeframe and BTC context analysis used before human approval.</summary>
 public sealed class ProfessionalSignalAnalysisService(
     BybitDemoClient bybit,
-    SignalSimilarityService predictor)
+    SignalSimilarityService predictor,
+    ReviewArchiveStore reviews)
 {
     private static readonly string[] ContextIntervals = ["15", "60", "240", "D"];
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -35,12 +36,16 @@ public sealed class ProfessionalSignalAnalysisService(
 
         var btc = bitcoinTasks.Select(x => TechnicalFeatureExtractor.Calculate(x.Value.Result, candidate)).ToArray();
         var bitcoinAlignment = btc.Average(x => DirectionalTrend(x, direction));
-        var primary = snapshots.FirstOrDefault(x => x.Interval == signalInterval).Features
+        var primaryMatch = snapshots.FirstOrDefault(x => x.Interval == signalInterval);
+        var primary = primaryMatch.Features
             ?? TechnicalFeatureExtractor.Calculate(signalCandles, candidate);
         var regimeScore = snapshots.Average(x => Math.Abs(x.Features.TrendStrength));
         var regime = regimeScore >= 0.62m ? "روند قدرتمند" : regimeScore <= 0.22m ? "رنج/فشرده" : "روند متوسط";
         var structure = snapshots.Sum(x => x.Features.StructureScore * weights[x.Interval]) / weights.Values.Sum();
         var sweep = snapshots.Sum(x => x.Features.LiquiditySweepScore * weights[x.Interval]) / weights.Values.Sum();
+        var otherFib = ContextIntervals.Where(x => x != signalInterval)
+            .Select(x => TimeframeFibAlignment(symbolTasks[x].Result, candidate.EntryPrice))
+            .DefaultIfEmpty(0m).Max();
         var enriched = primary with
         {
             HigherTimeframeAlignment = alignment,
@@ -62,11 +67,27 @@ public sealed class ProfessionalSignalAnalysisService(
         Explain(structure * 2m - 1m, 0.20m, "ساختار قیمت هم‌جهت است", "ساختار قیمت تأیید نمی‌کند");
         Explain(sweep * 2m - 1m, 0.28m, "جمع‌آوری نقدینگی به نفع ورود", "جمع‌آوری نقدینگی علیه ورود");
         Explain(primary.PriceActionScore * 2m - 1m, 0.20m, "پرایس‌اکشن ورود را تأیید می‌کند", "پرایس‌اکشن ورود ضعیف است");
-        if (primary.FibonacciAlignment >= 0.7m) strengths.Add("هم‌ترازی مناسب فیبوناچی");
-        else if (primary.FibonacciAlignment <= 0.3m) risks.Add("هم‌ترازی فیبوناچی ضعیف");
+        if (otherFib >= 0.7m) strengths.Add("هم‌ترازی فیبوناچی در تایم‌فریم دیگر");
         if (primary.VolumeRatio >= 1.15m) strengths.Add("حجم بالاتر از میانگین");
         else if (primary.VolumeRatio < 0.75m) risks.Add("حجم تأییدکننده نیست");
-        return new(enriched, prediction, regime, strengths.Take(4).ToArray(), risks.Take(4).ToArray());
+        var rejected = await reviews.GetRejectedPatternsAsync(300, token);
+        var similarRejections = rejected.Select(x => new
+            {
+                Pattern = x,
+                Similarity = SignalSimilarityService.TechnicalSimilarity(serverSignal,
+                    new ServerSignal { Direction = x.Candidate.Direction, Timeframe = x.Candidate.Interval },
+                    enriched, x.Features)
+            })
+            .Where(x => x.Similarity >= 0.76d).OrderByDescending(x => x.Similarity).Take(5).ToArray();
+        if (prediction.TargetPercent.HasValue && similarRejections.Length > 0)
+        {
+            var penalty = Math.Min(15m, similarRejections.Sum(x => (decimal)(x.Similarity - 0.75d) * 12m));
+            var target = Math.Clamp(prediction.TargetPercent.Value - penalty, 5m, 95m);
+            prediction = prediction with { TargetPercent = target, StopPercent = 100m - target };
+            foreach (var reason in similarRejections.Select(x => x.Pattern.Reason).Distinct().Take(2))
+                risks.Add($"طبق رد قبلی شما: {reason}");
+        }
+        return new(enriched, prediction, regime, strengths.Take(5).ToArray(), risks.Take(5).ToArray());
 
         void Explain(decimal value, decimal threshold, string positive, string negative)
         {
@@ -100,6 +121,21 @@ public sealed class ProfessionalSignalAnalysisService(
     private static decimal DirectionalTrend(TechnicalFeatureSnapshot f, decimal direction) =>
         Math.Clamp((f.TrendStrength * 0.45m + f.IchimokuPosition * 0.35m +
             f.IchimokuCloudBias * 0.20m) * direction, -1m, 1m);
+
+    private static decimal TimeframeFibAlignment(IReadOnlyList<BybitKline> source, decimal entry)
+    {
+        var candles = source.Skip(Math.Max(0, source.Count - 240)).ToArray();
+        if (candles.Length < 20) return 0m;
+        var high = candles.Max(x => x.High);
+        var low = candles.Min(x => x.Low);
+        var range = high - low;
+        if (range <= 0m) return 0m;
+        var nearest = new[] { 0.236m, 0.382m, 0.5m, 0.618m, 0.786m }
+            .Select(level => Math.Min(Math.Abs(entry - (low + range * level)),
+                Math.Abs(entry - (high - range * level))))
+            .Min();
+        return Math.Clamp(1m - nearest / (range * 0.035m), 0m, 1m);
+    }
 
     private sealed record CacheEntry(DateTime AtUtc, IReadOnlyList<BybitKline> Candles);
 }

@@ -107,6 +107,36 @@ public sealed class ReviewArchiveStore
         finally { _gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<RejectedReviewPattern>> GetRejectedPatternsAsync(
+        int limit = 300, CancellationToken token = default)
+    {
+        var result = new List<RejectedReviewPattern>();
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT metadata,candles,rejection_reason FROM reviews WHERE decision='Rejected' AND rejection_reason IS NOT NULL ORDER BY decided_utc DESC LIMIT $limit";
+            command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 1000));
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                try
+                {
+                    using var metadata = JsonDocument.Parse(reader.GetString(0));
+                    var candidate = metadata.RootElement.GetProperty("candidate").Deserialize<SignalCandidate>(Json);
+                    var candles = JsonSerializer.Deserialize<BybitKline[]>(reader.GetString(1), Json);
+                    var reason = reader.GetString(2).Trim();
+                    if (candidate is null || candles is not { Length: >= 52 } || reason.Length == 0) continue;
+                    result.Add(new(candidate, TechnicalFeatureExtractor.Calculate(candles, candidate), reason));
+                }
+                catch { /* A legacy review must not disable live analysis. */ }
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
     private async Task<int> ChangeAsync(string key, string sql, string value, CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -205,3 +235,6 @@ public sealed class ReviewArchiveStore
         return connection;
     }
 }
+
+public sealed record RejectedReviewPattern(SignalCandidate Candidate,
+    TechnicalFeatureSnapshot Features, string Reason);

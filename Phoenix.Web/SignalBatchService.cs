@@ -215,6 +215,8 @@ public sealed class SignalBatchService(
                         Checked = state.Checked + 1, CurrentSymbol = asset.Symbol,
                         Message = $"در حال یافتن نزدیک‌ترین سیگنال‌ها؛ بررسی {asset.Symbol}…"
                     });
+                    try
+                    {
                     var active = (await orders.GetAllAsync(token)).Where(x =>
                         x.Symbol.Equals(asset.Symbol, StringComparison.OrdinalIgnoreCase) &&
                         x.Status is "Pending" or "Submitting" or "Submitted" or "Filled").ToArray();
@@ -247,6 +249,17 @@ public sealed class SignalBatchService(
                     }
                     var closest = options.MinBy(x => x.EntryDistancePercent);
                     if (closest is not null) pool.Add(closest);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Skipping {Symbol}; market scan failed", asset.Symbol);
+                        Update(state => state with
+                        {
+                            Error = null,
+                            Message = $"بررسی {asset.Symbol} موقتاً ناموفق بود؛ صف ادامه دارد…"
+                        });
+                    }
                 }
                 var ranked = pool.OrderBy(x => x.EntryDistancePercent).ToArray();
                 Task<ProfessionalSignalAnalysis>? prepared = null;
@@ -255,7 +268,20 @@ public sealed class SignalBatchService(
                     if (!ShouldContinue()) break;
                     var option = ranked[optionIndex];
                     prepared ??= professional.AnalyzeAsync(option.Candidate, option.Candles, option.Interval, token);
-                    var analysis = await prepared;
+                    ProfessionalSignalAnalysis analysis;
+                    try { analysis = await prepared; }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Skipping {Symbol}; professional analysis failed", option.Candidate.Symbol);
+                        prepared = null;
+                        Update(state => state with
+                        {
+                            Error = null,
+                            Message = $"تحلیل {option.Candidate.Symbol} موقتاً ناموفق بود؛ صف ادامه دارد…"
+                        });
+                        continue;
+                    }
                     prepared = optionIndex + 1 < ranked.Length
                         ? professional.AnalyzeAsync(ranked[optionIndex + 1].Candidate,
                             ranked[optionIndex + 1].Candles, ranked[optionIndex + 1].Interval, token)
@@ -267,9 +293,19 @@ public sealed class SignalBatchService(
                     var decision = new TaskCompletionSource<BatchDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
                     lock (_sync) { _decision = decision; _decisionKey = key; }
                     var chartInterval = ReviewChartInterval(option.Interval);
-                    var chartCandles = chartInterval == option.Interval
-                        ? option.Candles
-                        : await bybit.GetKlinesAsync(selected.Symbol, chartInterval, 1000, token);
+                    IReadOnlyList<BybitKline> chartCandles;
+                    try
+                    {
+                        chartCandles = chartInterval == option.Interval
+                            ? option.Candles
+                            : await bybit.GetKlinesAsync(selected.Symbol, chartInterval, 1000, token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Skipping {Symbol}; chart candles failed", selected.Symbol);
+                        continue;
+                    }
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
@@ -283,9 +319,19 @@ public sealed class SignalBatchService(
                         ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {Format(similarityResult.StopPercent!.Value)}٪</b>\n🌐 رژیم بازار: {analysis.MarketRegime}\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های کالیبراسیون: {similarityResult.CalibrationSampleCount}"
                         : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
-                    var image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
-                        TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent);
-                    await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
+                    byte[] image;
+                    try
+                    {
+                        image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
+                            TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent);
+                        await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Skipping {Symbol}; chart rendering/archive failed", selected.Symbol);
+                        continue;
+                    }
                     Update(state => state with
                     {
                         Proposed = state.Proposed + 1, CurrentSymbol = selected.Symbol,
@@ -296,7 +342,11 @@ public sealed class SignalBatchService(
                         : await telegram.SendCandidateAsync(image, caption, key, token);
                     await reviews.MarkDeliveryAsync(key, sent, token);
                     if (!sent)
-                        throw new InvalidOperationException("ارسال پیشنهاد به تلگرام ناموفق بود.");
+                    {
+                        logger.LogWarning("Skipping {Symbol}; Telegram candidate delivery failed", selected.Symbol);
+                        Update(state => state with { Error = null, Message = "ارسال یک پیشنهاد ناموفق بود؛ صف ادامه دارد…" });
+                        continue;
+                    }
                     proposedKeys.Add(option.ProposalKey);
                     var selectedDecision = await decision.Task.WaitAsync(token);
                     if (selectedDecision == BatchDecision.Reject)

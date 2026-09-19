@@ -8,6 +8,7 @@ public sealed class DemoOrderWorker(
     ServerState state,
     ServerOrderStore store,
     TelegramNotifier telegram,
+    EntrySignalReviewService entryReview,
     PublicSignalNotifier publicSignals,
     ILogger<DemoOrderWorker> logger) : BackgroundService
 {
@@ -165,7 +166,12 @@ public sealed class DemoOrderWorker(
         order.Status = "Submitting";
         order.Error = null;
         await store.UpdateAsync(order, token);
-        await telegram.EntryReachedAsync(order, token);
+        await entryReview.RefreshAndNotifyAsync(order, token);
+        await store.UpdateAsync(order, token);
+        await Task.Delay(TimeSpan.FromSeconds(15), token);
+        var reviewed = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == order.Id);
+        if (reviewed is null || reviewed.Status != "Submitting") return;
+        order = reviewed;
         try
         {
             if (order.LeverageSource != "PhoenixFormula")

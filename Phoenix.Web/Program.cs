@@ -24,6 +24,7 @@ builder.Services.AddSingleton<ShadowSignalRuntime>();
 builder.Services.AddSingleton<SignalLearningService>();
 builder.Services.AddSingleton<SignalSimilarityService>();
 builder.Services.AddSingleton<ProfessionalSignalAnalysisService>();
+builder.Services.AddSingleton<EntrySignalReviewService>();
 builder.Services.AddSingleton<SignalSubmissionService>();
 builder.Services.AddSingleton<SignalPlanPreviewer>();
 builder.Services.AddSingleton<SignalBatchService>();

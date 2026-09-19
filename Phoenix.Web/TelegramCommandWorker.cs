@@ -9,6 +9,7 @@ public sealed class TelegramCommandWorker(
     ServerOrderStore store,
     ServerState state,
     BybitDemoOptions options,
+    BybitDemoClient bybit,
     SignalBatchService batches,
     ILogger<TelegramCommandWorker> logger) : BackgroundService
 {
@@ -52,6 +53,11 @@ public sealed class TelegramCommandWorker(
                         continue;
                     }
                     if (await batches.HandleReasonAsync(command, false, stoppingToken)) continue;
+                    if (command.Command.StartsWith("entry:cancel:", StringComparison.Ordinal))
+                    {
+                        await HandleEntryCancelAsync(command, false, stoppingToken);
+                        continue;
+                    }
                     if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
                     {
                         await batches.HandleCallbackAsync(command, false, stoppingToken);
@@ -106,6 +112,11 @@ public sealed class TelegramCommandWorker(
                         continue;
                     }
                     if (await batches.HandleReasonAsync(command, true, token)) continue;
+                    if (command.Command.StartsWith("entry:cancel:", StringComparison.Ordinal))
+                    {
+                        await HandleEntryCancelAsync(command, true, token);
+                        continue;
+                    }
                     if (command.Command.StartsWith("batch:", StringComparison.Ordinal))
                     {
                         await batches.HandleCallbackAsync(command, true, token);
@@ -123,6 +134,35 @@ public sealed class TelegramCommandWorker(
                 await Task.Delay(TimeSpan.FromSeconds(3), token);
             }
         }
+    }
+
+    private async Task HandleEntryCancelAsync(TelegramCommand command, bool dedicated, CancellationToken token)
+    {
+        var value = command.Command["entry:cancel:".Length..];
+        if (!Guid.TryParseExact(value, "N", out var id)) return;
+        string answer;
+        try
+        {
+            var signal = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
+            if (signal is null || signal.Status is "Filled" or "Closing")
+                answer = "این سیگنال دیگر قابل لغو نیست.";
+            else
+            {
+                if (signal.Status == "Submitted" && !string.IsNullOrWhiteSpace(signal.BybitOrderId))
+                    await bybit.CancelOrderAsync(signal.Symbol, signal.BybitOrderId, token);
+                answer = await store.CancelEntryReviewAsync(id, token)
+                    ? "سیگنال در بررسی لحظه ورود لغو شد 🚫"
+                    : "این سیگنال قبلاً بسته یا لغو شده است.";
+            }
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Entry review cancellation failed for {SignalId}", id);
+            answer = "لغو سیگنال ناموفق بود؛ وضعیت سفارش را در پنل بررسی کنید.";
+        }
+        if (string.IsNullOrWhiteSpace(command.CallbackId)) return;
+        if (dedicated) await dedicatedTelegram.AnswerCallbackAsync(command.CallbackId, answer, token);
+        else await telegram.AnswerCallbackAsync(command.CallbackId, answer, token);
     }
 
     private async Task<string> BuildReplyAsync(string command, CancellationToken token)

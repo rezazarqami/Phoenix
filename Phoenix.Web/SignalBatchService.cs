@@ -314,7 +314,7 @@ public sealed class SignalBatchService(
                     var elliottScenario = elliott.Scenarios.FirstOrDefault();
                     var elliottLines = elliottScenario is null
                         ? "\n🌊 الیوت: شمارش معتبر کافی پیدا نشد"
-                        : $"\n🌊 الیوت: {PatternName(elliottScenario.Pattern)} · {elliottScenario.CurrentWave} · امتیاز {Format(elliottScenario.Score)}٪\nابطال شمارش: {Format(elliottScenario.StartInvalidation)}";
+                        : $"\n🌊 الیوت: {PatternName(elliottScenario.Pattern)} · {elliottScenario.CurrentWave} · امتیاز {Format(elliottScenario.Score)}٪\nپوشش شمارش: {Format(elliottScenario.CoveragePercent)}٪ · ریزموج معتبر: {elliottScenario.Subwaves.Count}\nمبنای محاسبه: خط Close\nابطال شمارش: {Format(elliottScenario.StartInvalidation)}";
                     var technicalFeatures = analysis.Features;
                     var similarityResult = analysis.Prediction;
                     var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
@@ -433,7 +433,8 @@ public sealed class SignalBatchService(
         "TruncatedImpulse" => "ایمپالس با موج پنجم ناقص", "EndingDiagonal" => "دیاگونال پایانی",
         "DevelopingDiagonal" => "دیاگونال در حال تشکیل", "Zigzag" => "زیگزاگ",
         "Flat" => "فلت", "ExpandedFlat" => "فلت گسترش‌یافته", "RunningFlat" => "فلت رانینگ",
-        "ContractingTriangle" => "مثلث همگرا", "ExpandingTriangle" => "مثلث واگرا", _ => value
+        "ContractingTriangle" => "مثلث همگرا", "ExpandingTriangle" => "مثلث واگرا",
+        "DoubleThree" => "اصلاح مرکب W-X-Y", "TripleThree" => "اصلاح مرکب W-X-Y-X-Z", _ => value
     };
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>

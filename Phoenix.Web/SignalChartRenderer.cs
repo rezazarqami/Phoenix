@@ -21,6 +21,18 @@ public static class SignalChartRenderer
         var padding = Math.Clamp(anchorSpan * 5 / 4, 150, 450);
         var viewStart = Math.Max(0, firstAnchor - padding);
         var viewEnd = Math.Min(candles.Count - 1, secondAnchor + padding);
+        // A partial Elliott count is analytically misleading: wave 2 can only be
+        // validated against the origin of wave 1 (point 0). If an overlay is shown,
+        // keep every labelled pivot -- especially point 0 -- inside the image.
+        if (elliott is not null && elliott.Waves.Count > 0)
+        {
+            var allWaves = elliott.Waves.Concat(elliott.Subwaves).ToArray();
+            var waveStart = FindNearestIndex(candles, allWaves.MinBy(x => x.Time)!.Time);
+            var waveEnd = FindNearestIndex(candles, allWaves.MaxBy(x => x.Time)!.Time);
+            var wavePadding = Math.Clamp((waveEnd - waveStart + 1) / 8, 8, 80);
+            viewStart = Math.Min(viewStart, Math.Max(0, waveStart - wavePadding));
+            viewEnd = Math.Max(viewEnd, Math.Min(candles.Count - 1, waveEnd + wavePadding));
+        }
         candles = candles.Skip(viewStart).Take(viewEnd - viewStart + 1).ToArray();
         var pixels = new byte[width * height * 3];
         Fill(pixels, 255, 255, 255);
@@ -46,6 +58,9 @@ public static class SignalChartRenderer
         {
             var wavePoints = elliott.Waves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
+            // Never draw a clipped count. A sequence without its origin cannot be
+            // independently checked against the first hard rule.
+            if (wavePoints.Length != elliott.Waves.Count) wavePoints = [];
             for (var i = 1; i < wavePoints.Length; i++)
                 DrawLine(pixels, width, height, X(wavePoints[i - 1].Index), Y(wavePoints[i - 1].Wave.Price),
                     X(wavePoints[i].Index), Y(wavePoints[i].Wave.Price), 230, 166, 32, 3);
@@ -54,6 +69,28 @@ public static class SignalChartRenderer
                 var x = X(point.Index); var y = Y(point.Wave.Price);
                 FillRect(pixels, width, height, x - 11, y - 11, 22, 22, 19, 16, 10);
                 DrawTinyText(pixels, width, height, x - 7, y - 8, point.Wave.Label, 2, 255, 216, 92);
+            }
+
+            // Draw validated lower-degree structures independently inside each
+            // parent leg. Parent changes break the line so unrelated corrective
+            // and motive subdivisions are never connected visually.
+            foreach (var group in elliott.Subwaves.GroupBy(x => x.Parent))
+            {
+                var children = group.OrderBy(x => x.Time)
+                    .Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
+                    .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
+                for (var i = 1; i < children.Length; i++)
+                    DrawLine(pixels, width, height, X(children[i - 1].Index), Y(children[i - 1].Wave.Price),
+                        X(children[i].Index), Y(children[i].Wave.Price), 59, 111, 214, 2);
+                for (var i = 0; i < children.Length; i++)
+                {
+                    var point = children[i];
+                    var x = X(point.Index); var y = Y(point.Wave.Price);
+                    var offset = i % 2 == 0 ? 13 : -27;
+                    FillRect(pixels, width, height, x - 8, y + offset, 17, 17, 245, 249, 255);
+                    DrawTinyText(pixels, width, height, x - 6, y + offset + 2,
+                        point.Wave.Label, 1, 35, 78, 170);
+                }
             }
         }
         Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);

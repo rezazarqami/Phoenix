@@ -38,7 +38,43 @@ public sealed class PublicSignalNotifier
     public bool IsDedicatedSignal(ServerSignal signal) =>
         _dedicatedOptions.Owns(signal.RequestedByUsername);
 
+    public async Task<IReadOnlyList<TelegramCommand>> GetCommandsAsync(long offset, CancellationToken token)
+    {
+        if (!_options.IsConfigured) return Array.Empty<TelegramCommand>();
+        using var response = await (_httpClient ?? Client).GetAsync(
+            $"https://api.telegram.org/bot{_options.BotToken}/getUpdates?offset={offset}&timeout=25&allowed_updates=%5B%22callback_query%22%5D", token);
+        var json = await response.Content.ReadAsStringAsync(token);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(json);
+        var result = new List<TelegramCommand>();
+        foreach (var update in document.RootElement.GetProperty("result").EnumerateArray())
+        {
+            if (!update.TryGetProperty("callback_query", out var callback) ||
+                !callback.TryGetProperty("data", out var data) ||
+                !callback.TryGetProperty("message", out var message) ||
+                !message.TryGetProperty("chat", out var chat) ||
+                !callback.TryGetProperty("from", out var from)) continue;
+            result.Add(new TelegramCommand(update.GetProperty("update_id").GetInt64(),
+                chat.GetProperty("id").GetInt64().ToString(CultureInfo.InvariantCulture),
+                from.GetProperty("id").GetInt64(), null, "Public user", data.GetString() ?? string.Empty,
+                callback.GetProperty("id").GetString()));
+        }
+        return result;
+    }
+
+    public async Task AnswerCallbackAsync(string callbackId, string text, CancellationToken token)
+    {
+        if (!_options.IsConfigured) return;
+        using var response = await (_httpClient ?? Client).PostAsJsonAsync(
+            $"https://api.telegram.org/bot{_options.BotToken}/answerCallbackQuery",
+            new { callback_query_id = callbackId, text }, token);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<int?> PublishAsync(ServerSignal signal, CancellationToken token)
+        => await PublishAsync(signal, null, token);
+
+    public async Task<int?> PublishAsync(ServerSignal signal, byte[]? image, CancellationToken token)
     {
         if (signal.PublicSignalNumber is null) return null;
         if (IsDedicatedSignal(signal) ? !_dedicatedOptions.IsConfigured : !_options.IsConfigured) return null;
@@ -65,9 +101,15 @@ public sealed class PublicSignalNotifier
 
             (‌1%- از کل سرمایه)
             """;
-        return IsDedicatedSignal(signal)
-            ? await SendDedicatedAsync(text, token)
-            : await SendAsync(_options, text, null, token);
+        var scores = signal.TargetSimilarityPercent.HasValue
+            ? $"\n\n🟢 احتمال تارگت: {Format(signal.TargetSimilarityPercent.Value)}٪\n🔴 احتمال استاپ: {Format(signal.StopSimilarityPercent ?? 0m)}٪"
+            : string.Empty;
+        if (image is not null)
+            return IsDedicatedSignal(signal)
+                ? await SendDedicatedSignalPhotoAsync(text + scores, image, signal.Id, token)
+                : await SendSignalPhotoAsync(_options, text + scores, image, signal.Id, null, token);
+        return IsDedicatedSignal(signal) ? await SendDedicatedAsync(text + scores, token)
+            : await SendAsync(_options, text + scores, null, token);
     }
 
     public Task<int?> RiskFreeReachedAsync(ServerSignal signal, CancellationToken token) =>
@@ -164,6 +206,62 @@ public sealed class PublicSignalNotifier
             firstMessageId ??= messageId;
         }
         return firstMessageId;
+    }
+
+    private async Task<int?> SendDedicatedSignalPhotoAsync(string text, byte[] image, Guid signalId,
+        CancellationToken token)
+    {
+        int? firstMessageId = null;
+        foreach (var chatId in _dedicatedOptions.GetChatIds())
+        {
+            var messageId = await SendSignalPhotoAsync(
+                new PublicSignalTelegramOptions(_dedicatedOptions.BotToken, chatId), text, image, signalId, null, token);
+            firstMessageId ??= messageId;
+        }
+        return firstMessageId;
+    }
+
+    private async Task<int?> SendSignalPhotoAsync(PublicSignalTelegramOptions destination, string caption,
+        byte[] image, Guid signalId, int? replyToMessageId, CancellationToken token)
+    {
+        if (!destination.IsConfigured) return null;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(destination.ChatId!), "chat_id");
+            content.Add(new StringContent(caption), "caption");
+            content.Add(new StringContent(JsonSerializer.Serialize(new { inline_keyboard = new[] {
+                new[] { new { text = "🚫 لغو سیگنال", callback_data = $"public:cancel:{signalId:N}" } }
+            } })), "reply_markup");
+            if (replyToMessageId is { } replyId)
+                content.Add(new StringContent(JsonSerializer.Serialize(new { message_id = replyId })), "reply_parameters");
+            var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png");
+            content.Add(photo, "photo", $"signal-{signalId:N}.png");
+            using var response = await (_httpClient ?? Client).PostAsync(
+                $"https://api.telegram.org/bot{destination.BotToken}/sendPhoto", content, token);
+            var body = await response.Content.ReadAsStringAsync(token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Public Telegram signal photo failed: {Status} {Body}", response.StatusCode, body);
+                return null;
+            }
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.GetProperty("result").GetProperty("message_id").GetInt32();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Public Telegram signal photo failed");
+            return null;
+        }
+    }
+
+    public Task<int?> SendCurrentReviewAsync(ServerSignal signal, byte[] image, CancellationToken token)
+    {
+        var caption = $"📸 شرایط فعلی {signal.Symbol}\n🟢 احتمال تارگت: {Format(signal.TargetSimilarityPercent ?? 0m)}٪\n🔴 احتمال استاپ: {Format(signal.StopSimilarityPercent ?? 0m)}٪\n\nدر صورت نامناسب‌بودن شرایط، سیگنال را لغو کنید.";
+        return IsDedicatedSignal(signal)
+            ? SendDedicatedSignalPhotoAsync(caption, image, signal.Id, token)
+            : SendSignalPhotoAsync(_options, caption, image, signal.Id,
+                signal.PublicTelegramMessageId, token);
     }
 
     private async Task<int?> SendPhotoAsync(PublicSignalTelegramOptions destination, string caption,

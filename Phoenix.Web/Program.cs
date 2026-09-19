@@ -50,6 +50,8 @@ builder.Services.AddHostedService<DemoOrderWorker>();
 builder.Services.AddHostedService<ShadowSignalWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<SignalLearningService>());
 builder.Services.AddHostedService<PublicSignalNotificationWorker>();
+builder.Services.AddHostedService<PublicSignalCommandWorker>();
+builder.Services.AddHostedService<PublicSignalImageBackfillWorker>();
 builder.Services.AddSingleton<BulkPositionService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<BulkPositionService>());
 builder.Services.AddHostedService<BybitEntryWebSocketWorker>();

@@ -104,7 +104,15 @@ public sealed class DemoOrderWorker(
             order.ExpirePrice = order.TakeProfit;
             order.ExpireAdjustedAtUtc = DateTime.UtcNow;
             order.PublicSignalNumber = await store.ReservePublicSignalNumberAsync(order.Id, token);
-            order.PublicTelegramMessageId = await publicSignals.PublishAsync(order, token);
+            byte[]? currentChart = null;
+            try { currentChart = (await entryReview.BuildCurrentAsync(order, token)).Image; }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                logger.LogWarning(exception, "Current public signal chart failed for {Symbol}", order.Symbol);
+            }
+            order.PublicTelegramMessageId = await publicSignals.PublishAsync(order, currentChart, token);
+            if (currentChart is not null && order.PublicTelegramMessageId is > 0)
+                order.PublicReviewImageSentAtUtc = DateTime.UtcNow;
         }
 
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))

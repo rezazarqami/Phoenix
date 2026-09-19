@@ -6,7 +6,8 @@ namespace Phoenix.Web;
 public static class SignalChartRenderer
 {
     public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode,
-        string? timeframeBadge = null, decimal? targetSimilarity = null, decimal? stopSimilarity = null)
+        string? timeframeBadge = null, decimal? targetSimilarity = null, decimal? stopSimilarity = null,
+        ElliottScenario? elliott = null)
     {
         const int width = 1000, height = 730, left = 30, right = 25, top = 25, bottom = 165;
         var footerTop = height - bottom + 14;
@@ -41,6 +42,20 @@ public static class SignalChartRenderer
                 var x = X(i); DrawLine(pixels, width, height, x, Y(candle.High), x, Y(candle.Low), color.R, color.G, color.B);
                 FillRect(pixels, width, height, x - 1, Math.Min(Y(candle.Open), Y(candle.Close)), 3, Math.Max(2, Math.Abs(Y(candle.Open) - Y(candle.Close))), color.R, color.G, color.B);
             }
+        if (elliott is not null)
+        {
+            var wavePoints = elliott.Waves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
+                .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
+            for (var i = 1; i < wavePoints.Length; i++)
+                DrawLine(pixels, width, height, X(wavePoints[i - 1].Index), Y(wavePoints[i - 1].Wave.Price),
+                    X(wavePoints[i].Index), Y(wavePoints[i].Wave.Price), 230, 166, 32, 3);
+            foreach (var point in wavePoints)
+            {
+                var x = X(point.Index); var y = Y(point.Wave.Price);
+                FillRect(pixels, width, height, x - 11, y - 11, 22, 22, 19, 16, 10);
+                DrawTinyText(pixels, width, height, x - 7, y - 8, point.Wave.Label, 2, 255, 216, 92);
+            }
+        }
         Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
         DrawLine(pixels, width, height, 0, footerTop - 8, width - 1, footerTop - 8, 218, 222, 225, 2);
@@ -161,6 +176,20 @@ public static class SignalChartRenderer
         }
     }
 
+    private static void DrawTinyText(byte[] pixels, int width, int height, int x, int y, string text,
+        int scale, byte r, byte g, byte b)
+    {
+        foreach (var character in text.ToUpperInvariant())
+        {
+            var rows = Glyph(character);
+            for (var row = 0; row < rows.Length; row++)
+                for (var column = 0; column < 5; column++)
+                    if ((rows[row] & (1 << (4 - column))) != 0)
+                        FillRect(pixels, width, height, x + column * scale, y + row * scale, scale, scale, r, g, b);
+            x += 6 * scale;
+        }
+    }
+
     private static int[] Glyph(char character) => character switch
     {
         '0' => [14, 17, 19, 21, 25, 17, 14], '1' => [4, 12, 4, 4, 4, 4, 14],
@@ -168,6 +197,9 @@ public static class SignalChartRenderer
         '4' => [2, 6, 10, 18, 31, 2, 2], '5' => [31, 16, 16, 30, 1, 1, 30],
         '6' => [14, 16, 16, 30, 17, 17, 14], '7' => [31, 1, 2, 4, 8, 8, 8],
         '8' => [14, 17, 17, 14, 17, 17, 14], '9' => [14, 17, 17, 15, 1, 1, 14],
+        'A' => [14, 17, 17, 31, 17, 17, 17], 'B' => [30, 17, 17, 30, 17, 17, 30],
+        'C' => [14, 17, 16, 16, 16, 17, 14], 'D' => [30, 17, 17, 17, 17, 17, 30],
+        'E' => [31, 16, 16, 30, 16, 16, 31],
         'M' => [17, 27, 21, 21, 17, 17, 17], 'H' => [17, 17, 17, 31, 17, 17, 17],
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],
         'G' => [14, 17, 16, 23, 17, 17, 15], 'T' => [31, 4, 4, 4, 4, 4, 4],

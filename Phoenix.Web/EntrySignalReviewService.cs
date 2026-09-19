@@ -5,6 +5,7 @@ namespace Phoenix.Web;
 public sealed class EntrySignalReviewService(
     BybitDemoClient bybit,
     ProfessionalSignalAnalysisService professional,
+    ElliottWaveAnalyzer elliottAnalyzer,
     TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ILogger<EntrySignalReviewService> logger)
@@ -40,12 +41,14 @@ public sealed class EntrySignalReviewService(
             {
                 logger.LogWarning(exception, "Entry-time AI refresh failed for {Symbol}; sending chart with stored probabilities", signal.Symbol);
             }
+            var elliott = elliottAnalyzer.Analyze(candles, 5, 0.6m).Scenarios.FirstOrDefault();
             var image = SignalChartRenderer.Render(candles, candidate, false,
-                Badge(interval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent);
+                Badge(interval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent, elliott);
             var caption = $"🎯 <b>قیمت به نقطه ورود رسید</b>\nنماد: {signal.Symbol}\nجهت: {signal.Direction}\n" +
                 $"احتمال {(analysis is null ? "آخرین" : "جدید")} تارگت: {F(signal.TargetSimilarityPercent)}٪\n" +
                 $"احتمال {(analysis is null ? "آخرین" : "جدید")} استاپ: {F(signal.StopSimilarityPercent)}٪\n" +
-                $"رژیم بازار: {signal.MarketRegime ?? "در دسترس نیست"}\n\nاین تصویر مربوط به شرایط فعلی بازار در لحظه ورود است.";
+                $"رژیم بازار: {signal.MarketRegime ?? "در دسترس نیست"}\n" +
+                $"موج فعلی الیوت: {elliott?.CurrentWave ?? "شمارش معتبر کافی نیست"}\n\nاین تصویر مربوط به شرایط فعلی بازار در لحظه ورود است.";
             var sent = dedicatedTelegram.Owns(signal.RequestedByUsername)
                 ? await dedicatedTelegram.SendEntryReviewAsync(image, caption, signal.Id, token)
                 : await telegram.SendEntryReviewAsync(image, caption, signal.Id, token);

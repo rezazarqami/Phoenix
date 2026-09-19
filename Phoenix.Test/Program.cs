@@ -978,7 +978,10 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
     var analysis = new ElliottWaveAnalyzer().Analyze(candles, 3, 2m);
     True(analysis.Scenarios.Count > 0);
     Equal("Bullish", analysis.Scenarios[0].Direction);
-    True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3").Passed);
+    True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3-shortest").Passed);
+    Equal("2.0", analysis.RuleSetVersion);
+    Equal("اصلاح پس از موج ۵", analysis.Scenarios[0].CurrentWave);
+    True(analysis.Scenarios[0].Rules.Where(x => x.IsHard).All(x => x.Passed));
 });
 
 Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>

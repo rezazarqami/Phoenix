@@ -102,10 +102,14 @@ PHOENIX_AUTH_USERNAME=<username>
 PHOENIX_AUTH_PASSWORD=<strong password>
 ```
 
-The first analysis ruleset reads public Bybit linear-market candles, detects
-configurable swing pivots, validates five-wave impulses, ranks up to three
-scenarios, and reports Fibonacci ratios and invalidation levels. It does not
-place orders and does not use exchange API credentials.
+Elliott ruleset 2.0 reads public Bybit linear-market candles, detects
+configurable swing pivots, separates unbreakable rules from Fibonacci
+guidelines, and ranks impulse, developing impulse, truncated fifth,
+diagonal, zigzag, flat and triangle scenarios. It reports the probable
+current wave, alternatives and invalidation levels. The leading count is
+also drawn over Telegram review and entry-time charts. It does not place
+orders and does not use exchange API credentials. The executable rule map
+is documented in `docs/elliott-rules-fa.md`.
 
 ## Review dataset and completion notifications
 

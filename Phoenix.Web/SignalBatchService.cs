@@ -8,6 +8,7 @@ public sealed class SignalBatchService(
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ProfessionalSignalAnalysisService professional,
+    ElliottWaveAnalyzer elliottAnalyzer,
     ShadowSignalRuntime shadow,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
@@ -309,6 +310,11 @@ public sealed class SignalBatchService(
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
+                    var elliott = elliottAnalyzer.Analyze(chartCandles, 5, 0.6m);
+                    var elliottScenario = elliott.Scenarios.FirstOrDefault();
+                    var elliottLines = elliottScenario is null
+                        ? "\n🌊 الیوت: شمارش معتبر کافی پیدا نشد"
+                        : $"\n🌊 الیوت: {PatternName(elliottScenario.Pattern)} · {elliottScenario.CurrentWave} · امتیاز {Format(elliottScenario.Score)}٪\nابطال شمارش: {Format(elliottScenario.StartInvalidation)}";
                     var technicalFeatures = analysis.Features;
                     var similarityResult = analysis.Prediction;
                     var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
@@ -318,12 +324,13 @@ public sealed class SignalBatchService(
                     var similarityLines = similarityResult.TargetPercent.HasValue
                         ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {Format(similarityResult.StopPercent!.Value)}٪</b>\n🌐 رژیم بازار: {analysis.MarketRegime}\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های کالیبراسیون: {similarityResult.CalibrationSampleCount}"
                         : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
-                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
+                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{elliottLines}{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     byte[] image;
                     try
                     {
                         image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
-                            TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent);
+                            TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
+                            elliottScenario);
                         await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -420,6 +427,14 @@ public sealed class SignalBatchService(
     public static string ReviewChartInterval(string signalInterval) => signalInterval == "5" ? "15" : signalInterval;
     private static string IntervalName(string value) => value switch { "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", _ => value };
+    private static string PatternName(string value) => value switch
+    {
+        "Impulse" => "ایمپالس", "DevelopingImpulse" => "ایمپالس در حال تشکیل",
+        "TruncatedImpulse" => "ایمپالس با موج پنجم ناقص", "EndingDiagonal" => "دیاگونال پایانی",
+        "DevelopingDiagonal" => "دیاگونال در حال تشکیل", "Zigzag" => "زیگزاگ",
+        "Flat" => "فلت", "ExpandedFlat" => "فلت گسترش‌یافته", "RunningFlat" => "فلت رانینگ",
+        "ContractingTriangle" => "مثلث همگرا", "ExpandingTriangle" => "مثلث واگرا", _ => value
+    };
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";

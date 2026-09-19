@@ -58,6 +58,7 @@ public sealed class ServerSignal
     public string? AnalysisSummary { get; set; }
     public string? MarketRegime { get; set; }
     public string? FailureReason { get; set; }
+    public DateTime? EntryReviewSentAtUtc { get; set; }
 
     public static ServerSignal FromPreview(Signal signal, BybitOrderPreview preview, decimal? leverage = null)
     {
@@ -378,7 +379,8 @@ public sealed class ServerOrderStore
         TechnicalFeatures = signal.TechnicalFeatures,
         AnalysisSummary = signal.AnalysisSummary,
         MarketRegime = signal.MarketRegime,
-        FailureReason = signal.FailureReason
+        FailureReason = signal.FailureReason,
+        EntryReviewSentAtUtc = signal.EntryReviewSentAtUtc
     };
 }
 

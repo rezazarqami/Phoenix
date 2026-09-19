@@ -53,6 +53,7 @@ builder.Services.AddHostedService<PublicSignalNotificationWorker>();
 builder.Services.AddSingleton<BulkPositionService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<BulkPositionService>());
 builder.Services.AddHostedService<BybitEntryWebSocketWorker>();
+builder.Services.AddHostedService<EntryReviewBackfillWorker>();
 builder.Services.AddHostedService<TelegramCommandWorker>();
 builder.Services.AddSingleton<Strategy2Worker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<Strategy2Worker>());

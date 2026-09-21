@@ -30,15 +30,34 @@ public sealed class ElliottWaveAnalyzer
         }
         foreach (var count in new[] { 5, 4, 3 })
             if (pivots.Count >= count) Add(ScoreDeveloping(pivots.TakeLast(count).ToArray()));
-        var ranked = found.GroupBy(x => $"{x.Pattern}|{string.Join(',', x.Waves.Select(w => w.Time))}")
+        var decorated = found.GroupBy(x => $"{x.Pattern}|{string.Join(',', x.Waves.Select(w => w.Time))}")
             .Select(x => x.MaxBy(y => y.Score)!)
-            // Prefer a structurally valid count that explains the chart, not a
-            // tiny pattern at the right edge. Recency is only a tie breaker.
             .Select(x => AddSubwaves(x, detailPivots))
+            .ToArray();
+        var ranked = decorated
             .Where(x => x.CoveragePercent >= 18m)
             .OrderByDescending(x => x.Score + Math.Min(30m, x.CoveragePercent * .45m)
                 + (x.Subwaves.Count > 0 ? 8m : 0m))
             .ThenByDescending(x => x.Waves[^1].Time).Take(5).ToArray();
+        // The chart overlay must describe the live/right-hand side of the chart.
+        // A high-scoring completed structure in the past is useful context, but
+        // must never hide a valid developing count that reaches the newest pivot.
+        // Developing counts still pass all hard rules in ScoreDeveloping.
+        if (decorated.Length > 0)
+        {
+            var newestEnd = decorated.Max(x => x.Waves[^1].Time);
+            var active = decorated.Where(x => x.Waves[^1].Time == newestEnd)
+                .OrderByDescending(x => x.CoveragePercent)
+                .ThenByDescending(x => x.Score)
+                .First();
+            var context = ranked.FirstOrDefault(x => x.Waves[^1].Time < active.Waves[0].Time)
+                ?? ranked.FirstOrDefault(x => x.Waves[^1].Time < active.Waves[^1].Time);
+            if (context is not null)
+                active = active with { ContextWaves = context.Waves };
+            ranked = new[] { active }.Concat(ranked.Where(x =>
+                    x.Pattern != active.Pattern || !x.Waves.Select(w => w.Time).SequenceEqual(active.Waves.Select(w => w.Time))))
+                .Take(5).ToArray();
+        }
         var message = ranked.Length == 0
             ? "ساختار معتبر پیدا نشد؛ پیوت‌های مهم برای بررسی دستی نمایش داده شده‌اند."
             : "سناریوها با جداسازی قوانین سخت از راهنماهای فیبوناچی و تناوب رتبه‌بندی شده‌اند؛ سناریوی جایگزین را نیز بررسی کنید.";
@@ -292,6 +311,7 @@ public sealed record ElliottScenario(string Direction, decimal Score, IReadOnlyL
     string Pattern, string Phase, string CurrentWave, string Summary)
 {
     public IReadOnlyList<ElliottWavePoint> Subwaves { get; init; } = [];
+    public IReadOnlyList<ElliottWavePoint> ContextWaves { get; init; } = [];
     public decimal CoveragePercent { get; init; }
 }
 public sealed record ElliottWavePoint(string Label, long Time, decimal Price, int Degree = 0, string? Parent = null);

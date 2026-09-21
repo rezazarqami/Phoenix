@@ -104,15 +104,10 @@ public sealed class DemoOrderWorker(
             order.ExpirePrice = order.TakeProfit;
             order.ExpireAdjustedAtUtc = DateTime.UtcNow;
             order.PublicSignalNumber = await store.ReservePublicSignalNumberAsync(order.Id, token);
-            byte[]? currentChart = null;
-            try { currentChart = (await entryReview.BuildCurrentAsync(order, token)).Image; }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                logger.LogWarning(exception, "Current public signal chart failed for {Symbol}", order.Symbol);
-            }
-            order.PublicTelegramMessageId = await publicSignals.PublishAsync(order, currentChart, token);
-            if (currentChart is not null && order.PublicTelegramMessageId is > 0)
-                order.PublicReviewImageSentAtUtc = DateTime.UtcNow;
+            // Persist the activation immediately and never block entry detection on
+            // multi-timeframe analysis, chart rendering, or Telegram delivery.
+            await store.UpdateAsync(order, token);
+            _ = Task.Run(() => PublishPublicSignalAsync(order.Id), CancellationToken.None);
         }
 
         if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
@@ -121,6 +116,29 @@ public sealed class DemoOrderWorker(
         }
 
         await store.UpdateAsync(order, token);
+    }
+
+    private async Task PublishPublicSignalAsync(Guid signalId)
+    {
+        try
+        {
+            var current = (await store.GetAllAsync()).SingleOrDefault(x => x.Id == signalId);
+            if (current is null || current.PublicTelegramMessageId is > 0 || current.CompletedAtUtc is not null) return;
+            byte[]? chart = null;
+            try { chart = (await entryReview.BuildCurrentAsync(current, CancellationToken.None)).Image; }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Background public chart failed for {Symbol}", current.Symbol);
+            }
+            current.PublicTelegramMessageId = await publicSignals.PublishAsync(current, chart, CancellationToken.None);
+            if (chart is not null && current.PublicTelegramMessageId is > 0)
+                current.PublicReviewImageSentAtUtc = DateTime.UtcNow;
+            await store.UpdateAsync(current);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Background public signal publishing failed for {SignalId}", signalId);
+        }
     }
 
     private static bool InitialExpiryReached(ServerSignal order, decimal price) => order.Direction switch

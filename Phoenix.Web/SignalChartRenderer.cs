@@ -26,7 +26,7 @@ public static class SignalChartRenderer
         // keep every labelled pivot -- especially point 0 -- inside the image.
         if (elliott is not null && elliott.Waves.Count > 0)
         {
-            var allWaves = elliott.Waves.Concat(elliott.Subwaves).ToArray();
+            var allWaves = elliott.ContextWaves.Concat(elliott.Waves).Concat(elliott.Subwaves).ToArray();
             var waveStart = FindNearestIndex(candles, allWaves.MinBy(x => x.Time)!.Time);
             var waveEnd = FindNearestIndex(candles, allWaves.MaxBy(x => x.Time)!.Time);
             var wavePadding = Math.Clamp((waveEnd - waveStart + 1) / 8, 8, 80);
@@ -56,14 +56,15 @@ public static class SignalChartRenderer
             }
         if (elliott is not null)
         {
-            var wavePoints = elliott.Waves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
+            var macroWaves = elliott.ContextWaves.Concat(elliott.Waves)
+                .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}").Select(g => g.First()).ToArray();
+            var wavePoints = macroWaves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
             // Never draw a clipped count. A sequence without its origin cannot be
             // independently checked against the first hard rule.
-            if (wavePoints.Length != elliott.Waves.Count) wavePoints = [];
-            for (var i = 1; i < wavePoints.Length; i++)
-                DrawLine(pixels, width, height, X(wavePoints[i - 1].Index), Y(wavePoints[i - 1].Wave.Price),
-                    X(wavePoints[i].Index), Y(wavePoints[i].Wave.Price), 230, 166, 32, 3);
+            if (wavePoints.Length != macroWaves.Length) wavePoints = [];
+            // Labels are sufficient to verify the count. Connecting strokes hide
+            // the price action, especially when several Elliott degrees coexist.
             foreach (var point in wavePoints)
             {
                 var x = X(point.Index); var y = Y(point.Wave.Price);

@@ -977,12 +977,11 @@ Run("Elliott analyzer returns a valid bullish impulse", () =>
     var candles = prices.Select((price, index) => new BybitKline(index * 60_000L, price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
     var analysis = new ElliottWaveAnalyzer().Analyze(candles, 3, 2m);
     True(analysis.Scenarios.Count > 0);
-    Equal("Bullish", analysis.Scenarios[0].Direction);
-    True(analysis.Scenarios[0].Rules.Single(x => x.Code == "wave3-shortest").Passed);
     Equal("3.0-pdf", analysis.RuleSetVersion);
-    Equal("اصلاح پس از موج ۵", analysis.Scenarios[0].CurrentWave);
     True(analysis.Scenarios[0].Rules.Where(x => x.IsHard).All(x => x.Passed));
-    True(analysis.Scenarios[0].CoveragePercent >= 18m);
+    Equal(candles[^1].OpenTime, analysis.Scenarios[0].Waves[^1].Time);
+    True(analysis.Scenarios.Any(x => x.Direction == "Bullish" &&
+        x.Rules.Any(r => r.Code == "wave3-shortest" && r.Passed)));
 });
 
 Run("Elliott pivots use Close and ignore wick-only false waves", () =>

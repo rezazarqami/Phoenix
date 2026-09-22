@@ -55,7 +55,6 @@ builder.Services.AddHostedService<PublicSignalImageBackfillWorker>();
 builder.Services.AddSingleton<BulkPositionService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<BulkPositionService>());
 builder.Services.AddHostedService<BybitEntryWebSocketWorker>();
-builder.Services.AddHostedService<EntryReviewBackfillWorker>();
 builder.Services.AddHostedService<TelegramCommandWorker>();
 builder.Services.AddSingleton<Strategy2Worker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<Strategy2Worker>());
@@ -618,7 +617,7 @@ app.MapPost("/api/positions/close-all/{previewId:guid}", async (Guid previewId, 
 {
     if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);
     // Once explicitly confirmed, disconnecting the browser must not interrupt reconciliation.
-    try { return Results.Ok(new { items = await bulk.CloseAsync(previewId, CancellationToken.None), entriesPaused = true }); }
+    try { return Results.Ok(new { items = await bulk.CloseAsync(previewId, CancellationToken.None), entriesPaused = false }); }
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
     catch { return Results.Problem("عملیات کامل نشد؛ وضعیت صرافی و توقف ورودها را بررسی کنید."); }
 });

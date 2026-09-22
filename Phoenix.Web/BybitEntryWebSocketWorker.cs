@@ -12,7 +12,6 @@ public sealed class BybitEntryWebSocketWorker(
     BybitDemoOptions options,
     ServerOrderStore store,
     TelegramNotifier telegram,
-    EntrySignalReviewService entryReview,
     ILogger<BybitEntryWebSocketWorker> logger) : BackgroundService
 {
     private static readonly Uri StreamUri = new("wss://stream.bybit.com/v5/public/linear");
@@ -107,28 +106,25 @@ public sealed class BybitEntryWebSocketWorker(
         var candidates = _pending.Values.Where(x => x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase));
         foreach (var watch in candidates)
         {
+            ServerSignal? claimed = null;
             await store.ExecutionGate.WaitAsync(token);
             try
             {
-            if (!EntryReached(watch, price) || !await store.TryClaimSubmissionAsync(watch.Id, price, token))
-                continue;
-            _pending.TryRemove(watch.Id, out _);
-            var order = (await store.GetAllAsync(token)).Single(x => x.Id == watch.Id);
-            await SubmitClaimedAsync(order, token);
+                if (EntryReached(watch, price) && await store.TryClaimSubmissionAsync(watch.Id, price, token))
+                {
+                    _pending.TryRemove(watch.Id, out _);
+                    claimed = (await store.GetAllAsync(token)).Single(x => x.Id == watch.Id);
+                }
             }
             finally { store.ExecutionGate.Release(); }
+            // Exchange and Telegram network calls must never hold the shared execution gate.
+            if (claimed is not null) await SubmitClaimedAsync(claimed, token);
         }
     }
 
     private async Task SubmitClaimedAsync(ServerSignal order, CancellationToken token)
     {
         order.Status = "Submitting";
-        await entryReview.RefreshAndNotifyAsync(order, token);
-        await store.UpdateAsync(order, token);
-        await Task.Delay(TimeSpan.FromSeconds(15), token);
-        var reviewed = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == order.Id);
-        if (reviewed is null || reviewed.Status != "Submitting") return;
-        order = reviewed;
         try
         {
             if (order.LeverageSource != "PhoenixFormula")

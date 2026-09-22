@@ -38,6 +38,7 @@ public sealed class DemoOrderWorker(
                     foreach (var order in orders.Where(x =>
                                  (x.Status is "Pending" or "Submitted" or "Filled") && x.Symbol == symbol))
                     {
+                        ServerSignal? claimed = null;
                         await store.ExecutionGate.WaitAsync(stoppingToken);
                         try
                         {
@@ -50,11 +51,11 @@ public sealed class DemoOrderWorker(
                             if (entryReached && IsTradingEnabled(options))
                             {
                                 if (await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken))
-                                    await SubmitAsync(order, stoppingToken);
+                                    claimed = (await store.GetAllAsync(stoppingToken)).Single(x => x.Id == order.Id);
                                 // Another entry worker already claimed it. Never write this stale Pending copy back.
-                                continue;
                             }
-                            await TrackPendingExpiryAsync(order, ticker.LastPrice, stoppingToken);
+                            else
+                                await TrackPendingExpiryAsync(order, ticker.LastPrice, stoppingToken);
                         }
                         else if (order.Status == "Submitted")
                             await SynchronizeOrderAsync(order, ticker.LastPrice, stoppingToken);
@@ -64,6 +65,8 @@ public sealed class DemoOrderWorker(
                             await store.UpdateAsync(order, stoppingToken);
                         }
                         finally { store.ExecutionGate.Release(); }
+                        // Never keep entry detection locked while talking to Bybit or Telegram.
+                        if (claimed is not null) await SubmitAsync(claimed, stoppingToken);
                     }
                 }
                 state.PublicApiConnected = true;
@@ -191,13 +194,6 @@ public sealed class DemoOrderWorker(
     {
         order.Status = "Submitting";
         order.Error = null;
-        await store.UpdateAsync(order, token);
-        await entryReview.RefreshAndNotifyAsync(order, token);
-        await store.UpdateAsync(order, token);
-        await Task.Delay(TimeSpan.FromSeconds(15), token);
-        var reviewed = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == order.Id);
-        if (reviewed is null || reviewed.Status != "Submitting") return;
-        order = reviewed;
         try
         {
             if (order.LeverageSource != "PhoenixFormula")

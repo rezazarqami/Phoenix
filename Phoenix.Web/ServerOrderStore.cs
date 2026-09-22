@@ -113,15 +113,14 @@ public sealed class ServerOrderStore
     private bool _historyMigrated;
     public string NotificationLedgerPath => _filePath + ".public-notifications.json";
     public SemaphoreSlim ExecutionGate { get; } = new(1, 1);
-    public bool EntriesPaused => File.Exists(_filePath + ".entry-pause");
-    public async Task SetEntriesPausedAsync(bool paused, CancellationToken token = default)
+    public bool EntriesPaused => false;
+    public Task SetEntriesPausedAsync(bool paused, CancellationToken token = default)
     {
-        if (paused)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
-            await File.WriteAllTextAsync(_filePath + ".entry-pause", "Manual bulk close", token);
-        }
-        else File.Delete(_filePath + ".entry-pause");
+        // Bulk close already owns ExecutionGate for its entire operation. A persistent
+        // pause file can silently disable every future main-strategy entry after the
+        // operation (and even across deployments), so remove legacy markers instead.
+        File.Delete(_filePath + ".entry-pause");
+        return Task.CompletedTask;
     }
 
     public async Task<int> CancelPendingAsync(string direction, CancellationToken token = default)
@@ -244,7 +243,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
-            if (EntriesPaused || signal is null || signal.Status != "Pending") return false;
+            if (signal is null || signal.Status != "Pending") return false;
             signal.Status = "Submitting";
             signal.LastPrice = price;
             await SaveUnsafeAsync(signals, token);

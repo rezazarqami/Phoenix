@@ -6,7 +6,7 @@ namespace Phoenix.Web;
 /// <summary>Persists each symbol's counts from monthly down to the requested interval.</summary>
 public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer analyzer, ILogger<ElliottCountStore> logger)
 {
-    private static readonly string[] Degrees = ["M", "W", "D", "240", "60", "15", "5"];
+    private static readonly string[] Degrees = ["M", "W", "D", "240", "60", "15", "5", "1"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _directory = Environment.GetEnvironmentVariable("PHOENIX_ELLIOTT_COUNT_DIR")

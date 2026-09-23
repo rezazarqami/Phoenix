@@ -8,7 +8,7 @@ public sealed class SignalBatchService(
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ProfessionalSignalAnalysisService professional,
-    ElliottWaveAnalyzer elliottAnalyzer,
+    ElliottCountStore elliottCounts,
     ShadowSignalRuntime shadow,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
@@ -310,8 +310,14 @@ public sealed class SignalBatchService(
                     var chartTimeframeLine = chartInterval == option.Interval
                         ? string.Empty
                         : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
-                    var elliott = elliottAnalyzer.Analyze(chartCandles, 5, 0.6m);
-                    var elliottScenario = elliott.Scenarios.FirstOrDefault();
+                    ElliottScenario? elliottScenario;
+                    try { elliottScenario = await elliottCounts.AnalyzeAsync(selected.Symbol, chartInterval, chartCandles, token); }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Elliott count unavailable for {Symbol}", selected.Symbol);
+                        elliottScenario = null;
+                    }
                     var elliottLines = elliottScenario is null
                         ? "\n🌊 الیوت: شمارش معتبر کافی پیدا نشد"
                         : $"\n🌊 الیوت: {PatternName(elliottScenario.Pattern)} · {elliottScenario.CurrentWave} · امتیاز {Format(elliottScenario.Score)}٪\nپوشش شمارش: {Format(elliottScenario.CoveragePercent)}٪ · ریزموج معتبر: {elliottScenario.Subwaves.Count}\nمبنای محاسبه: خط Close\nابطال شمارش: {Format(elliottScenario.StartInvalidation)}";

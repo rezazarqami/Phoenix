@@ -57,19 +57,17 @@ public static class SignalChartRenderer
         if (elliott is not null)
         {
             var macroWaves = elliott.ContextWaves.Concat(elliott.Waves)
-                .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}").Select(g => g.First()).ToArray();
+                .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}|{w.Degree}").Select(g => g.First()).ToArray();
             var wavePoints = macroWaves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
-            // Never draw a clipped count. A sequence without its origin cannot be
-            // independently checked against the first hard rule.
-            if (wavePoints.Length != macroWaves.Length) wavePoints = [];
-            // Labels are sufficient to verify the count. Connecting strokes hide
-            // the price action, especially when several Elliott degrees coexist.
+            // Each degree has its own scale. Leave the price trace unobstructed.
             foreach (var point in wavePoints)
             {
                 var x = X(point.Index); var y = Y(point.Wave.Price);
-                FillRect(pixels, width, height, x - 11, y - 11, 22, 22, 19, 16, 10);
-                DrawTinyText(pixels, width, height, x - 7, y - 8, point.Wave.Label, 2, 255, 216, 92);
+                var scale = point.Wave.Degree < 0 ? 3 : 2;
+                var offset = point.Wave.Price >= candles[point.Index].Close ? -21 - scale * 4 : 12;
+                DrawTinyText(pixels, width, height, x - 3 * scale, y + offset,
+                    point.Wave.Label, scale, 112, 71, 6);
             }
 
             // Draw validated lower-degree structures independently inside each
@@ -80,17 +78,13 @@ public static class SignalChartRenderer
                 var children = group.OrderBy(x => x.Time)
                     .Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                     .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
-                for (var i = 1; i < children.Length; i++)
-                    DrawLine(pixels, width, height, X(children[i - 1].Index), Y(children[i - 1].Wave.Price),
-                        X(children[i].Index), Y(children[i].Wave.Price), 59, 111, 214, 2);
                 for (var i = 0; i < children.Length; i++)
                 {
                     var point = children[i];
                     var x = X(point.Index); var y = Y(point.Wave.Price);
-                    var offset = i % 2 == 0 ? 13 : -27;
-                    FillRect(pixels, width, height, x - 8, y + offset, 17, 17, 245, 249, 255);
-                    DrawTinyText(pixels, width, height, x - 6, y + offset + 2,
-                        point.Wave.Label, 1, 35, 78, 170);
+                    var offset = i % 2 == 0 ? 10 : -18;
+                    DrawTinyText(pixels, width, height, x - 3, y + offset,
+                        point.Wave.Label.ToLowerInvariant(), 1, 35, 78, 170);
                 }
             }
         }
@@ -217,7 +211,7 @@ public static class SignalChartRenderer
     private static void DrawTinyText(byte[] pixels, int width, int height, int x, int y, string text,
         int scale, byte r, byte g, byte b)
     {
-        foreach (var character in text.ToUpperInvariant())
+        foreach (var character in text)
         {
             var rows = Glyph(character);
             for (var row = 0; row < rows.Length; row++)
@@ -235,6 +229,9 @@ public static class SignalChartRenderer
         '4' => [2, 6, 10, 18, 31, 2, 2], '5' => [31, 16, 16, 30, 1, 1, 30],
         '6' => [14, 16, 16, 30, 17, 17, 14], '7' => [31, 1, 2, 4, 8, 8, 8],
         '8' => [14, 17, 17, 14, 17, 17, 14], '9' => [14, 17, 17, 15, 1, 1, 14],
+        'a' => [0, 0, 14, 1, 15, 17, 15], 'b' => [16, 16, 30, 17, 17, 17, 30],
+        'c' => [0, 0, 15, 16, 16, 16, 15], 'd' => [1, 1, 15, 17, 17, 17, 15],
+        'e' => [0, 0, 14, 17, 31, 16, 14],
         'A' => [14, 17, 17, 31, 17, 17, 17], 'B' => [30, 17, 17, 30, 17, 17, 30],
         'C' => [14, 17, 16, 16, 16, 17, 14], 'D' => [30, 17, 17, 17, 17, 17, 30],
         'E' => [31, 16, 16, 30, 16, 16, 31],

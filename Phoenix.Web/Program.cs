@@ -19,6 +19,7 @@ builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
+builder.Services.AddSingleton<ElliottCountStore>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<ShadowSignalRuntime>();
 builder.Services.AddSingleton<SignalLearningService>();

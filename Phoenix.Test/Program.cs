@@ -8,6 +8,46 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 
+Run("Second-stage expiry includes a time-ordered evidence photo and risk-free closure a photo", () =>
+{
+    var methods = new List<string>();
+    var captions = new List<string>();
+    var notifier = new PublicSignalNotifier(new("test-token", "test-chat"),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<PublicSignalNotifier>.Instance,
+        new HttpClient(new StubHttpHandler(request =>
+        {
+            methods.Add(request.RequestUri!.AbsolutePath);
+            var content = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            captions.Add(content);
+            return new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"ok\":true,\"result\":{\"message_id\":456}}")
+            };
+        })));
+    var start = DateTime.UtcNow;
+    var signal = new ServerSignal
+    {
+        Symbol = "HYPEUSDT", Direction = "Long", EntryPrice = 94.26m, TakeProfit = 94.95m,
+        PublicTelegramMessageId = 123, ExpireReason = "TargetAfterActivation"
+    };
+    ExpiryEvidence.Record(signal, 94.6m, start);
+    ExpiryEvidence.Record(signal, 94.3m, start.AddSeconds(6));
+    ExpiryEvidence.Record(signal, 95.01m, start.AddSeconds(12), final: true);
+    var image = SignalChartRenderer.RenderExpiryEvidence(signal);
+    True(image.Length > 100 && image[0] == 137 && image[1] == 80);
+    False(ExpiryEvidence.ObservedEntryTouch(signal));
+    notifier.ExpiredAsync(signal, image, default).GetAwaiter().GetResult();
+    True(methods[^1].EndsWith("/sendPhoto"));
+    True(captions[^1].Contains("reply_parameters") && captions[^1].Contains("نمودار قیمت‌های مشاهده‌شده"));
+    ExpiryEvidence.Record(signal, 94.2m, start.AddSeconds(18), final: true);
+    True(ExpiryEvidence.ObservedEntryTouch(signal));
+    notifier.RiskFreeClosedAsync(signal, image, true, default).GetAwaiter().GetResult();
+    True(methods[^1].EndsWith("/sendPhoto") && captions[^1].Contains("نزدیک زمان بسته‌شدن"));
+    signal.ExpireReason = "InitialBoundary";
+    notifier.ExpiredAsync(signal, image, default).GetAwaiter().GetResult();
+    Equal(2, methods.Count);
+});
+
 Run("Public lifecycle notifications require publication and exclude initial expiry", () =>
 {
     var sent = new List<string>();

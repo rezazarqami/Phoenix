@@ -106,6 +106,7 @@ public sealed class DemoOrderWorker(
             order.ExpireStage = "Target";
             order.ExpirePrice = order.TakeProfit;
             order.ExpireAdjustedAtUtc = DateTime.UtcNow;
+            ExpiryEvidence.Record(order, price, order.ExpireAdjustedAtUtc.Value);
             order.PublicSignalNumber = await store.ReservePublicSignalNumberAsync(order.Id, token);
             // Persist the activation immediately and never block entry detection on
             // multi-timeframe analysis, chart rendering, or Telegram delivery.
@@ -113,9 +114,11 @@ public sealed class DemoOrderWorker(
             _ = Task.Run(() => PublishPublicSignalAsync(order.Id), CancellationToken.None);
         }
 
-        if (order.ExpireStage == "Target" && TargetExpiryReached(order, price))
+        if (order.ExpireStage == "Target")
         {
-            Complete(order, "Expired", DateTime.UtcNow, "TargetAfterActivation");
+            var reached = TargetExpiryReached(order, price);
+            ExpiryEvidence.Record(order, price, DateTime.UtcNow, reached);
+            if (reached) Complete(order, "Expired", DateTime.UtcNow, "TargetAfterActivation");
         }
 
         await store.UpdateAsync(order, token);
@@ -133,10 +136,24 @@ public sealed class DemoOrderWorker(
             {
                 logger.LogWarning(exception, "Background public chart failed for {Symbol}", current.Symbol);
             }
-            current.PublicTelegramMessageId = await publicSignals.PublishAsync(current, chart, CancellationToken.None);
-            if (chart is not null && current.PublicTelegramMessageId is > 0)
-                current.PublicReviewImageSentAtUtc = DateTime.UtcNow;
-            await store.UpdateAsync(current);
+            var messageId = await publicSignals.PublishAsync(current, chart, CancellationToken.None);
+            if (messageId is > 0)
+            {
+                // Chart generation can take longer than the remaining expiry window.
+                // Merge only delivery metadata into the latest trading snapshot.
+                await store.ExecutionGate.WaitAsync();
+                try
+                {
+                    var latest = (await store.GetAllAsync()).SingleOrDefault(x => x.Id == signalId);
+                    if (latest is not null)
+                    {
+                        latest.PublicTelegramMessageId = messageId;
+                        if (chart is not null) latest.PublicReviewImageSentAtUtc = DateTime.UtcNow;
+                        await store.UpdateAsync(latest);
+                    }
+                }
+                finally { store.ExecutionGate.Release(); }
+            }
         }
         catch (Exception exception)
         {

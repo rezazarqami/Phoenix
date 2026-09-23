@@ -6,6 +6,7 @@ namespace Phoenix.Web;
 // overwrite a concurrently claimed entry or a terminal trading result.
 public sealed class PublicSignalNotificationWorker(
     ServerOrderStore store, PublicSignalNotifier notifier,
+    EntrySignalReviewService entryReview,
     ILogger<PublicSignalNotificationWorker> logger) : BackgroundService
 {
     public sealed class Ledger
@@ -52,14 +53,34 @@ public sealed class PublicSignalNotificationWorker(
                     if (e.At < ledger.SinceUtc || ledger.Sent.Contains(key)) continue;
                     var resultImage = e.Kind is "Target" or "StopLoss"
                         ? await store.GetHistoryImageAsync(s.Id, token) : null;
+                    byte[]? expiryImage = null;
+                    if (e.Kind == "Expired" && s.ExpireReason == "TargetAfterActivation" &&
+                        s.ExpiryPriceTrail is { Count: > 0 })
+                        expiryImage = SignalChartRenderer.RenderExpiryEvidence(s);
+                    byte[]? riskFreeImage = null;
+                    var riskFreeCurrent = false;
+                    if (e.Kind == "RiskFree")
+                    {
+                        try
+                        {
+                            riskFreeImage = (await entryReview.BuildCurrentAsync(s, token)).Image;
+                            riskFreeCurrent = true;
+                        }
+                        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                        catch (Exception exception)
+                        {
+                            logger.LogWarning(exception, "Risk-free closure chart failed for {Symbol}", s.Symbol);
+                            riskFreeImage = await store.GetHistoryImageAsync(s.Id, token);
+                        }
+                    }
                     var messageId = e.Kind switch
                     {
                         "Opened" => await notifier.OpenedAsync(s, token),
                         "RiskFreeReached" => await notifier.RiskFreeReachedAsync(s, token),
                         "Target" => await notifier.TargetReachedAsync(s, resultImage, token),
                         "StopLoss" => await notifier.StopLossReachedAsync(s, resultImage, token),
-                        "RiskFree" => await notifier.RiskFreeClosedAsync(s, token),
-                        "Expired" => await notifier.ExpiredAsync(s, token),
+                        "RiskFree" => await notifier.RiskFreeClosedAsync(s, riskFreeImage, riskFreeCurrent, token),
+                        "Expired" => await notifier.ExpiredAsync(s, expiryImage, token),
                         "ManualClosed" => await notifier.ManuallyClosedAsync(s, token),
                         _ => await notifier.CancelledAsync(s, token)
                     };

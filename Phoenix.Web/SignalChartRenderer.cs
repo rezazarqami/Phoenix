@@ -5,6 +5,56 @@ namespace Phoenix.Web;
 
 public static class SignalChartRenderer
 {
+    // Event evidence uses persisted ticker observations, not candles that could
+    // conceal the order of entry and target touches inside the same minute.
+    public static byte[] RenderExpiryEvidence(ServerSignal signal)
+    {
+        const int width = 1000, height = 540, left = 95, right = 175, top = 80, bottom = 85;
+        var trail = signal.ExpiryPriceTrail ?? [];
+        if (trail.Count == 0) throw new ArgumentException("Expiry trail is empty.");
+        var pixels = new byte[width * height * 3];
+        Fill(pixels, 255, 255, 255);
+        var min = Math.Min(trail.Min(x => x.Price), Math.Min(signal.EntryPrice, signal.TakeProfit));
+        var max = Math.Max(trail.Max(x => x.Price), Math.Max(signal.EntryPrice, signal.TakeProfit));
+        var pad = Math.Max((max - min) * 0.12m, Math.Max(Math.Abs(max), 1m) * 0.0001m);
+        min -= pad; max += pad;
+        var first = trail[0].AtUtc;
+        var duration = Math.Max(1d, (trail[^1].AtUtc - first).TotalSeconds);
+        int X(SignalPriceSample p) => left + (int)Math.Round((p.AtUtc - first).TotalSeconds / duration *
+            (width - left - right));
+        int Y(decimal price) => top + (int)Math.Round((double)((max - price) / (max - min)) *
+            (height - top - bottom));
+        for (var i = 0; i <= 4; i++)
+        {
+            var y = top + i * (height - top - bottom) / 4;
+            DrawLine(pixels, width, height, left, y, width - right, y, 231, 236, 237);
+        }
+        DrawLine(pixels, width, height, left, Y(signal.EntryPrice), width - right, Y(signal.EntryPrice), 36, 92, 198, 2);
+        DrawLine(pixels, width, height, left, Y(signal.TakeProfit), width - right, Y(signal.TakeProfit), 24, 152, 96, 2);
+        DrawTinyText(pixels, width, height, width - right + 10, Y(signal.EntryPrice) - 8,
+            $"ENTRY {signal.EntryPrice.ToString("0.########", System.Globalization.CultureInfo.InvariantCulture)}", 2, 36, 92, 198);
+        DrawTinyText(pixels, width, height, width - right + 10, Y(signal.TakeProfit) - 8,
+            $"TARGET {signal.TakeProfit.ToString("0.########", System.Globalization.CultureInfo.InvariantCulture)}", 2, 24, 126, 80);
+        for (var i = 1; i < trail.Count; i++)
+            DrawLine(pixels, width, height, X(trail[i - 1]), Y(trail[i - 1].Price),
+                X(trail[i]), Y(trail[i].Price), 24, 83, 80, 3);
+        var nearest = trail.MinBy(x => Math.Abs(x.Price - signal.EntryPrice))!;
+        Marker(trail[0], 197, 117, 40);
+        Marker(nearest, 36, 92, 198);
+        Marker(trail[^1], 199, 55, 60);
+        DrawTinyText(pixels, width, height, left, 25, "OBSERVED TICKER PRICES", 3, 25, 45, 50);
+        DrawTinyText(pixels, width, height, left, height - 60,
+            $"START {first:HH:mm:ss} UTC", 2, 197, 117, 40);
+        DrawTinyText(pixels, width, height, left + 245, height - 60,
+            $"NEAREST {nearest.AtUtc:HH:mm:ss} UTC", 2, 36, 92, 198);
+        DrawTinyText(pixels, width, height, left + 525, height - 60,
+            $"EXPIRED {trail[^1].AtUtc:HH:mm:ss} UTC", 2, 199, 55, 60);
+        return EncodePng(pixels, width, height);
+
+        void Marker(SignalPriceSample sample, byte r, byte g, byte b) =>
+            FillRect(pixels, width, height, X(sample) - 5, Y(sample.Price) - 5, 11, 11, r, g, b);
+    }
+
     public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode,
         string? timeframeBadge = null, decimal? targetSimilarity = null, decimal? stopSimilarity = null,
         ElliottScenario? elliott = null)
@@ -296,12 +346,18 @@ public static class SignalChartRenderer
         'A' => [14, 17, 17, 31, 17, 17, 17], 'B' => [30, 17, 17, 30, 17, 17, 30],
         'C' => [14, 17, 16, 16, 16, 17, 14], 'D' => [30, 17, 17, 17, 17, 17, 30],
         'E' => [31, 16, 16, 30, 16, 16, 31],
+        'N' => [17, 25, 25, 21, 19, 19, 17], 'R' => [30, 17, 17, 30, 20, 18, 17],
+        'I' => [31, 4, 4, 4, 4, 4, 31], 'X' => [17, 17, 10, 4, 10, 17, 17],
+        'U' => [17, 17, 17, 17, 17, 17, 14], 'V' => [17, 17, 17, 17, 17, 10, 4],
+        'F' => [31, 16, 16, 30, 16, 16, 16], 'K' => [17, 18, 20, 24, 20, 18, 17],
+        'Y' => [17, 17, 10, 4, 4, 4, 4],
         'M' => [17, 27, 21, 21, 17, 17, 17], 'W' => [17, 17, 17, 21, 21, 21, 10],
         'H' => [17, 17, 17, 31, 17, 17, 17],
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],
         'G' => [14, 17, 16, 23, 17, 17, 15], 'T' => [31, 4, 4, 4, 4, 4, 4],
         'P' => [30, 17, 17, 30, 16, 16, 16], 'S' => [15, 16, 16, 14, 1, 1, 30],
         '%' => [17, 2, 4, 8, 17, 0, 0], '.' => [0, 0, 0, 0, 0, 12, 12],
+        ':' => [0, 12, 12, 0, 12, 12, 0],
         ' ' => [0, 0, 0, 0, 0, 0, 0],
         _ => [0, 0, 0, 0, 0, 0, 0]
     };

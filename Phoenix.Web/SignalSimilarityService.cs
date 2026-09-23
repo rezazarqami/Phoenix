@@ -52,7 +52,34 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         AddNullable(left.EntryCloud, right.EntryCloud, 5d, 2m);
         AddNullable(left.StopCloud, right.StopCloud, 5d, 2m);
         AddNullable(left.TargetCloud, right.TargetCloud, 5d, 2m);
+        var sign = candidate.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
+        var otherSign = sample.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
+        var candidateScales = candidateFeatures.MultiScaleLevels;
+        var sampleScales = sampleFeatures.MultiScaleLevels;
+        if (candidateScales is { Count: > 0 } && sampleScales is { Count: > 0 })
+        {
+            var matches = candidateScales.Join(sampleScales,
+                x => (x.Interval, x.Window), x => (x.Interval, x.Window),
+                (a, b) => (Left: a, Right: b)).ToArray();
+            if (matches.Length > 0)
+            {
+                Add(matches.Average(pair => (
+                    Near(pair.Left.EntryStrength, pair.Right.EntryStrength, 1m) +
+                    Near(pair.Left.StopStrength, pair.Right.StopStrength, 1m) +
+                    Near(pair.Left.TargetStrength, pair.Right.TargetStrength, 1m)) / 3d), 24d);
+                Add(matches.Average(pair => (
+                    Near(pair.Left.CloudEntry * sign, pair.Right.CloudEntry * otherSign, 2m) +
+                    Near(pair.Left.CloudStop * sign, pair.Right.CloudStop * otherSign, 2m) +
+                    Near(pair.Left.CloudTarget * sign, pair.Right.CloudTarget * otherSign, 2m) +
+                    Near(pair.Left.CloudBias * sign, pair.Right.CloudBias * otherSign, 2m)) / 4d), 18d);
+                Add(matches.Average(pair => (
+                    Near(pair.Left.FibonacciEntry, pair.Right.FibonacciEntry, 1m) +
+                    Near(pair.Left.FibonacciStop, pair.Right.FibonacciStop, 1m) +
+                    Near(pair.Left.FibonacciTarget, pair.Right.FibonacciTarget, 1m)) / 3d), 16d);
+            }
+        }
         return totalWeight == 0d ? 0d : weighted / totalWeight;
+
 
         void Add(double value, double weight)
         {

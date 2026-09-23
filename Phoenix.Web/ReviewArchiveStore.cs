@@ -98,7 +98,16 @@ public sealed class ReviewArchiveStore
                     var candidate = metadata.RootElement.GetProperty("candidate").Deserialize<SignalCandidate>(Json);
                     var candles = JsonSerializer.Deserialize<BybitKline[]>(reader.GetString(2), Json);
                     if (candidate is not null && candles is { Length: >= 52 })
-                        result[signalId] = TechnicalFeatureExtractor.Calculate(candles, candidate);
+                    {
+                        var interval = metadata.RootElement.TryGetProperty("timeframe", out var timeframe)
+                            ? timeframe.GetString() : candidate.Interval;
+                        var history = new Dictionary<string, IReadOnlyList<BybitKline>>
+                            { [interval ?? candidate.Interval] = candles };
+                        result[signalId] = TechnicalFeatureExtractor.Calculate(candles, candidate) with
+                        {
+                            MultiScaleLevels = MultiScaleLevelExtractor.Calculate(history, candidate)
+                        };
+                    }
                 }
                 catch { /* A damaged legacy review must not disable similarity. */ }
             }

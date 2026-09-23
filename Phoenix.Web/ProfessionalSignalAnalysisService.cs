@@ -16,16 +16,23 @@ public sealed class ProfessionalSignalAnalysisService(
     SignalSimilarityService predictor)
 {
     private static readonly string[] ContextIntervals = ["15", "60", "240", "D"];
+    private static readonly string[] ExtendedIntervals = ["5", "W", "M"];
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<ProfessionalSignalAnalysis> AnalyzeAsync(SignalCandidate candidate,
         IReadOnlyList<BybitKline> signalCandles, string signalInterval, CancellationToken token)
     {
         var symbolTasks = ContextIntervals.ToDictionary(x => x,
-            x => x == signalInterval ? Task.FromResult(signalCandles) : GetCandlesAsync(candidate.Symbol, x, token));
+            x => x == signalInterval && signalCandles.Count >= 720
+                ? Task.FromResult(signalCandles) : GetCandlesAsync(candidate.Symbol, x, 1000, token));
+        var extendedTasks = ExtendedIntervals.ToDictionary(x => x,
+            x => x == signalInterval && signalCandles.Count >= 80
+                ? Task.FromResult<IReadOnlyList<BybitKline>?>(signalCandles)
+                : TryGetCandlesAsync(candidate.Symbol, x, token));
         var bitcoinTasks = new[] { "60", "240", "D" }.ToDictionary(x => x,
-            x => GetCandlesAsync("BTCUSDT", x, token));
-        await Task.WhenAll(symbolTasks.Values.Concat(bitcoinTasks.Values));
+            x => GetCandlesAsync("BTCUSDT", x, 300, token));
+        await Task.WhenAll(symbolTasks.Values.Concat<Task>(bitcoinTasks.Values)
+            .Concat(extendedTasks.Values));
 
         var snapshots = ContextIntervals.Select(interval =>
             (Interval: interval, Features: TechnicalFeatureExtractor.Calculate(symbolTasks[interval].Result, candidate))).ToArray();
@@ -42,16 +49,21 @@ public sealed class ProfessionalSignalAnalysisService(
         var regime = regimeScore >= 0.62m ? "روند قدرتمند" : regimeScore <= 0.22m ? "رنج/فشرده" : "روند متوسط";
         var structure = snapshots.Sum(x => x.Features.StructureScore * weights[x.Interval]) / weights.Values.Sum();
         var sweep = snapshots.Sum(x => x.Features.LiquiditySweepScore * weights[x.Interval]) / weights.Values.Sum();
-        var otherFib = ContextIntervals.Where(x => x != signalInterval)
-            .Select(x => TimeframeFibAlignment(symbolTasks[x].Result, candidate.EntryPrice))
-            .DefaultIfEmpty(0m).Max();
+        var histories = symbolTasks.ToDictionary(x => x.Key, x => x.Value.Result);
+        foreach (var (interval, task) in extendedTasks)
+            if (task.Result is { Count: >= 80 } candles) histories[interval] = candles;
+        if (signalCandles.Count >= 80) histories[signalInterval] = signalCandles;
+        var scales = MultiScaleLevelExtractor.Calculate(histories, candidate);
+        var otherFib = scales.Where(x => x.Interval != signalInterval)
+            .Select(x => x.FibonacciEntry).DefaultIfEmpty(0m).Max();
         var enriched = primary with
         {
             HigherTimeframeAlignment = alignment,
             BitcoinMarketAlignment = bitcoinAlignment,
             MarketRegimeScore = regimeScore,
             StructureScore = structure,
-            LiquiditySweepScore = sweep
+            LiquiditySweepScore = sweep,
+            MultiScaleLevels = scales
         };
         var serverSignal = new ServerSignal
         {
@@ -88,13 +100,21 @@ public sealed class ProfessionalSignalAnalysisService(
         return "غلبه حرکت مخالف پس از فعال‌شدن ورود";
     }
 
-    private async Task<IReadOnlyList<BybitKline>> GetCandlesAsync(string symbol, string interval,
+    private async Task<IReadOnlyList<BybitKline>?> TryGetCandlesAsync(string symbol, string interval,
         CancellationToken token)
     {
-        var key = $"{symbol}|{interval}";
+        try { return await GetCandlesAsync(symbol, interval, 1000, token); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch { return null; } // A new symbol may not have any weekly history yet.
+    }
+
+    private async Task<IReadOnlyList<BybitKline>> GetCandlesAsync(string symbol, string interval,
+        int limit, CancellationToken token)
+    {
+        var key = $"{symbol}|{interval}|{limit}";
         if (_cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.AtUtc < TimeSpan.FromSeconds(45))
             return cached.Candles;
-        var candles = await bybit.GetKlinesAsync(symbol, interval, 300, token);
+        var candles = await bybit.GetKlinesAsync(symbol, interval, limit, token);
         _cache[key] = new(DateTime.UtcNow, candles);
         return candles;
     }
@@ -102,21 +122,6 @@ public sealed class ProfessionalSignalAnalysisService(
     private static decimal DirectionalTrend(TechnicalFeatureSnapshot f, decimal direction) =>
         Math.Clamp((f.TrendStrength * 0.45m + f.IchimokuPosition * 0.35m +
             f.IchimokuCloudBias * 0.20m) * direction, -1m, 1m);
-
-    private static decimal TimeframeFibAlignment(IReadOnlyList<BybitKline> source, decimal entry)
-    {
-        var candles = source.Skip(Math.Max(0, source.Count - 240)).ToArray();
-        if (candles.Length < 20) return 0m;
-        var high = candles.Max(x => x.High);
-        var low = candles.Min(x => x.Low);
-        var range = high - low;
-        if (range <= 0m) return 0m;
-        var nearest = new[] { 0.236m, 0.382m, 0.5m, 0.618m, 0.786m }
-            .Select(level => Math.Min(Math.Abs(entry - (low + range * level)),
-                Math.Abs(entry - (high - range * level))))
-            .Min();
-        return Math.Clamp(1m - nearest / (range * 0.035m), 0m, 1m);
-    }
 
     private sealed record CacheEntry(DateTime AtUtc, IReadOnlyList<BybitKline> Candles);
 }

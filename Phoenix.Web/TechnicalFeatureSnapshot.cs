@@ -24,14 +24,15 @@ public sealed record TechnicalFeatureSnapshot(
     decimal? TargetLevelStrength = null,
     decimal? IchimokuEntryPosition = null,
     decimal? IchimokuStopPosition = null,
-    decimal? IchimokuTargetPosition = null);
+    decimal? IchimokuTargetPosition = null,
+    IReadOnlyList<MultiScaleLevelSnapshot>? MultiScaleLevels = null);
 
 public static class TechnicalFeatureExtractor
 {
     public static TechnicalFeatureSnapshot Calculate(IReadOnlyList<BybitKline> source,
         SignalCandidate candidate)
     {
-        var candles = source.Count > 240 ? source.Skip(source.Count - 240).ToArray() : source.ToArray();
+        var candles = source.Count > 1000 ? source.Skip(source.Count - 1000).ToArray() : source.ToArray();
         if (candles.Length < 52) throw new InvalidOperationException("حداقل ۵۲ کندل برای تحلیل فنی لازم است.");
         var closes = candles.Select(x => x.Close).ToArray();
         var atr = Atr(candles, 14);
@@ -49,7 +50,7 @@ public static class TechnicalFeatureExtractor
         var cloudPosition = atr <= 0m ? 0m : Clamp((closes[^1] - (cloudTop + cloudBottom) / 2m) / atr / 3m, -1m, 1m);
         var cloudBias = atr <= 0m ? 0m : Clamp((spanA - spanB) / atr / 2m, -1m, 1m);
 
-        var lookback = candles.Skip(Math.Max(0, candles.Length - 150)).ToArray();
+        var lookback = candles;
         var swingLows = Swings(lookback, false);
         var swingHighs = Swings(lookback, true);
         var support = swingLows.Where(x => x <= candidate.EntryPrice).DefaultIfEmpty(lookback.Min(x => x.Low)).Max();

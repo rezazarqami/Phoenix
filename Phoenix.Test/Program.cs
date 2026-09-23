@@ -39,6 +39,35 @@ Run("Target and stop similarity are independent and ignore price action", () =>
     True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, legacy) > 0d);
 });
 
+Run("Target and stop similarity uses near and distant Fibonacci, cloud and levels", () =>
+{
+    var proposal = new SignalCandidate("BTCUSDT", "15", "Long", 110m, 90m,
+        101m, 101m, 104m, 98m, null, null, 1m, 1m, 50m,
+        1, 2, 0, 3, 4, "test", false, null);
+    BybitKline[] History(decimal oldHigh) => Enumerable.Range(0, 800).Select(i =>
+    {
+        var center = i < 400 ? oldHigh - 1m + (i % 9) * 0.1m : 101m + (i % 11) * 0.1m;
+        return new BybitKline(i * 60_000L, center, center + 1m, center - 1m, center, 1m);
+    }).ToArray();
+    var recent = History(106m);
+    var changedHistory = History(130m);
+    var initial = MultiScaleLevelExtractor.Calculate(new Dictionary<string, IReadOnlyList<BybitKline>>
+        { ["15"] = recent, ["W"] = recent }, proposal);
+    var changed = MultiScaleLevelExtractor.Calculate(new Dictionary<string, IReadOnlyList<BybitKline>>
+        { ["15"] = changedHistory, ["W"] = changedHistory }, proposal);
+    Equal(6, initial.Count);
+    Equal(initial.Single(x => x.Interval == "W" && x.Window == 80).FibonacciEntry,
+        changed.Single(x => x.Interval == "W" && x.Window == 80).FibonacciEntry);
+    False(initial.Single(x => x.Interval == "W" && x.Window == 720).FibonacciEntry ==
+        changed.Single(x => x.Interval == "W" && x.Window == 720).FibonacciEntry);
+    var baseFeatures = TechnicalFeatureExtractor.Calculate(recent, proposal);
+    var a = baseFeatures with { MultiScaleLevels = initial };
+    var b = baseFeatures with { MultiScaleLevels = changed };
+    var candidate = new ServerSignal { Direction = "Long" };
+    True(SignalSimilarityService.TechnicalSimilarity(candidate, candidate, a, b) <
+        SignalSimilarityService.TechnicalSimilarity(candidate, candidate, a, a));
+});
+
 Run("Second-stage expiry includes a time-ordered evidence photo and risk-free closure a photo", () =>
 {
     var methods = new List<string>();

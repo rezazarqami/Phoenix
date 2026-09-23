@@ -7,6 +7,7 @@ namespace Phoenix.Web;
 
 public sealed class ServerSignal
 {
+    public List<SignalPriceSample> ExpiryPriceTrail { get; set; } = [];
     public Guid Id { get; set; }
     public string Symbol { get; set; } = string.Empty;
     public string Direction { get; set; } = string.Empty;
@@ -355,6 +356,7 @@ public sealed class ServerOrderStore
         Quantity = signal.Quantity, EntryPrice = signal.EntryPrice, TakeProfit = signal.TakeProfit,
         StopLoss = signal.StopLoss, LastPrice = signal.LastPrice, Status = signal.Status,
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,
+        ExpiryPriceTrail = signal.ExpiryPriceTrail?.ToList() ?? [],
         ExpireStage = signal.ExpireStage,
         StopLoss2 = signal.StopLoss2, RiskFreeStopMarket = signal.RiskFreeStopMarket,
         RiskFreePrice = signal.RiskFreePrice,
@@ -384,6 +386,8 @@ public sealed class ServerOrderStore
         PublicReviewImageSentAtUtc = signal.PublicReviewImageSentAtUtc
     };
 }
+
+public sealed record SignalPriceSample(DateTime AtUtc, decimal Price);
 
 public enum ExclusiveClaimResult { Unavailable, PositionBusy, Claimed }
 public sealed record SignalEvidence(string Timeframe, string ChartMode, byte[] Image,

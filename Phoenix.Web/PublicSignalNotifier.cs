@@ -143,11 +143,30 @@ public sealed class PublicSignalNotifier
             : Task.FromResult<int?>(null);
     }
 
+    public Task<int?> ExpiredAsync(ServerSignal signal, byte[]? evidenceImage, CancellationToken token)
+    {
+        if (signal.ExpireReason != "TargetAfterActivation" || evidenceImage is null)
+            return ExpiredAsync(signal, token);
+        var observed = ExpiryEvidence.ObservedEntryTouch(signal)
+            ? "⚠️ در قیمت‌های ثبت‌شده، نقطه ورود لمس شده است؛ ترتیب معامله را بررسی کنید."
+            : "در قیمت‌های ثبت‌شده لمس نقطه ورود دیده نشد.";
+        var caption = $"⌛ سیگنال {signal.Symbol} پس از نزدیک‌شدن به ورود و بازگشت به تارگت اکسپایر شد.\n" +
+            $"{observed}\nنمودار قیمت‌های مشاهده‌شده از فعال‌شدن انتظار تا اکسپایر؛ حرکت بین نمونه‌ها ممکن است ثبت نشده باشد.";
+        return ReplyPhotoAsync(signal, caption, evidenceImage, token);
+    }
+
     public Task<int?> OpenedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"▶️ معامله {signal.Symbol} باز شد.", token);
 
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) =>
         ReplyAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.", token);
+
+    public Task<int?> RiskFreeClosedAsync(ServerSignal signal, byte[]? image, bool current,
+        CancellationToken token) => image is null
+            ? RiskFreeClosedAsync(signal, token)
+            : ReplyPhotoAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.\n🖼 " +
+                (current ? "تصویر شرایط نزدیک زمان بسته‌شدن است." : "تصویر مربوط به لحظه صدور سیگنال است."),
+                image, token);
 
     public Task<int?> ManuallyClosedAsync(ServerSignal signal, CancellationToken token) =>
         IsDedicatedSignal(signal)
@@ -166,6 +185,13 @@ public sealed class PublicSignalNotifier
             ? SendAsync(_options, text, signal.PublicTelegramMessageId, token)
             : Task.FromResult<int?>(null);
     }
+
+    private Task<int?> ReplyPhotoAsync(ServerSignal signal, string caption, byte[] image,
+        CancellationToken token) => IsDedicatedSignal(signal)
+            ? SendDedicatedPhotoAsync(caption, image, token)
+            : signal.PublicTelegramMessageId is > 0
+                ? SendPhotoAsync(_options, caption, image, signal.PublicTelegramMessageId, token)
+                : Task.FromResult<int?>(null);
 
     private Task<int?> ReplyResultAsync(ServerSignal signal, string headline, byte[]? image,
         CancellationToken token)

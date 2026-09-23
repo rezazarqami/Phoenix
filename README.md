@@ -104,6 +104,13 @@ without label boxes or connecting strokes. Elliott hard rules still determine
 whether a structure may be labelled, so an interval with no valid count is left
 unlabelled instead of displaying a fabricated wave sequence.
 
+Chart labels use fixed degree colors and sizes: monthly green (largest), weekly
+blue, daily red, and one-hour black. Four-hour counts remain in the analysis
+but are hidden on shorter images. On 15-minute and 5-minute images the active
+count is an optional, smaller purple fifth degree. On longer images sparse
+child waves may use purple. The footer shows the color key; an absent monthly
+count is not invented.
+
 Counts and the last 1,000 candles per symbol and interval persist in
 `elliott-counts` beside `PHOENIX_QUEUE_PATH`, or in `PHOENIX_ELLIOTT_COUNT_DIR`
 when set. Subsequent requests fetch only recent higher-interval candles and

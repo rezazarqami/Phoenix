@@ -327,6 +327,9 @@ public sealed record ElliottScenario(string Direction, decimal Score, IReadOnlyL
     public IReadOnlyList<ElliottWavePoint> ContextWaves { get; init; } = [];
     public decimal CoveragePercent { get; init; }
 }
-public sealed record ElliottWavePoint(string Label, long Time, decimal Price, int Degree = 0, string? Parent = null);
+public sealed record ElliottWavePoint(string Label, long Time, decimal Price, int Degree = 0, string? Parent = null)
+{
+    public string? Timeframe { get; init; }
+}
 public sealed record ElliottRule(string Code, string Description, bool Passed, bool IsHard);
 public sealed record ElliottRatios(decimal Wave2Retracement, decimal Wave3Extension, decimal Wave4Retracement);

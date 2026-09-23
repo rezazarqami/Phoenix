@@ -56,8 +56,12 @@ public static class SignalChartRenderer
         if (elliott is not null)
         {
             var occupied = new List<(int Left, int Top, int Right, int Bottom)>();
-            var macroWaves = elliott.Waves.Concat(elliott.ContextWaves.OrderByDescending(w => w.Degree))
-                .Where(w => ShouldDisplayWaveLabel(w))
+            var imageInterval = elliott.Waves.FirstOrDefault()?.Timeframe;
+            // Monthly, weekly, daily and hourly colors are fixed regardless
+            // of the image interval. A shorter active interval is a fifth degree.
+            var macroWaves = elliott.ContextWaves.Concat(elliott.Waves)
+                .Where(w => ShouldDisplayWaveLabel(w) && WaveStyle(w.Timeframe, imageInterval).Visible)
+                .OrderBy(w => WavePriority(w.Timeframe, imageInterval))
                 .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}|{w.Degree}").Select(g => g.First()).ToArray();
             var wavePoints = macroWaves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
@@ -65,8 +69,8 @@ public static class SignalChartRenderer
             foreach (var point in wavePoints)
             {
                 var x = X(point.Index); var y = Y(point.Wave.Price);
-                var scale = point.Wave.Degree < 0 ? 3 : 2;
-                TryDrawWaveLabel(point.Wave.Label, x, y, scale, 112, 71, 6);
+                var style = WaveStyle(point.Wave.Timeframe, imageInterval);
+                TryDrawWaveLabel(point.Wave.Label, x, y, style.Scale, style.R, style.G, style.B);
             }
 
             // All validated subdivisions remain in the analysis. Show only a
@@ -84,12 +88,13 @@ public static class SignalChartRenderer
                         ShouldDisplayWaveLabel(w) && (index == 0 || w == children[^1] ||
                             (span >= 180 && index % 2 == 0)));
                 })
-                .Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
+                .Where(w => imageInterval is not ("15" or "5") &&
+                    w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .TakeLast(10).OrderByDescending(w => w.Time);
             foreach (var wave in visibleDetails)
             {
                 var index = FindNearestIndex(candles, wave.Time);
-                TryDrawWaveLabel(wave.Label.ToLowerInvariant(), X(index), Y(wave.Price), 1, 35, 78, 170);
+                TryDrawWaveLabel(wave.Label.ToLowerInvariant(), X(index), Y(wave.Price), 2, 111, 63, 145);
             }
 
             void TryDrawWaveLabel(string label, int x, int y, int scale, byte r, byte g, byte b)
@@ -114,6 +119,18 @@ public static class SignalChartRenderer
         DrawLine(pixels, width, height, 0, footerTop - 8, width - 1, footerTop - 8, 218, 222, 225, 2);
         DrawBadge(pixels, width, height,
             string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG", footerTop + 28);
+        if (elliott is not null)
+        {
+            DrawTinyText(pixels, width, height, 385, footerTop + 30, "M", 2, 18, 130, 65);
+            DrawTinyText(pixels, width, height, 440, footerTop + 30, "W", 2, 30, 85, 210);
+            DrawTinyText(pixels, width, height, 495, footerTop + 30, "D", 2, 205, 50, 62);
+            DrawTinyText(pixels, width, height, 550, footerTop + 30,
+                elliott.Waves.FirstOrDefault()?.Timeframe is "15" or "5" ? "1H" : timeframeBadge ?? "",
+                2, 25, 25, 25);
+            if (elliott.Waves.FirstOrDefault()?.Timeframe is "15" or "5")
+                DrawTinyText(pixels, width, height, 625, footerTop + 30,
+                    timeframeBadge ?? "", 2, 111, 63, 145);
+        }
         if (targetSimilarity.HasValue)
             DrawSimilarityBar(pixels, width, height, 18, footerTop, "TP", targetSimilarity.Value, 31, 170, 118);
         if (stopSimilarity.HasValue)
@@ -136,6 +153,26 @@ public static class SignalChartRenderer
 
     public static bool ShouldDisplayWaveLabel(ElliottWavePoint wave) =>
         !string.IsNullOrWhiteSpace(wave.Label) && wave.Label != "0";
+
+    public static (byte R, byte G, byte B, int Scale, bool Visible) WaveStyle(
+        string? timeframe, string? imageTimeframe) => timeframe switch
+    {
+        "M" => (18, 130, 65, 6, true),
+        "W" => (30, 85, 210, 5, true),
+        "D" => (205, 50, 62, 4, true),
+        "60" => (25, 25, 25, 3, true),
+        "15" or "5" when timeframe == imageTimeframe => (111, 63, 145, 2, true),
+        null => (25, 25, 25, 3, true),
+        _ when timeframe == imageTimeframe => (25, 25, 25, 3, true),
+        _ => (25, 25, 25, 3, false)
+    };
+
+    private static int WavePriority(string? timeframe, string? imageTimeframe) => timeframe switch
+    {
+        "M" => 0, "W" => 1, "D" => 2, "60" => 3,
+        _ when timeframe == imageTimeframe => 4,
+        _ => 5
+    };
 
     private static int FindNearestIndex(IReadOnlyList<BybitKline> candles, long time)
     {
@@ -259,7 +296,8 @@ public static class SignalChartRenderer
         'A' => [14, 17, 17, 31, 17, 17, 17], 'B' => [30, 17, 17, 30, 17, 17, 30],
         'C' => [14, 17, 16, 16, 16, 17, 14], 'D' => [30, 17, 17, 17, 17, 17, 30],
         'E' => [31, 16, 16, 30, 16, 16, 31],
-        'M' => [17, 27, 21, 21, 17, 17, 17], 'H' => [17, 17, 17, 31, 17, 17, 17],
+        'M' => [17, 27, 21, 21, 17, 17, 17], 'W' => [17, 17, 17, 21, 21, 21, 10],
+        'H' => [17, 17, 17, 31, 17, 17, 17],
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],
         'G' => [14, 17, 16, 23, 17, 17, 15], 'T' => [31, 4, 4, 4, 4, 4, 4],
         'P' => [30, 17, 17, 30, 16, 16, 16], 'S' => [15, 16, 16, 14, 1, 1, 30],

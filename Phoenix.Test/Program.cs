@@ -1059,6 +1059,18 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     False(SignalChartRenderer.ShouldDisplayWaveLabel(new ElliottWavePoint("0", 0, 100m)));
     True(SignalChartRenderer.ShouldDisplayWaveLabel(new ElliottWavePoint("C", 0, 100m)));
     True(SignalChartRenderer.ShouldDisplayWaveLabel(new ElliottWavePoint("1", 0, 100m)));
+    var monthly = SignalChartRenderer.WaveStyle("M", "15");
+    var weekly = SignalChartRenderer.WaveStyle("W", "15");
+    var daily = SignalChartRenderer.WaveStyle("D", "15");
+    var hourly = SignalChartRenderer.WaveStyle("60", "15");
+    var current = SignalChartRenderer.WaveStyle("15", "15");
+    True(monthly.Visible && weekly.Visible && daily.Visible && hourly.Visible && current.Visible);
+    True(monthly.Scale > weekly.Scale && weekly.Scale > daily.Scale &&
+        daily.Scale > hourly.Scale && hourly.Scale > current.Scale);
+    True(monthly.G > monthly.R && weekly.B > weekly.R && daily.R > daily.G);
+    Equal((byte)25, hourly.R);
+    Equal((byte)111, current.R);
+    False(SignalChartRenderer.WaveStyle("240", "15").Visible);
     Equal("15", SignalBatchService.ReviewChartInterval("1"));
     Equal("15", SignalBatchService.ReviewChartInterval("5"));
     Equal("15", SignalBatchService.ReviewChartInterval("15"));

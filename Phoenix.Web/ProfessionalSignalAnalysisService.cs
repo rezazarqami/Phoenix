@@ -13,8 +13,7 @@ public sealed record ProfessionalSignalAnalysis(
 /// <summary>Cached multi-timeframe and BTC context analysis used before human approval.</summary>
 public sealed class ProfessionalSignalAnalysisService(
     BybitDemoClient bybit,
-    SignalSimilarityService predictor,
-    ReviewArchiveStore reviews)
+    SignalSimilarityService predictor)
 {
     private static readonly string[] ContextIntervals = ["15", "60", "240", "D"];
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -66,25 +65,9 @@ public sealed class ProfessionalSignalAnalysisService(
         Explain(bitcoinAlignment, 0.20m, "هم‌جهتی مناسب با بیت‌کوین", "جهت بیت‌کوین مخالف سیگنال");
         Explain(structure * 2m - 1m, 0.20m, "ساختار قیمت هم‌جهت است", "ساختار قیمت تأیید نمی‌کند");
         Explain(sweep * 2m - 1m, 0.28m, "جمع‌آوری نقدینگی به نفع ورود", "جمع‌آوری نقدینگی علیه ورود");
-        Explain(primary.PriceActionScore * 2m - 1m, 0.20m, "پرایس‌اکشن ورود را تأیید می‌کند", "پرایس‌اکشن ورود ضعیف است");
         if (otherFib >= 0.7m) strengths.Add("هم‌ترازی فیبوناچی در تایم‌فریم دیگر");
         if (primary.VolumeRatio >= 1.15m) strengths.Add("حجم بالاتر از میانگین");
         else if (primary.VolumeRatio < 0.75m) risks.Add("حجم تأییدکننده نیست");
-        var rejected = await reviews.GetRejectedPatternsAsync(300, token);
-        var similarRejections = rejected.Select(x => new
-            {
-                Pattern = x,
-                Similarity = SignalSimilarityService.TechnicalSimilarity(serverSignal,
-                    new ServerSignal { Direction = x.Candidate.Direction, Timeframe = x.Candidate.Interval },
-                    enriched, x.Features)
-            })
-            .Where(x => x.Similarity >= 0.76d).OrderByDescending(x => x.Similarity).Take(5).ToArray();
-        if (prediction.TargetPercent.HasValue && similarRejections.Length > 0)
-        {
-            var penalty = Math.Min(15m, similarRejections.Sum(x => (decimal)(x.Similarity - 0.75d) * 12m));
-            var target = Math.Clamp(prediction.TargetPercent.Value - penalty, 5m, 95m);
-            prediction = prediction with { TargetPercent = target, StopPercent = 100m - target };
-        }
         return new(enriched, prediction, regime, strengths.Take(5).ToArray(), risks.Take(5).ToArray());
 
         void Explain(decimal value, decimal threshold, string positive, string negative)

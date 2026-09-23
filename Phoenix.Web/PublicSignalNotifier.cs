@@ -102,7 +102,7 @@ public sealed class PublicSignalNotifier
             (‌1%- از کل سرمایه)
             """;
         var scores = signal.TargetSimilarityPercent.HasValue
-            ? $"\n\n🟢 احتمال تارگت: {Format(signal.TargetSimilarityPercent.Value)}٪\n🔴 احتمال استاپ: {Format(signal.StopSimilarityPercent ?? 0m)}٪"
+            ? $"\n\n🟢 شباهت به تارگت‌ها: {Format(signal.TargetSimilarityPercent.Value)}٪\n🔴 شباهت به استاپ‌ها: {Format(signal.StopSimilarityPercent ?? 0m)}٪"
             : string.Empty;
         if (image is not null)
             return IsDedicatedSignal(signal)
@@ -197,7 +197,7 @@ public sealed class PublicSignalNotifier
         CancellationToken token)
     {
         var scores = signal.TargetSimilarityPercent.HasValue
-            ? $"\n\n🟢 <b>احتمال تارگت در زمان صدور: {Format(signal.TargetSimilarityPercent.Value)}٪</b>\n🔴 <b>احتمال استاپ در زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)}٪</b>"
+            ? $"\n\n🟢 <b>شباهت به تارگت‌ها در زمان صدور: {Format(signal.TargetSimilarityPercent.Value)}٪</b>\n🔴 <b>شباهت به استاپ‌ها در زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)}٪</b>"
             : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود";
         var failure = signal.Outcome == "StopLoss" && !string.IsNullOrWhiteSpace(signal.FailureReason)
             ? $"\nعلت فنی محتمل: {signal.FailureReason}" : string.Empty;
@@ -283,7 +283,7 @@ public sealed class PublicSignalNotifier
 
     public Task<int?> SendCurrentReviewAsync(ServerSignal signal, byte[] image, CancellationToken token)
     {
-        var caption = $"📸 شرایط فعلی {signal.Symbol}\n🟢 احتمال تارگت: {Format(signal.TargetSimilarityPercent ?? 0m)}٪\n🔴 احتمال استاپ: {Format(signal.StopSimilarityPercent ?? 0m)}٪\n\nدر صورت نامناسب‌بودن شرایط، سیگنال را لغو کنید.";
+        var caption = $"📸 شرایط فعلی {signal.Symbol}\n🟢 شباهت به تارگت‌ها: {Format(signal.TargetSimilarityPercent ?? 0m)}٪\n🔴 شباهت به استاپ‌ها: {Format(signal.StopSimilarityPercent ?? 0m)}٪\n\nدر صورت نامناسب‌بودن شرایط، سیگنال را لغو کنید.";
         return IsDedicatedSignal(signal)
             ? SendDedicatedSignalPhotoAsync(caption, image, signal.Id, token)
             : SendSignalPhotoAsync(_options, caption, image, signal.Id,

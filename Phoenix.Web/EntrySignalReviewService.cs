@@ -52,8 +52,8 @@ public sealed class EntrySignalReviewService(
         {
             var review = await BuildCurrentAsync(signal, token);
             var caption = $"🎯 <b>قیمت به نقطه ورود رسید</b>\nنماد: {signal.Symbol}\nجهت: {signal.Direction}\n" +
-                $"احتمال {(review.AiRefreshed ? "جدید" : "آخرین")} تارگت: {F(signal.TargetSimilarityPercent)}٪\n" +
-                $"احتمال {(review.AiRefreshed ? "جدید" : "آخرین")} استاپ: {F(signal.StopSimilarityPercent)}٪\n" +
+                $"شباهت {(review.AiRefreshed ? "جدید" : "آخرین")} به تارگت‌ها: {F(signal.TargetSimilarityPercent)}٪\n" +
+                $"شباهت {(review.AiRefreshed ? "جدید" : "آخرین")} به استاپ‌ها: {F(signal.StopSimilarityPercent)}٪\n" +
                 $"رژیم بازار: {signal.MarketRegime ?? "در دسترس نیست"}\n\nاین تصویر مربوط به شرایط فعلی بازار در لحظه ورود است.";
             var sent = dedicatedTelegram.Owns(signal.RequestedByUsername)
                 ? await dedicatedTelegram.SendEntryReviewAsync(review.Image, caption, signal.Id, token)

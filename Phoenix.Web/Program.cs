@@ -479,8 +479,8 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Http
     var timeframeFilter = string.IsNullOrWhiteSpace(request.TimeframeFilter) ? "All" : request.TimeframeFilter;
     if (timeframeFilter is not ("All" or "1" or "5" or "15" or "60" or "240"))
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
-    if (request.MinimumTargetProbability is < 0m or > 95m)
-        return Results.BadRequest(new { error = "حداقل احتمال تارگت باید بین صفر تا ۹۵ درصد باشد." });
+    if (request.MinimumTargetProbability is < 0m or > 100m)
+        return Results.BadRequest(new { error = "حداقل شباهت به تارگت‌ها باید بین صفر تا ۱۰۰ درصد باشد." });
     PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
     return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
             timeframeFilter, request.MinimumTargetProbability, request.TimedMode, request.DurationMinutes,

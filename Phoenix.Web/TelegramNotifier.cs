@@ -308,7 +308,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         $"نماد: {signal.Symbol}\nجهت: {signal.Direction}\nورود: {Format(signal.EntryPrice)}\nتارگت: {Format(signal.TakeProfit)}\nاستاپ: {Format(signal.StopLoss)}\nمقدار ورودی: {Format(signal.PositionSizeUsdt)} USDT";
 
     private static string SimilarityText(ServerSignal signal) => signal.TargetSimilarityPercent.HasValue
-        ? $"\n\n🟢 <b>احتمال تارگت در زمان صدور: {Format(signal.TargetSimilarityPercent)}٪</b>\n🔴 <b>احتمال استاپ در زمان صدور: {Format(signal.StopSimilarityPercent)}٪</b>"
+        ? $"\n\n🟢 <b>شباهت به تارگت‌ها در زمان صدور: {Format(signal.TargetSimilarityPercent)}٪</b>\n🔴 <b>شباهت به استاپ‌ها در زمان صدور: {Format(signal.StopSimilarityPercent)}٪</b>"
         : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود";
 
     private static string StripHtml(string text) => text.Replace("<b>", string.Empty).Replace("</b>", string.Empty);

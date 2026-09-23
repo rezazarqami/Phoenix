@@ -51,7 +51,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                     logger.LogWarning(ex, "Using saved Elliott count for {Symbol} {Interval}", symbol, tier);
                     if (previous?.Analysis.Scenarios.FirstOrDefault() is { } saved)
                         context.AddRange(saved.ContextWaves.Concat(saved.Waves)
-                            .Select(w => w with { Degree = -(target - degree) }));
+                            .Select(w => w with { Degree = -(target - degree), Timeframe = tier }));
                     continue;
                 }
                 if (recent.Count < 30) continue;
@@ -80,12 +80,17 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 if (selected is null) continue;
                 if (degree == target) active = selected;
                 else context.AddRange(selected.ContextWaves.Concat(selected.Waves)
-                    .Select(w => w with { Degree = -(target - degree) }));
+                    .Select(w => w with { Degree = -(target - degree), Timeframe = tier }));
             }
             if (active is null) return null;
             // The analyzer already retains all non-overlapping valid structures
             // on the requested interval. Higher degrees provide market context.
-            return active with { ContextWaves = context.Concat(active.ContextWaves).ToArray() };
+            return active with
+            {
+                Waves = active.Waves.Select(w => w with { Timeframe = interval }).ToArray(),
+                ContextWaves = context.Concat(active.ContextWaves.Select(w => w with { Timeframe = interval })).ToArray(),
+                Subwaves = active.Subwaves.Select(w => w with { Timeframe = interval }).ToArray()
+            };
         }
         finally { _gate.Release(); }
     }

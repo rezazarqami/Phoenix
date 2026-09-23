@@ -1056,9 +1056,23 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     var labeledSnapshot = SignalChartRenderer.Render(candles, candidate, false, "1H");
     True(labeledSnapshot.Length > 1000);
     False(snapshot.SequenceEqual(labeledSnapshot));
+    Equal("15", SignalBatchService.ReviewChartInterval("1"));
     Equal("15", SignalBatchService.ReviewChartInterval("5"));
     Equal("15", SignalBatchService.ReviewChartInterval("15"));
     Equal("60", SignalBatchService.ReviewChartInterval("60"));
+});
+
+Run("Signal batch applies directional entry-to-target threshold", () =>
+{
+    var candidate = new SignalCandidate("BTCUSDT", "1", "Long", 110m, 90m,
+        100m, 100m, 100.49m, 99m, null, null, 1m, 1m, 50m,
+        1, 2, 0, 3, 4, "test", false, null);
+    True(SignalBatchService.EntryToTargetPercent(candidate) < 0.5m);
+    Equal(0.5m, SignalBatchService.EntryToTargetPercent(candidate with { TakeProfit = 100.5m }));
+    Equal(1m, SignalBatchService.EntryToTargetPercent(candidate with
+    {
+        Direction = "Short", TakeProfit = 99m
+    }));
 });
 
 Run("Signal Lab moves Long floor after an intermediate 61.8 percent entry was touched", () =>

@@ -8,7 +8,7 @@ public sealed class SignalBatchService(
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ProfessionalSignalAnalysisService professional,
-    ElliottWaveAnalyzer elliottAnalyzer,
+    ElliottCountStore elliottCounts,
     ShadowSignalRuntime shadow,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
@@ -239,6 +239,7 @@ public sealed class SignalBatchService(
                             try { candidate = finder.Find(asset.Symbol, interval, candles, rules, positionSizeUsdt, 5, lineMode); }
                             catch { continue; }
                             if (candidate.IsBurned || SignalQualityAssessment.IsVeryWeakImpulse(candidate, candles) ||
+                                EntryToTargetPercent(candidate) < 0.5m ||
                                 (directionFilter != "All" && !candidate.Direction.Equals(directionFilter, StringComparison.OrdinalIgnoreCase)) ||
                                 active.Any(x => x.Direction.Equals(candidate.Direction, StringComparison.OrdinalIgnoreCase)))
                                 continue;
@@ -287,7 +288,8 @@ public sealed class SignalBatchService(
                         ? professional.AnalyzeAsync(ranked[optionIndex + 1].Candidate,
                             ranked[optionIndex + 1].Candles, ranked[optionIndex + 1].Interval, token)
                         : null;
-                    if (!analysis.Prediction.TargetPercent.HasValue ||
+                    if (EntryToTargetPercent(option.Candidate) < 0.5m ||
+                        !analysis.Prediction.TargetPercent.HasValue ||
                         analysis.Prediction.TargetPercent.Value < minimumTargetProbability) continue;
                     var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N");
@@ -307,14 +309,14 @@ public sealed class SignalBatchService(
                         logger.LogWarning(exception, "Skipping {Symbol}; chart candles failed", selected.Symbol);
                         continue;
                     }
-                    var chartTimeframeLine = chartInterval == option.Interval
-                        ? string.Empty
-                        : $"\nتایم‌فریم تصویر: {IntervalName(chartInterval)}";
-                    var elliott = elliottAnalyzer.Analyze(chartCandles, 5, 0.6m);
-                    var elliottScenario = elliott.Scenarios.FirstOrDefault();
-                    var elliottLines = elliottScenario is null
-                        ? "\n🌊 الیوت: شمارش معتبر کافی پیدا نشد"
-                        : $"\n🌊 الیوت: {PatternName(elliottScenario.Pattern)} · {elliottScenario.CurrentWave} · امتیاز {Format(elliottScenario.Score)}٪\nپوشش شمارش: {Format(elliottScenario.CoveragePercent)}٪ · ریزموج معتبر: {elliottScenario.Subwaves.Count}\nمبنای محاسبه: خط Close\nابطال شمارش: {Format(elliottScenario.StartInvalidation)}";
+                    ElliottScenario? elliottScenario;
+                    try { elliottScenario = await elliottCounts.AnalyzeAsync(selected.Symbol, chartInterval, chartCandles, token); }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Elliott count unavailable for {Symbol}", selected.Symbol);
+                        elliottScenario = null;
+                    }
                     var technicalFeatures = analysis.Features;
                     var similarityResult = analysis.Prediction;
                     var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
@@ -322,9 +324,9 @@ public sealed class SignalBatchService(
                     var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
                         : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
                     var similarityLines = similarityResult.TargetPercent.HasValue
-                        ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {Format(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {Format(similarityResult.StopPercent!.Value)}٪</b>\n🌐 رژیم بازار: {analysis.MarketRegime}\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های کالیبراسیون: {similarityResult.CalibrationSampleCount}"
+                        ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های کالیبراسیون: {similarityResult.CalibrationSampleCount}"
                         : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
-                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}{chartTimeframeLine}\nنوع نمایش: {(option.LineMode ? "خط Close" : "کندل‌استیک")}\nمقیاس قیمت: لگاریتمی\nفاصله تا ورود: {Format(option.EntryDistancePercent)}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{elliottLines}{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
+                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     byte[] image;
                     try
                     {
@@ -423,19 +425,17 @@ public sealed class SignalBatchService(
     }
 
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
-    private static string[] Intervals(string filter) => filter == "All" ? ["5", "15", "60", "240"] : [filter];
-    public static string ReviewChartInterval(string signalInterval) => signalInterval == "5" ? "15" : signalInterval;
-    private static string IntervalName(string value) => value switch { "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
+    private static string[] Intervals(string filter) => filter == "All" ? ["1", "5", "15", "60", "240"] : [filter];
+    public static string ReviewChartInterval(string signalInterval) => signalInterval is "1" or "5" ? "15" : signalInterval;
+    private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", _ => value };
-    private static string PatternName(string value) => value switch
-    {
-        "Impulse" => "ایمپالس", "DevelopingImpulse" => "ایمپالس در حال تشکیل",
-        "TruncatedImpulse" => "ایمپالس با موج پنجم ناقص", "EndingDiagonal" => "دیاگونال پایانی",
-        "DevelopingDiagonal" => "دیاگونال در حال تشکیل", "Zigzag" => "زیگزاگ",
-        "Flat" => "فلت", "ExpandedFlat" => "فلت گسترش‌یافته", "RunningFlat" => "فلت رانینگ",
-        "ContractingTriangle" => "مثلث همگرا", "ExpandingTriangle" => "مثلث واگرا",
-        "DoubleThree" => "اصلاح مرکب W-X-Y", "TripleThree" => "اصلاح مرکب W-X-Y-X-Z", _ => value
-    };
+    public static decimal EntryToTargetPercent(SignalCandidate candidate) => candidate.EntryPrice <= 0m
+        ? 0m : candidate.Direction == "Long"
+            ? (candidate.TakeProfit - candidate.EntryPrice) / candidate.EntryPrice * 100m
+            : (candidate.EntryPrice - candidate.TakeProfit) / candidate.EntryPrice * 100m;
+    private static string FormatTwoDecimals(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string FormatWholePercent(decimal value) => Math.Round(value, 0, MidpointRounding.AwayFromZero)
+        .ToString("0", CultureInfo.InvariantCulture);
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";

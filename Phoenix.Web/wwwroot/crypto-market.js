@@ -144,7 +144,7 @@ function renderResults(data) {
   const summary = data.summary || {};
   const values = [summary.total, summary.entered, summary.expired, summary.target, summary.stopLoss, summary.riskFree];
   document.querySelectorAll('#resultsSummary b').forEach((node, index) => { node.textContent = faMarket.format(values[index] || 0); });
-  const label = key => ({ Long:'Long', Short:'Short', Target:'تارگت', StopLoss:'استاپ‌لاس', RiskFree:'ریسک‌فری', Expired:'اکسپایر', ExpiredNearEntry:'اکسپایر نزدیک ورود', 5:'5M', 15:'15M', 60:'1H', 240:'4H' })[key] || key;
+  const label = key => ({ Long:'Long', Short:'Short', Target:'تارگت', StopLoss:'استاپ‌لاس', RiskFree:'ریسک‌فری', Expired:'اکسپایر', ExpiredNearEntry:'اکسپایر نزدیک ورود', 1:'1M', 5:'5M', 15:'15M', 60:'1H', 240:'4H' })[key] || key;
   const group = (title, items) => `<section><strong>${title}</strong><div>${(items || []).map(item => `<span>${escapeMarket(label(item.key))}<b>${faMarket.format(item.count)}</b></span>`).join('') || '<small>داده‌ای نیست</small>'}</div></section>`;
   document.querySelector('#resultsBreakdown').innerHTML = group('بر اساس جهت', data.byDirection) + group('بر اساس تایم‌فریم', data.byTimeframe) + group('بر اساس نتیجه', data.byOutcome) + group('علت‌های پرتکرار استاپ', data.byFailureReason);
   const rows = data.details || [];

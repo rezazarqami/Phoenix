@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 /// <summary>Hard Elliott rules invalidate counts; ratios and alternation only rank them.</summary>
 public sealed class ElliottWaveAnalyzer
 {
-    public const string RuleSetVersion = "3.0-pdf";
+    public const string RuleSetVersion = "3.1-hierarchical";
 
     public ElliottAnalysis Analyze(IReadOnlyList<BybitKline> candles, int depth = 5, decimal deviationPercent = 0.6m)
     {
@@ -50,10 +50,19 @@ public sealed class ElliottWaveAnalyzer
                 .OrderByDescending(x => x.CoveragePercent)
                 .ThenByDescending(x => x.Score)
                 .First();
-            var context = ranked.FirstOrDefault(x => x.Waves[^1].Time < active.Waves[0].Time)
-                ?? ranked.FirstOrDefault(x => x.Waves[^1].Time < active.Waves[^1].Time);
-            if (context is not null)
-                active = active with { ContextWaves = context.Waves };
+            var prior = new List<ElliottScenario>();
+            var cursor = active.Waves[0].Time;
+            while (true)
+            {
+                var preceding = decorated.Where(x => x.Waves[^1].Time <= cursor && x.Waves[0].Time < cursor)
+                    .OrderByDescending(x => x.Waves[^1].Time)
+                    .ThenByDescending(x => x.Score).FirstOrDefault();
+                if (preceding is null) break;
+                prior.Add(preceding);
+                cursor = preceding.Waves[0].Time;
+            }
+            active = active with { ContextWaves = prior.AsEnumerable().Reverse()
+                .SelectMany(x => x.Waves).ToArray() };
             ranked = new[] { active }.Concat(ranked.Where(x =>
                     x.Pattern != active.Pattern || !x.Waves.Select(w => w.Time).SequenceEqual(active.Waves.Select(w => w.Time))))
                 .Take(5).ToArray();

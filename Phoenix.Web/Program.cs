@@ -19,6 +19,7 @@ builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
+builder.Services.AddSingleton<ElliottCountStore>();
 builder.Services.AddSingleton<SignalCandidateFinder>();
 builder.Services.AddSingleton<ShadowSignalRuntime>();
 builder.Services.AddSingleton<SignalLearningService>();
@@ -476,7 +477,7 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Http
     var chartFilter = string.IsNullOrWhiteSpace(request.ChartFilter) ? "All" : request.ChartFilter;
     if (chartFilter is not ("All" or "Candles" or "Line")) return Results.BadRequest(new { error = "نوع نمودار معتبر نیست." });
     var timeframeFilter = string.IsNullOrWhiteSpace(request.TimeframeFilter) ? "All" : request.TimeframeFilter;
-    if (timeframeFilter is not ("All" or "5" or "15" or "60" or "240"))
+    if (timeframeFilter is not ("All" or "1" or "5" or "15" or "60" or "240"))
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
     if (request.MinimumTargetProbability is < 0m or > 95m)
         return Results.BadRequest(new { error = "حداقل احتمال تارگت باید بین صفر تا ۹۵ درصد باشد." });

@@ -89,6 +89,29 @@ Bybit or its network provider may reject requests based on the originating regio
 
 ## Elliott Wave Lab
 
+### Signal review Elliott count
+
+The batch signal selector also supports one-minute analysis with a separate
+15-minute Telegram chart. Its candidate and probability use one-minute candles;
+the image (including entry-time review) uses 15-minute candles. Candidates
+whose direction-adjusted entry-to-target move is below 0.5% are discarded
+before professional analysis and Telegram delivery.
+
+The Telegram review chart counts each symbol from monthly through weekly, daily,
+four-hour, one-hour and the requested review interval. Valid prior structures
+are retained alongside the active count; lower-degree labels use smaller type
+without label boxes or connecting strokes. Elliott hard rules still determine
+whether a structure may be labelled, so an interval with no valid count is left
+unlabelled instead of displaying a fabricated wave sequence.
+
+Counts and the last 1,000 candles per symbol and interval persist in
+`elliott-counts` beside `PHOENIX_QUEUE_PATH`, or in `PHOENIX_ELLIOTT_COUNT_DIR`
+when set. Subsequent requests fetch only recent higher-interval candles and
+reuse the saved analysis when unchanged. New candles extend the stored data;
+changed historical candles trigger a fresh analysis, and a rule-set change
+invalidates the saved count. Keep this directory on persistent storage in
+production.
+
 Phoenix Web includes an analysis workspace inside the main Phoenix panel.
 Sign in once at `/login` and choose «بخش تحلیل» to open Crypto Markets,
 Signal Lab and Elliott Wave Lab. All analysis pages and APIs share the

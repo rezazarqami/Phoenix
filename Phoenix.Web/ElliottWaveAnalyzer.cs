@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 /// <summary>Hard Elliott rules invalidate counts; ratios and alternation only rank them.</summary>
 public sealed class ElliottWaveAnalyzer
 {
-    public const string RuleSetVersion = "3.1-hierarchical";
+    public const string RuleSetVersion = "3.2-continuous-context";
 
     public ElliottAnalysis Analyze(IReadOnlyList<BybitKline> candles, int depth = 5, decimal deviationPercent = 0.6m)
     {
@@ -54,9 +54,13 @@ public sealed class ElliottWaveAnalyzer
             var cursor = active.Waves[0].Time;
             while (true)
             {
-                var preceding = decorated.Where(x => x.Waves[^1].Time <= cursor && x.Waves[0].Time < cursor)
-                    .OrderByDescending(x => x.Waves[^1].Time)
-                    .ThenByDescending(x => x.Score).FirstOrDefault();
+                var candidates = decorated.Where(x => x.Waves[^1].Time <= cursor && x.Waves[0].Time < cursor);
+                // The previous C/5 endpoint is the next count's implicit origin.
+                // Prefer a structure sharing that exact pivot whenever valid.
+                var preceding = candidates.Where(x => x.Waves[^1].Time == cursor)
+                    .OrderByDescending(x => x.Score).FirstOrDefault()
+                    ?? candidates.OrderByDescending(x => x.Waves[^1].Time)
+                        .ThenByDescending(x => x.Score).FirstOrDefault();
                 if (preceding is null) break;
                 prior.Add(preceding);
                 cursor = preceding.Waves[0].Time;

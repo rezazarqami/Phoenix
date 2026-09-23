@@ -21,9 +21,8 @@ public static class SignalChartRenderer
         var padding = Math.Clamp(anchorSpan * 5 / 4, 150, 450);
         var viewStart = Math.Max(0, firstAnchor - padding);
         var viewEnd = Math.Min(candles.Count - 1, secondAnchor + padding);
-        // A partial Elliott count is analytically misleading: wave 2 can only be
-        // validated against the origin of wave 1 (point 0). If an overlay is shown,
-        // keep every labelled pivot -- especially point 0 -- inside the image.
+        // Keep the validated count's time span visible even though its origin
+        // is implicit in the preceding structure and is never labelled "0".
         if (elliott is not null && elliott.Waves.Count > 0)
         {
             var allWaves = elliott.ContextWaves.Concat(elliott.Waves).Concat(elliott.Subwaves).ToArray();
@@ -56,35 +55,57 @@ public static class SignalChartRenderer
             }
         if (elliott is not null)
         {
-            var macroWaves = elliott.ContextWaves.Concat(elliott.Waves)
+            var occupied = new List<(int Left, int Top, int Right, int Bottom)>();
+            var macroWaves = elliott.Waves.Concat(elliott.ContextWaves.OrderByDescending(w => w.Degree))
+                .Where(w => ShouldDisplayWaveLabel(w))
                 .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}|{w.Degree}").Select(g => g.First()).ToArray();
             var wavePoints = macroWaves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
-            // Each degree has its own scale. Leave the price trace unobstructed.
+            // Keep the major count readable; an occupied spot is never painted over.
             foreach (var point in wavePoints)
             {
                 var x = X(point.Index); var y = Y(point.Wave.Price);
                 var scale = point.Wave.Degree < 0 ? 3 : 2;
-                var offset = point.Wave.Price >= candles[point.Index].Close ? -21 - scale * 4 : 12;
-                DrawTinyText(pixels, width, height, x - 3 * scale, y + offset,
-                    point.Wave.Label, scale, 112, 71, 6);
+                TryDrawWaveLabel(point.Wave.Label, x, y, scale, 112, 71, 6);
             }
 
-            // Draw validated lower-degree structures independently inside each
-            // parent leg. Parent changes break the line so unrelated corrective
-            // and motive subdivisions are never connected visually.
-            foreach (var group in elliott.Subwaves.GroupBy(x => x.Parent))
-            {
-                var children = group.OrderBy(x => x.Time)
-                    .Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
-                    .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
-                for (var i = 0; i < children.Length; i++)
+            // All validated subdivisions remain in the analysis. Show only a
+            // sparse sample when their parent leg has enough horizontal space.
+            var visibleDetails = elliott.Subwaves.GroupBy(x => x.Parent)
+                .SelectMany(group =>
                 {
-                    var point = children[i];
-                    var x = X(point.Index); var y = Y(point.Wave.Price);
-                    var offset = i % 2 == 0 ? 10 : -18;
-                    DrawTinyText(pixels, width, height, x - 3, y + offset,
-                        point.Wave.Label.ToLowerInvariant(), 1, 35, 78, 170);
+                    var children = group.OrderBy(x => x.Time).ToArray();
+                    if (children.Length < 2) return Enumerable.Empty<ElliottWavePoint>();
+                    var span = X(FindNearestIndex(candles, children[^1].Time)) -
+                        X(FindNearestIndex(candles, children[0].Time));
+                    if (span < 90)
+                        return Enumerable.Empty<ElliottWavePoint>();
+                    return children.Skip(1).Where((w, index) =>
+                        ShouldDisplayWaveLabel(w) && (index == 0 || w == children[^1] ||
+                            (span >= 180 && index % 2 == 0)));
+                })
+                .Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
+                .TakeLast(10).OrderByDescending(w => w.Time);
+            foreach (var wave in visibleDetails)
+            {
+                var index = FindNearestIndex(candles, wave.Time);
+                TryDrawWaveLabel(wave.Label.ToLowerInvariant(), X(index), Y(wave.Price), 1, 35, 78, 170);
+            }
+
+            void TryDrawWaveLabel(string label, int x, int y, int scale, byte r, byte g, byte b)
+            {
+                var textWidth = label.Length * 6 * scale;
+                var leftEdge = x - textWidth / 2;
+                foreach (var topEdge in new[] { y - 13 - 7 * scale, y + 12 })
+                {
+                    var box = (Left: leftEdge - 3, Top: topEdge - 3,
+                        Right: leftEdge + textWidth + 3, Bottom: topEdge + 7 * scale + 3);
+                    if (box.Left < left || box.Right > width - right || box.Top < top || box.Bottom > height - bottom ||
+                        occupied.Any(other => box.Left < other.Right && box.Right > other.Left &&
+                            box.Top < other.Bottom && box.Bottom > other.Top)) continue;
+                    DrawTinyText(pixels, width, height, leftEdge, topEdge, label, scale, r, g, b);
+                    occupied.Add(box);
+                    return;
                 }
             }
         }
@@ -112,6 +133,9 @@ public static class SignalChartRenderer
         var fraction = (logMax - Math.Log((double)price)) / (logMax - logMin);
         return Math.Clamp(fraction, 0d, 1d);
     }
+
+    public static bool ShouldDisplayWaveLabel(ElliottWavePoint wave) =>
+        !string.IsNullOrWhiteSpace(wave.Label) && wave.Label != "0";
 
     private static int FindNearestIndex(IReadOnlyList<BybitKline> candles, long time)
     {

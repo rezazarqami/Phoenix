@@ -1056,6 +1056,9 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     var labeledSnapshot = SignalChartRenderer.Render(candles, candidate, false, "1H");
     True(labeledSnapshot.Length > 1000);
     False(snapshot.SequenceEqual(labeledSnapshot));
+    False(SignalChartRenderer.ShouldDisplayWaveLabel(new ElliottWavePoint("0", 0, 100m)));
+    True(SignalChartRenderer.ShouldDisplayWaveLabel(new ElliottWavePoint("C", 0, 100m)));
+    True(SignalChartRenderer.ShouldDisplayWaveLabel(new ElliottWavePoint("1", 0, 100m)));
     Equal("15", SignalBatchService.ReviewChartInterval("1"));
     Equal("15", SignalBatchService.ReviewChartInterval("5"));
     Equal("15", SignalBatchService.ReviewChartInterval("15"));

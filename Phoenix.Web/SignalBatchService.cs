@@ -324,7 +324,7 @@ public sealed class SignalBatchService(
                     var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
                         : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
                     var similarityLines = similarityResult.TargetPercent.HasValue
-                        ? $"\n\n🟢 <b>احتمال رسیدن به تارگت: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>احتمال رسیدن به استاپ: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های کالیبراسیون: {similarityResult.CalibrationSampleCount}"
+                        ? $"\n\n🟢 <b>شباهت به سیگنال‌های تارگت‌خورده: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت به سیگنال‌های استاپ‌خورده: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های مقایسه: {similarityResult.CalibrationSampleCount}"
                         : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     byte[] image;

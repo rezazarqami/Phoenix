@@ -110,7 +110,7 @@ function renderBatch(state) {
   const status = document.querySelector('#batchStatus');
   status.classList.toggle('running', state.running);
   const remainingMinutes = state.endsAtUtc ? Math.max(0, Math.ceil((new Date(state.endsAtUtc) - Date.now()) / 60000)) : 0;
-  const probabilityFilter = state.minimumTargetProbability > 0 ? ` · حداقل تارگت ${faMarket.format(state.minimumTargetProbability)}٪` : '';
+  const probabilityFilter = state.minimumTargetProbability > 0 ? ` · حداقل شباهت به تارگت‌ها ${faMarket.format(state.minimumTargetProbability)}٪` : '';
   const progress = state.timedMode
     ? `تأیید ${faMarket.format(state.approved)} · پیشنهاد ${faMarket.format(state.proposed)} · باقی‌مانده حدود ${faMarket.format(remainingMinutes)} دقیقه`
     : `تأیید ${faMarket.format(state.approved)} از ${faMarket.format(state.target)}`;

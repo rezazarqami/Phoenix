@@ -18,7 +18,13 @@ public sealed record TechnicalFeatureSnapshot(
     decimal BitcoinMarketAlignment = 0m,
     decimal MarketRegimeScore = 0m,
     decimal StructureScore = 0m,
-    decimal LiquiditySweepScore = 0m);
+    decimal LiquiditySweepScore = 0m,
+    decimal? EntryLevelStrength = null,
+    decimal? StopLevelStrength = null,
+    decimal? TargetLevelStrength = null,
+    decimal? IchimokuEntryPosition = null,
+    decimal? IchimokuStopPosition = null,
+    decimal? IchimokuTargetPosition = null);
 
 public static class TechnicalFeatureExtractor
 {
@@ -50,6 +56,13 @@ public static class TechnicalFeatureExtractor
         var resistance = swingHighs.Where(x => x >= candidate.EntryPrice).DefaultIfEmpty(lookback.Max(x => x.High)).Min();
         var supportDistance = atr <= 0m ? 10m : Clamp(Math.Abs(candidate.EntryPrice - support) / atr, 0m, 10m);
         var resistanceDistance = atr <= 0m ? 10m : Clamp(Math.Abs(resistance - candidate.EntryPrice) / atr, 0m, 10m);
+        var swings = swingLows.Concat(swingHighs).ToArray();
+        // Confirmed pivots within half an ATR measure repeated tests of each
+        // actual trade level; absent historical fields remain missing, not zero.
+        decimal Strength(decimal level) => atr <= 0m ? 0m :
+            Clamp(swings.Count(x => Math.Abs(x - level) <= atr * 0.5m) / 4m, 0m, 1m);
+        decimal CloudAt(decimal level) => atr <= 0m ? 0m :
+            Clamp((level - (cloudTop + cloudBottom) / 2m) / atr / 3m, -1m, 1m);
 
         var range = Math.Max(candidate.Ceiling - candidate.Floor, 0.00000001m);
         var entryPosition = (candidate.EntryPrice - candidate.Floor) / range;
@@ -88,7 +101,13 @@ public static class TechnicalFeatureExtractor
             volumeRatio,
             Clamp(SignalQualityAssessment.ImpulseEfficiency(candidate, candles), 0m, 1m),
             StructureScore: structure,
-            LiquiditySweepScore: liquiditySweep);
+            LiquiditySweepScore: liquiditySweep,
+            EntryLevelStrength: Strength(candidate.EntryPrice),
+            StopLevelStrength: Strength(candidate.StopLoss),
+            TargetLevelStrength: Strength(candidate.TakeProfit),
+            IchimokuEntryPosition: CloudAt(candidate.EntryPrice),
+            IchimokuStopPosition: CloudAt(candidate.StopLoss),
+            IchimokuTargetPosition: CloudAt(candidate.TakeProfit));
     }
 
     private static decimal[] Swings(IReadOnlyList<BybitKline> candles, bool highs)

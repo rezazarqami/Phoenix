@@ -7,6 +7,37 @@ using Phoenix.Web;
 
 var passed = 0;
 var failed = 0;
+var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+
+Run("Target and stop similarity are independent and ignore price action", () =>
+{
+    var features = new TechnicalFeatureSnapshot(0.5m, 1m, 0m, 0.4m, 0.2m,
+        0.2m, 1.4m, 0.4m, 0m, 1m, 0.5m,
+        EntryLevelStrength: 0.9m, StopLevelStrength: 0.1m,
+        TargetLevelStrength: 0.7m, IchimokuEntryPosition: 0.3m,
+        IchimokuStopPosition: -0.5m, IchimokuTargetPosition: 0.8m);
+    var candidate = new ServerSignal { Direction = "Long", TechnicalFeatures = features };
+    var historic = new ServerSignal { Direction = "Long", TechnicalFeatures = features };
+    var patterns = new[] { new LearnedSignalPattern(historic, "Target", features),
+        new LearnedSignalPattern(historic, "StopLoss", features with { PriceActionScore = 1m }) };
+    var result = SignalSimilarityService.CalculateFromPatterns(candidate, patterns);
+    Equal(100m, result.TargetPercent!.Value);
+    Equal(100m, result.StopPercent!.Value);
+    Equal(2, result.CalibrationSampleCount);
+    var changed = candidate.TechnicalFeatures with { Rsi14 = 0m, PriceActionScore = 1m,
+        FibonacciAlignment = 0m, VolumeRatio = 3m };
+    Equal(1d, SignalSimilarityService.TechnicalSimilarity(candidate, historic, changed, features));
+    var distinct = features with { StopLevelStrength = 1m, IchimokuStopPosition = 1m };
+    True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, distinct) < 1d);
+    var separate = SignalSimilarityService.CalculateFromPatterns(candidate,
+        [patterns[0], new LearnedSignalPattern(historic, "StopLoss", distinct)]);
+    Equal(100m, separate.TargetPercent!.Value);
+    True(separate.StopPercent!.Value < separate.TargetPercent.Value);
+    var legacy = features with { EntryLevelStrength = null, StopLevelStrength = null,
+        TargetLevelStrength = null, IchimokuEntryPosition = null,
+        IchimokuStopPosition = null, IchimokuTargetPosition = null };
+    True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, legacy) > 0d);
+});
 
 Run("Second-stage expiry includes a time-ordered evidence photo and risk-free closure a photo", () =>
 {
@@ -1390,6 +1421,7 @@ return failed == 0 ? 0 : 1;
 
 void Run(string name, Action test)
 {
+    if (testFilter is not null && !name.Contains(testFilter, StringComparison.OrdinalIgnoreCase)) return;
     try { test(); passed++; Console.WriteLine($"PASS  {name}"); }
     catch (Exception exception) { failed++; Console.WriteLine($"FAIL  {name}: {exception.Message}"); }
 }

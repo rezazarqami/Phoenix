@@ -1,0 +1,32 @@
+name: Build Phoenix Android
+
+on:
+  push:
+    paths: ["android/**", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+  pull_request:
+    paths: ["android/**", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Add launcher logo
+        run: |
+          mkdir -p android/app/src/main/res/drawable
+          cp Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png android/app/src/main/res/drawable/phoenix_logo.png
+      - name: Build test APK
+        working-directory: android
+        run: gradle :app:assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-android-test-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk

@@ -6,7 +6,8 @@
   if (!button || !dialog || !help || !close) return;
 
   let installPrompt = null;
-  const installed = () => window.matchMedia('(display-mode: standalone)').matches ||
+  const installed = () => /PhoenixAndroid\//.test(navigator.userAgent) ||
+    window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true;
   const refresh = () => { button.hidden = installed(); };
   refresh();

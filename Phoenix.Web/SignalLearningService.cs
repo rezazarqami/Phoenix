@@ -52,8 +52,11 @@ public sealed class SignalLearningService(
             var patterns = new List<LearnedSignalPattern>(completed.Length);
             foreach (var signal in completed)
             {
-                var features = signal.TechnicalFeatures ??
-                    (archived.TryGetValue(signal.Id, out var value) ? value : null);
+                archived.TryGetValue(signal.Id, out var archivedFeatures);
+                var features = signal.TechnicalFeatures ?? archivedFeatures;
+                if (features is not null && features.MultiScaleLevels is not { Count: > 0 } &&
+                    archivedFeatures?.MultiScaleLevels is { Count: > 0 } savedScales)
+                    features = features with { MultiScaleLevels = savedScales };
                 if (features is not null) patterns.Add(new(signal, signal.Outcome!, features));
             }
             _snapshot = new(patterns, DateTime.UtcNow);

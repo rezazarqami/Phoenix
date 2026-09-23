@@ -306,8 +306,36 @@ public sealed class SignalBatchService(
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
                     catch (Exception exception)
                     {
-                        logger.LogWarning(exception, "Skipping {Symbol}; chart candles failed", selected.Symbol);
-                        continue;
+                        logger.LogWarning(exception, "Falling back to signal timeframe for {Symbol} chart", selected.Symbol);
+                        chartInterval = option.Interval;
+                        chartCandles = option.Candles;
+                    }
+                    // Prefer the broader degree only if its closes still cover
+                    // the selected ceiling/floor and contain enough turns to count.
+                    // The signal itself continues to use option.Interval.
+                    if (!ChartHasReadableAnchors(chartCandles, selected))
+                    {
+                        var intermediate = ReviewChartFallbackInterval(option.Interval);
+                        if (intermediate != option.Interval)
+                            try
+                            {
+                                var alternative = await bybit.GetKlinesAsync(selected.Symbol, intermediate, 1000, token);
+                                if (ChartHasReadableAnchors(alternative, selected))
+                                {
+                                    chartInterval = intermediate;
+                                    chartCandles = alternative;
+                                }
+                            }
+                            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                            catch (Exception exception)
+                            {
+                                logger.LogWarning(exception, "Intermediate chart unavailable for {Symbol}", selected.Symbol);
+                            }
+                        if (!ChartHasReadableAnchors(chartCandles, selected))
+                        {
+                            chartInterval = option.Interval;
+                            chartCandles = option.Candles;
+                        }
                     }
                     ElliottScenario? elliottScenario;
                     try { elliottScenario = await elliottCounts.AnalyzeAsync(selected.Symbol, chartInterval, chartCandles, token); }
@@ -426,9 +454,32 @@ public sealed class SignalBatchService(
 
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
     private static string[] Intervals(string filter) => filter == "All" ? ["1", "5", "15", "60", "240"] : [filter];
-    public static string ReviewChartInterval(string signalInterval) => signalInterval is "1" or "5" ? "15" : signalInterval;
+    public static string ReviewChartInterval(string signalInterval) => signalInterval switch
+    {
+        "1" or "5" => "60", "15" => "240", "60" => "D", "240" => "W", _ => signalInterval
+    };
+    private static string ReviewChartFallbackInterval(string signalInterval) => signalInterval switch
+    {
+        "1" => "15", "5" => "15", "15" => "60", "60" => "240", "240" => "D", _ => signalInterval
+    };
+
+    public static bool ChartHasReadableAnchors(IReadOnlyList<BybitKline> candles, SignalCandidate candidate)
+    {
+        if (candles.Count < 30) return false;
+        var first = Math.Min(candidate.FloorTime, candidate.CeilingTime);
+        var last = Math.Max(candidate.FloorTime, candidate.CeilingTime);
+        if (first < candles[0].OpenTime || last > candles[^1].OpenTime +
+            (candles[^1].OpenTime - candles[^2].OpenTime)) return false;
+        var start = 0;
+        while (start + 1 < candles.Count && candles[start + 1].OpenTime <= first) start++;
+        var end = start;
+        while (end + 1 < candles.Count && candles[end].OpenTime < last) end++;
+        var nearby = candles.Skip(Math.Max(0, start - 12)).Take(Math.Min(candles.Count - Math.Max(0, start - 12),
+            end - Math.Max(0, start - 12) + 13)).ToArray();
+        return nearby.Length >= 12 && ElliottWaveAnalyzer.CloseTurns(nearby).Count >= 4;
+    }
     private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
-    private static string TimeframeBadge(string value) => value switch { "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", _ => value };
+    private static string TimeframeBadge(string value) => value switch { "1" => "1M", "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value };
     public static decimal EntryToTargetPercent(SignalCandidate candidate) => candidate.EntryPrice <= 0m
         ? 0m : candidate.Direction == "Long"
             ? (candidate.TakeProfit - candidate.EntryPrice) / candidate.EntryPrice * 100m

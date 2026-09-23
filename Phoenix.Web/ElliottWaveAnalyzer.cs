@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 /// <summary>Hard Elliott rules invalidate counts; ratios and alternation only rank them.</summary>
 public sealed class ElliottWaveAnalyzer
 {
-    public const string RuleSetVersion = "3.2-continuous-context";
+    public const string RuleSetVersion = "3.3-close-turns";
 
     public ElliottAnalysis Analyze(IReadOnlyList<BybitKline> candles, int depth = 5, decimal deviationPercent = 0.6m)
     {
@@ -14,7 +14,10 @@ public sealed class ElliottWaveAnalyzer
         // presentation requested by the user is candlesticks. Wicks must not
         // create a different count from the corresponding line chart.
         var pivots = FindPivots(candles, Math.Clamp(depth, 2, 20), Math.Clamp(deviationPercent, .05m, 20m));
-        var detailPivots = FindPivots(candles, 2, Math.Max(.05m, deviationPercent / 4m));
+        // Every change of direction between consecutive closes ends a raw leg.
+        // The broader pivots above group these legs into Elliott degrees; raw
+        // legs remain available to validate the subdivisions of each pattern.
+        var detailPivots = CloseTurns(candles);
         var found = new List<ElliottScenario>();
         void Add(ElliottScenario? value) { if (value is not null) found.Add(value); }
         for (var start = 0; start < pivots.Count; start++)
@@ -92,6 +95,28 @@ public sealed class ElliottWaveAnalyzer
         AddPivot(result, new(candles.Count - 1, candles[^1].OpenTime, candles[^1].Close, "Boundary"), deviation);
         NormalizeBoundaryKinds(result);
         return result;
+    }
+
+    public static List<ElliottPivot> CloseTurns(IReadOnlyList<BybitKline> candles)
+    {
+        var turns = new List<ElliottPivot>();
+        if (candles.Count == 0) return turns;
+        turns.Add(new ElliottPivot(0, candles[0].OpenTime, candles[0].Close, "Boundary"));
+        var direction = 0;
+        for (var i = 1; i < candles.Count; i++)
+        {
+            var next = Math.Sign(candles[i].Close - candles[i - 1].Close);
+            if (next == 0) continue;
+            if (direction != 0 && next != direction)
+                turns.Add(new ElliottPivot(i - 1, candles[i - 1].OpenTime,
+                    candles[i - 1].Close, direction > 0 ? "High" : "Low"));
+            direction = next;
+        }
+        if (turns[^1].Index != candles.Count - 1)
+            turns.Add(new ElliottPivot(candles.Count - 1, candles[^1].OpenTime,
+                candles[^1].Close, "Boundary"));
+        NormalizeBoundaryKinds(turns);
+        return turns;
     }
 
     private static void NormalizeBoundaryKinds(List<ElliottPivot> pivots)

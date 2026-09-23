@@ -71,17 +71,8 @@ public static class SignalChartRenderer
         var padding = Math.Clamp(anchorSpan * 5 / 4, 150, 450);
         var viewStart = Math.Max(0, firstAnchor - padding);
         var viewEnd = Math.Min(candles.Count - 1, secondAnchor + padding);
-        // Keep the validated count's time span visible even though its origin
-        // is implicit in the preceding structure and is never labelled "0".
-        if (elliott is not null && elliott.Waves.Count > 0)
-        {
-            var allWaves = elliott.ContextWaves.Concat(elliott.Waves).Concat(elliott.Subwaves).ToArray();
-            var waveStart = FindNearestIndex(candles, allWaves.MinBy(x => x.Time)!.Time);
-            var waveEnd = FindNearestIndex(candles, allWaves.MaxBy(x => x.Time)!.Time);
-            var wavePadding = Math.Clamp((waveEnd - waveStart + 1) / 8, 8, 80);
-            viewStart = Math.Min(viewStart, Math.Max(0, waveStart - wavePadding));
-            viewEnd = Math.Max(viewEnd, Math.Min(candles.Count - 1, waveEnd + wavePadding));
-        }
+        // The signal's ceiling/floor determine the viewport. Old monthly counts
+        // must not shrink the current price move to a tiny sliver of the image.
         candles = candles.Skip(viewStart).Take(viewEnd - viewStart + 1).ToArray();
         var pixels = new byte[width * height * 3];
         Fill(pixels, 255, 255, 255);
@@ -123,29 +114,8 @@ public static class SignalChartRenderer
                 TryDrawWaveLabel(point.Wave.Label, x, y, style.Scale, style.R, style.G, style.B);
             }
 
-            // All validated subdivisions remain in the analysis. Show only a
-            // sparse sample when their parent leg has enough horizontal space.
-            var visibleDetails = elliott.Subwaves.GroupBy(x => x.Parent)
-                .SelectMany(group =>
-                {
-                    var children = group.OrderBy(x => x.Time).ToArray();
-                    if (children.Length < 2) return Enumerable.Empty<ElliottWavePoint>();
-                    var span = X(FindNearestIndex(candles, children[^1].Time)) -
-                        X(FindNearestIndex(candles, children[0].Time));
-                    if (span < 90)
-                        return Enumerable.Empty<ElliottWavePoint>();
-                    return children.Skip(1).Where((w, index) =>
-                        ShouldDisplayWaveLabel(w) && (index == 0 || w == children[^1] ||
-                            (span >= 180 && index % 2 == 0)));
-                })
-                .Where(w => imageInterval is not ("15" or "5") &&
-                    w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
-                .TakeLast(10).OrderByDescending(w => w.Time);
-            foreach (var wave in visibleDetails)
-            {
-                var index = FindNearestIndex(candles, wave.Time);
-                TryDrawWaveLabel(wave.Label.ToLowerInvariant(), X(index), Y(wave.Price), 2, 111, 63, 145);
-            }
+            // Raw close reversals and validated subdivisions participate in
+            // analysis, but labels on this overview show only major degrees.
 
             void TryDrawWaveLabel(string label, int x, int y, int scale, byte r, byte g, byte b)
             {
@@ -210,6 +180,7 @@ public static class SignalChartRenderer
         "M" => (18, 130, 65, 6, true),
         "W" => (30, 85, 210, 5, true),
         "D" => (205, 50, 62, 4, true),
+        "240" => (25, 25, 25, 3, true),
         "60" => (25, 25, 25, 3, true),
         "15" or "5" when timeframe == imageTimeframe => (111, 63, 145, 2, true),
         null => (25, 25, 25, 3, true),
@@ -219,7 +190,7 @@ public static class SignalChartRenderer
 
     private static int WavePriority(string? timeframe, string? imageTimeframe) => timeframe switch
     {
-        "M" => 0, "W" => 1, "D" => 2, "60" => 3,
+        "M" => 0, "W" => 1, "D" => 2, "240" or "60" => 3,
         _ when timeframe == imageTimeframe => 4,
         _ => 5
     };

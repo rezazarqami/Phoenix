@@ -1170,11 +1170,22 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     True(monthly.G > monthly.R && weekly.B > weekly.R && daily.R > daily.G);
     Equal((byte)25, hourly.R);
     Equal((byte)111, current.R);
-    False(SignalChartRenderer.WaveStyle("240", "15").Visible);
-    Equal("15", SignalBatchService.ReviewChartInterval("1"));
-    Equal("15", SignalBatchService.ReviewChartInterval("5"));
-    Equal("15", SignalBatchService.ReviewChartInterval("15"));
-    Equal("60", SignalBatchService.ReviewChartInterval("60"));
+    True(SignalChartRenderer.WaveStyle("240", "240").Visible);
+    Equal("60", SignalBatchService.ReviewChartInterval("1"));
+    Equal("60", SignalBatchService.ReviewChartInterval("5"));
+    Equal("240", SignalBatchService.ReviewChartInterval("15"));
+    Equal("D", SignalBatchService.ReviewChartInterval("60"));
+    Equal("W", SignalBatchService.ReviewChartInterval("240"));
+});
+
+Run("Every close-direction reversal ends a raw Elliott leg", () =>
+{
+    var closes = new[] { 100m, 101m, 102m, 101m, 100m, 101m, 102m };
+    var candles = closes.Select((close, i) => new BybitKline(i * 60_000L,
+        close, close, close, close, 1m)).ToArray();
+    var turns = ElliottWaveAnalyzer.CloseTurns(candles);
+    True(turns.Select(x => x.Index).SequenceEqual(new[] { 0, 2, 4, 6 }));
+    True(turns.Select(x => x.Kind).SequenceEqual(new[] { "Low", "High", "Low", "High" }));
 });
 
 Run("Signal batch applies directional entry-to-target threshold", () =>

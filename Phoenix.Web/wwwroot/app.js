@@ -76,7 +76,8 @@ async function refreshStatus() {
     document.querySelector('#modeNote').innerHTML = data.tradingEnabled
       ? `<i>✓</i><span>موتور Bybit ${environment} فعال است؛ سفارش پس از رسیدن قیمت به نقطه ورود ارسال می‌شود.</span>`
       : '<i>!</i><span>موتور ارسال سفارش خاموش است؛ سیگنال فقط در صف دائمی ذخیره می‌شود.</span>';
-    connection.innerHTML = '<i></i>' + (connected ? (data.demoAuthenticated ? `Bybit ${environment} متصل` : 'Bybit عمومی متصل') : 'خطای اتصال');
+    connection.innerHTML = '<i></i>Bybit Real';
+    connection.title = connected ? (data.demoAuthenticated ? 'اتصال برقرار است' : 'دسترسی عمومی برقرار است؛ اتصال حساب را بررسی کنید') : 'خطای اتصال';
     connection.className = 'badge ' + (connected ? 'ok' : 'bad');
     updated.textContent = connected ? 'به‌روزرسانی خودکار هر ۱ ثانیه' : (data.error || 'ارتباط برقرار نشد');
   } catch {

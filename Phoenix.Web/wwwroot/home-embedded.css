@@ -1,0 +1,7 @@
+html.embedded-view body{background:#111419!important}
+html.embedded-view body:before{display:none!important}
+html.embedded-view body>header,html.embedded-view main>.topbar{display:none!important}
+html.embedded-view main{padding:12px!important;margin:0!important;max-width:none!important}
+html.embedded-view .market-page{background:#111419!important}
+html.embedded-view .hero{padding-top:12px!important}
+@media(max-width:600px){html.embedded-view main{padding:9px!important}}

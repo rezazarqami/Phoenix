@@ -69,6 +69,12 @@ async function loadMarket() {
 }
 
 document.querySelector('#marketSearch').addEventListener('input', renderMarket);
+document.querySelector('#marketRows').addEventListener('click', event => {
+  const link = event.target.closest('.market-row>a');
+  if (!link || !document.documentElement.classList.contains('embedded-view')) return;
+  event.preventDefault();
+  window.parent.postMessage({ type: 'phoenix-open-signal', symbol: new URL(link.href).searchParams.get('symbol') }, location.origin);
+});
 document.querySelector('#marketFilter').addEventListener('change', renderMarket);
 document.querySelector('#marketRefresh').addEventListener('click', loadMarket);
 document.querySelector('#batchSize').value = localStorage.getItem('phoenix.signal.positionSizeUsdt') || '10';

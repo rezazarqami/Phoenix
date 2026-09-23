@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <script>if (/PhoenixAndroid\//.test(navigator.userAgent)) document.documentElement.classList.add('android-shell');</script>
   <meta name="theme-color" content="#0b0e11">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,26 +14,36 @@
   <link rel="stylesheet" href="/styles.css?v=5">
   <link rel="stylesheet" href="/security.css?v=2">
   <link rel="stylesheet" href="/professional-ui.css?v=1">
+  <link rel="stylesheet" href="/home-redesign.css?v=1">
   <title>Phoenix Trading Panel</title>
 </head>
 <body>
   <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
   <main>
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">P</span><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
+      <div class="brand"><img class="home-brand-logo" src="/analysis-assets/phoenix-gold.jpg" alt="لوگوی فونیکس"><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
       <div class="header-actions">
         <span id="connection" class="badge"><i></i>در حال بررسی</span>
-        <nav class="panel-nav" aria-label="ابزارهای پنل">
-          <button id="installPhoenixButton" class="security-button install-phoenix-button" type="button"><span class="action-icon">＋</span><span>افزودن به صفحه اصلی</span></button>
-          <a class="security-button page-link" href="/analysis/coins"><span class="action-icon">◈</span><span>بخش تحلیل</span></a>
-          <a class="security-button page-link" href="/strategy2.html"><span class="action-icon">Ⅱ</span><span>Strategy 2</span></a>
+        <button id="settingsToggle" class="security-button home-settings-toggle" type="button" aria-expanded="false" aria-controls="settingsMenu"><span aria-hidden="true">⚙</span> تنظیمات</button>
+        <div id="settingsMenu" class="settings-menu" hidden>
           <button id="telegramAccessButton" class="security-button" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
           <button id="usersButton" class="security-button" type="button"><span class="action-icon">♙</span><span>کاربران</span></button>
           <button id="securityButton" class="security-button" type="button"><span class="action-icon">⚙</span><span>تنظیمات امنیتی</span></button>
           <button id="logoutButton" class="security-button logout-action" type="button"><span class="action-icon">↪</span><span>خروج</span></button>
-        </nav>
+          <button id="installPhoenixButton" class="security-button install-phoenix-button" type="button"><span class="action-icon">＋</span><span>افزودن به صفحه اصلی</span></button>
+        </div>
       </div>
     </header>
+
+    <nav class="home-tabs" role="tablist" aria-label="بخش‌های فونیکس">
+      <button class="home-tab active" id="tab-home" type="button" role="tab" aria-selected="true" aria-controls="panel-home" data-panel="home"><span>◈</span> مرکز مدیریت سیگنال</button>
+      <button class="home-tab" id="tab-crypto" type="button" role="tab" aria-selected="false" aria-controls="panel-crypto" data-panel="crypto"><span>◇</span> Crypto Markets</button>
+      <button class="home-tab" id="tab-signal" type="button" role="tab" aria-selected="false" aria-controls="panel-signal" data-panel="signal"><span>⌁</span> Signal Lab</button>
+      <button class="home-tab" id="tab-elliott" type="button" role="tab" aria-selected="false" aria-controls="panel-elliott" data-panel="elliott"><span>∿</span> Elliott Wave Lab</button>
+      <button class="home-tab" id="tab-strategy" type="button" role="tab" aria-selected="false" aria-controls="panel-strategy" data-panel="strategy"><span>Ⅱ</span> Strategy 2</button>
+    </nav>
+
+    <div id="panel-home" class="home-section" role="tabpanel" aria-labelledby="tab-home">
 
     <section class="hero">
       <div class="hero-copy"><span class="eyebrow">REAL STRATEGY</span><h2>مرکز مدیریت سیگنال</h2><p>ثبت و پایش استراتژی اصلی روی حساب واقعی</p></div>
@@ -95,6 +106,11 @@
       <div id="history" class="history-list"><div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div></div>
     </section>
     <footer><span>PHOENIX • BYBIT REAL</span><span>استراتژی اصلی حساب واقعی</span></footer>
+    </div>
+    <section id="panel-crypto" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-crypto" hidden></section>
+    <section id="panel-signal" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-signal" hidden></section>
+    <section id="panel-elliott" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-elliott" hidden></section>
+    <section id="panel-strategy" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-strategy" hidden></section>
   </main>
   <dialog id="installPhoenixDialog" class="install-phoenix-dialog" aria-labelledby="installPhoenixTitle">
     <div class="install-phoenix-content">
@@ -149,8 +165,9 @@
     </form>
   </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
-  <script src="/app.js?v=11"></script>
+  <script src="/app.js?v=12"></script>
   <script src="/install-phoenix.js?v=2"></script>
   <script src="/bulk-controls.js?v=1"></script>
+  <script src="/home-tabs.js?v=1"></script>
 </body>
 </html>

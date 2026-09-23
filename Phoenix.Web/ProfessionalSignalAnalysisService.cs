@@ -84,8 +84,6 @@ public sealed class ProfessionalSignalAnalysisService(
             var penalty = Math.Min(15m, similarRejections.Sum(x => (decimal)(x.Similarity - 0.75d) * 12m));
             var target = Math.Clamp(prediction.TargetPercent.Value - penalty, 5m, 95m);
             prediction = prediction with { TargetPercent = target, StopPercent = 100m - target };
-            foreach (var reason in similarRejections.Select(x => x.Pattern.Reason).Distinct().Take(2))
-                risks.Add($"طبق رد قبلی شما: {reason}");
         }
         return new(enriched, prediction, regime, strengths.Take(5).ToArray(), risks.Take(5).ToArray());
 

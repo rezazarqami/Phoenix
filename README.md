@@ -91,6 +91,12 @@ Bybit or its network provider may reject requests based on the originating regio
 
 ### Signal review Elliott count
 
+The batch signal selector also supports one-minute analysis with a separate
+15-minute Telegram chart. Its candidate and probability use one-minute candles;
+the image (including entry-time review) uses 15-minute candles. Candidates
+whose direction-adjusted entry-to-target move is below 0.5% are discarded
+before professional analysis and Telegram delivery.
+
 The Telegram review chart counts each symbol from monthly through weekly, daily,
 four-hour, one-hour and the requested review interval. Valid prior structures
 are retained alongside the active count; lower-degree labels use smaller type

@@ -13,14 +13,17 @@ public sealed class EntrySignalReviewService(
     {
         var interval = string.IsNullOrWhiteSpace(signal.Timeframe) ? "15" : signal.Timeframe!;
         var candles = await bybit.GetKlinesAsync(signal.Symbol, interval, 1000, token);
-        if (candles.Count < 52)
+        var chartInterval = SignalBatchService.ReviewChartInterval(interval);
+        var chartCandles = chartInterval == interval ? candles
+            : await bybit.GetKlinesAsync(signal.Symbol, chartInterval, 1000, token);
+        if (candles.Count < 52 || chartCandles.Count < 52)
             throw new InvalidOperationException("کندل کافی برای تصویر شرایط فعلی وجود ندارد.");
-        var anchorStart = candles[Math.Max(0, candles.Count - 220)].OpenTime;
+        var anchorStart = chartCandles[Math.Max(0, chartCandles.Count - 220)].OpenTime;
         var candidate = new SignalCandidate(signal.Symbol, interval, signal.Direction,
             signal.Ceiling, signal.Floor, signal.LastPrice ?? candles[^1].Close, signal.EntryPrice,
             signal.TakeProfit, signal.StopLoss, signal.StopLoss2, signal.RiskFreePrice,
             signal.Leverage ?? 1m, signal.Quantity, 0m,
-            anchorStart, candles[^1].OpenTime, anchorStart, candles[^1].OpenTime,
+            anchorStart, chartCandles[^1].OpenTime, anchorStart, chartCandles[^1].OpenTime,
             candles.Count, "Current market review", false, candles[^1].OpenTime);
         ProfessionalSignalAnalysis? analysis = null;
         try
@@ -38,8 +41,8 @@ public sealed class EntrySignalReviewService(
         {
             logger.LogWarning(exception, "Current AI refresh failed for {Symbol}; rendering with stored probabilities", signal.Symbol);
         }
-        var image = SignalChartRenderer.Render(candles, candidate, false,
-            Badge(interval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent);
+        var image = SignalChartRenderer.Render(chartCandles, candidate, false,
+            Badge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent);
         return new(image, analysis is not null);
     }
 

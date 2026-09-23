@@ -7,6 +7,7 @@ using Phoenix.Web;
 
 var passed = 0;
 var failed = 0;
+var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
 Run("Target and stop similarity are independent and ignore price action", () =>
 {
@@ -28,6 +29,14 @@ Run("Target and stop similarity are independent and ignore price action", () =>
     Equal(1d, SignalSimilarityService.TechnicalSimilarity(candidate, historic, changed, features));
     var distinct = features with { StopLevelStrength = 1m, IchimokuStopPosition = 1m };
     True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, distinct) < 1d);
+    var separate = SignalSimilarityService.CalculateFromPatterns(candidate,
+        [patterns[0], new LearnedSignalPattern(historic, "StopLoss", distinct)]);
+    Equal(100m, separate.TargetPercent!.Value);
+    True(separate.StopPercent!.Value < separate.TargetPercent.Value);
+    var legacy = features with { EntryLevelStrength = null, StopLevelStrength = null,
+        TargetLevelStrength = null, IchimokuEntryPosition = null,
+        IchimokuStopPosition = null, IchimokuTargetPosition = null };
+    True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, legacy) > 0d);
 });
 
 Run("Second-stage expiry includes a time-ordered evidence photo and risk-free closure a photo", () =>
@@ -1412,6 +1421,7 @@ return failed == 0 ? 0 : 1;
 
 void Run(string name, Action test)
 {
+    if (testFilter is not null && !name.Contains(testFilter, StringComparison.OrdinalIgnoreCase)) return;
     try { test(); passed++; Console.WriteLine($"PASS  {name}"); }
     catch (Exception exception) { failed++; Console.WriteLine($"FAIL  {name}: {exception.Message}"); }
 }

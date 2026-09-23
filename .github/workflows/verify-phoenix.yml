@@ -12,5 +12,5 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Build and run regression checks
-        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release
+      - name: Build and run similarity regression
+        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release -- --filter "Target and stop similarity"

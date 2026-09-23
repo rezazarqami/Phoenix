@@ -4,8 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b0e11">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css?v=4">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/phoenix-192.png">
+  <link rel="apple-touch-icon" href="/icons/phoenix-192.png">
+  <link rel="stylesheet" href="/styles.css?v=5">
   <link rel="stylesheet" href="/security.css?v=2">
   <link rel="stylesheet" href="/professional-ui.css?v=1">
   <title>Phoenix Trading Panel</title>
@@ -18,6 +23,7 @@
       <div class="header-actions">
         <span id="connection" class="badge"><i></i>در حال بررسی</span>
         <nav class="panel-nav" aria-label="ابزارهای پنل">
+          <button id="installPhoenixButton" class="security-button install-phoenix-button" type="button"><span class="action-icon">＋</span><span>افزودن به صفحه اصلی</span></button>
           <a class="security-button page-link" href="/analysis/coins"><span class="action-icon">◈</span><span>بخش تحلیل</span></a>
           <a class="security-button page-link" href="/strategy2.html"><span class="action-icon">Ⅱ</span><span>Strategy 2</span></a>
           <button id="telegramAccessButton" class="security-button" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
@@ -90,6 +96,14 @@
     </section>
     <footer><span>PHOENIX • BYBIT REAL</span><span>استراتژی اصلی حساب واقعی</span></footer>
   </main>
+  <dialog id="installPhoenixDialog" class="install-phoenix-dialog" aria-labelledby="installPhoenixTitle">
+    <div class="install-phoenix-content">
+      <img src="/icons/phoenix-192.png" width="76" height="76" alt="نشان Phoenix">
+      <h2 id="installPhoenixTitle">نصب Phoenix روی صفحه اصلی</h2>
+      <p id="installPhoenixHelp"></p>
+      <button id="closeInstallPhoenix" class="security-button" type="button">متوجه شدم</button>
+    </div>
+  </dialog>
   <dialog id="securityDialog" class="security-dialog">
     <form id="securityForm" method="dialog" novalidate>
       <div class="dialog-head"><div><span class="step">03</span><div><h2>تنظیمات امنیتی</h2><p>تغییر نام کاربری و رمز ورود پنل</p></div></div><button id="closeSecurity" type="button" aria-label="بستن">×</button></div>
@@ -136,6 +150,7 @@
   </dialog>
   <link rel="stylesheet" href="/history.css?v=1">
   <script src="/app.js?v=11"></script>
+  <script src="/install-phoenix.js?v=1"></script>
   <script src="/bulk-controls.js?v=1"></script>
 </body>
 </html>

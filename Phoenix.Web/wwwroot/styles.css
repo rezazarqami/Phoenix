@@ -4,3 +4,10 @@
 .ai-signal-box textarea{width:100%;resize:vertical;min-height:76px}
 .ai-signal-box .security-button{justify-self:start}
 .similarity{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:7px 14px;padding:9px 10px;border:1px solid #30363e;border-radius:6px;background:#111318;font-size:11px}.similarity .target-similarity{color:var(--green)}.similarity .stop-similarity{color:var(--red)}.similarity small{color:var(--muted);margin-inline-start:auto}.similarity.insufficient{color:var(--muted)}
+.install-phoenix-button[hidden]{display:none!important}
+.install-phoenix-dialog{width:min(390px,calc(100% - 28px));border:1px solid #806328;border-radius:16px;background:#181a20;color:#f0f1f2;box-shadow:0 20px 65px #000a;padding:0;font-family:inherit}
+.install-phoenix-dialog::backdrop{background:#000b}
+.install-phoenix-content{display:grid;justify-items:center;gap:14px;padding:26px;text-align:center}
+.install-phoenix-content img{object-fit:contain}
+.install-phoenix-content h2{margin:0;color:var(--yellow);font-size:19px}
+.install-phoenix-content p{margin:0;line-height:1.9;font-size:14px;color:#d3d7dd}

@@ -115,7 +115,9 @@ app.Use(async (context, next) =>
     }
     var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login.js" or
         "/login-analysis-link.css" or "/login-gold.css" or "/viewer-mode.js" or "/api/auth/login" or
-        "/analysis-login.css" or "/analysis-login.js";
+        "/analysis-login.css" or "/analysis-login.js" or
+        "/manifest.webmanifest" or "/sw.js" ||
+        context.Request.Path.StartsWithSegments("/icons");
     if (publicPath)
     {
         context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";

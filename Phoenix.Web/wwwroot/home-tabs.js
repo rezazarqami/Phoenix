@@ -9,6 +9,34 @@
   const settingsToggle = document.querySelector('#settingsToggle');
   const settingsMenu = document.querySelector('#settingsMenu');
 
+  function fitFrame(frame) {
+    let observer;
+    let queued = false;
+    const measure = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        const doc = frame.contentDocument;
+        if (!doc?.body) return;
+        const height = Math.ceil(Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight));
+        if (height > 0 && Math.abs(frame.getBoundingClientRect().height - height) > 2)
+          frame.style.height = `${height}px`;
+      });
+    };
+    frame.addEventListener('load', () => {
+      observer?.disconnect();
+      try {
+        const doc = frame.contentDocument;
+        if (!doc?.body) return;
+        observer = new ResizeObserver(measure);
+        observer.observe(doc.body);
+        measure();
+      } catch { /* External navigation cannot be measured. */ }
+    });
+    window.addEventListener('resize', measure);
+  }
+
   function activate(name, updateHash = true) {
     if (name !== 'home' && !routes[name]) name = 'home';
     for (const tab of tabs) {
@@ -23,6 +51,7 @@
         frame.src = routes[name];
         frame.title = tab.textContent.trim();
         frame.className = 'home-content-frame';
+        fitFrame(frame);
         panel.append(frame);
       }
     }

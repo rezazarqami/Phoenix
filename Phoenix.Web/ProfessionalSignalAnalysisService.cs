@@ -20,7 +20,8 @@ public sealed class ProfessionalSignalAnalysisService(
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<ProfessionalSignalAnalysis> AnalyzeAsync(SignalCandidate candidate,
-        IReadOnlyList<BybitKline> signalCandles, string signalInterval, CancellationToken token)
+        IReadOnlyList<BybitKline> signalCandles, string signalInterval, CancellationToken token,
+        DateTime? asOfUtc = null)
     {
         var symbolTasks = ContextIntervals.ToDictionary(x => x,
             x => x == signalInterval && signalCandles.Count >= 720
@@ -34,13 +35,18 @@ public sealed class ProfessionalSignalAnalysisService(
         await Task.WhenAll(symbolTasks.Values.Concat<Task>(bitcoinTasks.Values)
             .Concat(extendedTasks.Values));
 
+        IReadOnlyList<BybitKline> AtEntry(IReadOnlyList<BybitKline> candles, string interval) =>
+            asOfUtc is null ? candles : CandlesAvailableAt(candles, interval, asOfUtc.Value);
+        signalCandles = AtEntry(signalCandles, signalInterval);
+        var symbolHistory = symbolTasks.ToDictionary(x => x.Key, x => AtEntry(x.Value.Result, x.Key));
+
         var snapshots = ContextIntervals.Select(interval =>
-            (Interval: interval, Features: TechnicalFeatureExtractor.Calculate(symbolTasks[interval].Result, candidate))).ToArray();
+            (Interval: interval, Features: TechnicalFeatureExtractor.Calculate(symbolHistory[interval], candidate))).ToArray();
         var direction = candidate.Direction == "Long" ? 1m : -1m;
         var weights = new Dictionary<string, decimal> { ["15"] = 1m, ["60"] = 1.5m, ["240"] = 2m, ["D"] = 2.5m };
         var alignment = snapshots.Sum(x => DirectionalTrend(x.Features, direction) * weights[x.Interval]) / weights.Values.Sum();
 
-        var btc = bitcoinTasks.Select(x => TechnicalFeatureExtractor.Calculate(x.Value.Result, candidate)).ToArray();
+        var btc = bitcoinTasks.Select(x => TechnicalFeatureExtractor.Calculate(AtEntry(x.Value.Result, x.Key), candidate)).ToArray();
         var bitcoinAlignment = btc.Average(x => DirectionalTrend(x, direction));
         var primaryMatch = snapshots.FirstOrDefault(x => x.Interval == signalInterval);
         var primary = primaryMatch.Features
@@ -49,9 +55,10 @@ public sealed class ProfessionalSignalAnalysisService(
         var regime = regimeScore >= 0.62m ? "روند قدرتمند" : regimeScore <= 0.22m ? "رنج/فشرده" : "روند متوسط";
         var structure = snapshots.Sum(x => x.Features.StructureScore * weights[x.Interval]) / weights.Values.Sum();
         var sweep = snapshots.Sum(x => x.Features.LiquiditySweepScore * weights[x.Interval]) / weights.Values.Sum();
-        var histories = symbolTasks.ToDictionary(x => x.Key, x => x.Value.Result);
+        var histories = symbolHistory;
         foreach (var (interval, task) in extendedTasks)
-            if (task.Result is { Count: >= 80 } candles) histories[interval] = candles;
+            if (task.Result is { } candles && AtEntry(candles, interval) is { Count: >= 80 } earlier)
+                histories[interval] = earlier;
         if (signalCandles.Count >= 80) histories[signalInterval] = signalCandles;
         var scales = MultiScaleLevelExtractor.Calculate(histories, candidate);
         var otherFib = scales.Where(x => x.Interval != signalInterval)
@@ -87,6 +94,21 @@ public sealed class ProfessionalSignalAnalysisService(
             if (value >= threshold) strengths.Add(positive);
             else if (value <= -threshold) risks.Add(negative);
         }
+    }
+
+    internal static IReadOnlyList<BybitKline> CandlesAvailableAt(
+        IReadOnlyList<BybitKline> candles, string interval, DateTime asOfUtc)
+    {
+        var cutoff = new DateTimeOffset(asOfUtc.ToUniversalTime()).ToUnixTimeMilliseconds();
+        return candles.Where(c => interval switch
+        {
+            "M" => new DateTimeOffset(DateTimeOffset.FromUnixTimeMilliseconds(c.OpenTime).UtcDateTime
+                .AddMonths(1)).ToUnixTimeMilliseconds() <= cutoff,
+            "W" => c.OpenTime + 7L * 86_400_000 <= cutoff,
+            "D" => c.OpenTime + 86_400_000 <= cutoff,
+            _ when int.TryParse(interval, out var minutes) => c.OpenTime + minutes * 60_000L <= cutoff,
+            _ => false
+        }).ToArray();
     }
 
     public static string ExplainStop(TechnicalFeatureSnapshot? f)

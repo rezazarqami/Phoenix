@@ -33,6 +33,7 @@ public sealed class ServerSignal
     public string? Error { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? SubmittedAtUtc { get; set; }
+    public DateTime? EntryTriggeredAtUtc { get; set; }
     public DateTime? FilledAtUtc { get; set; }
     public decimal? AverageFillPrice { get; set; }
     public decimal? ExecutedQuantity { get; set; }
@@ -56,6 +57,7 @@ public sealed class ServerSignal
     public decimal? StopSimilarityPercent { get; set; }
     public int SimilaritySampleCount { get; set; }
     public TechnicalFeatureSnapshot? TechnicalFeatures { get; set; }
+    public TechnicalFeatureSnapshot? EntryTechnicalFeatures { get; set; }
     public string? AnalysisSummary { get; set; }
     public string? MarketRegime { get; set; }
     public string? FailureReason { get; set; }
@@ -193,9 +195,28 @@ public sealed class ServerOrderStore
             if (signals[index].CompletedAtUtc is not null) return;
             if (signal.Status == "Pending" && signals[index].Status != "Pending")
                 return; // Never let a stale polling snapshot undo an atomic entry claim.
+            signal.EntryTechnicalFeatures ??= signals[index].EntryTechnicalFeatures;
+            signal.EntryTriggeredAtUtc ??= signals[index].EntryTriggeredAtUtc;
             signals[index] = Clone(signal);
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "SignalUpdated", token);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveEntryTechnicalFeaturesAsync(Guid id, TechnicalFeatureSnapshot features,
+        DateTime entryAtUtc, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is null || signal.EntryTechnicalFeatures is not null) return;
+            signal.EntryTriggeredAtUtc ??= entryAtUtc;
+            signal.EntryTechnicalFeatures = features;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "EntryTechnicalSnapshot", token);
         }
         finally { _gate.Release(); }
     }
@@ -246,6 +267,7 @@ public sealed class ServerOrderStore
             var signal = signals.SingleOrDefault(x => x.Id == id);
             if (signal is null || signal.Status != "Pending") return false;
             signal.Status = "Submitting";
+            signal.EntryTriggeredAtUtc = DateTime.UtcNow;
             signal.LastPrice = price;
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
@@ -266,6 +288,7 @@ public sealed class ServerOrderStore
             if (signals.Any(x => x.Id != id && x.Status is "Submitting" or "Submitted" or "Filled"))
                 return ExclusiveClaimResult.PositionBusy;
             signal.Status = "Submitting";
+            signal.EntryTriggeredAtUtc = DateTime.UtcNow;
             signal.LastPrice = price;
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
@@ -364,6 +387,7 @@ public sealed class ServerOrderStore
         RiskFreeStopMarketOrderId = signal.RiskFreeStopMarketOrderId,
         OrderLinkId = signal.OrderLinkId, BybitOrderId = signal.BybitOrderId, Error = signal.Error,
         CreatedAtUtc = signal.CreatedAtUtc, SubmittedAtUtc = signal.SubmittedAtUtc,
+        EntryTriggeredAtUtc = signal.EntryTriggeredAtUtc,
         FilledAtUtc = signal.FilledAtUtc, AverageFillPrice = signal.AverageFillPrice,
         ExecutedQuantity = signal.ExecutedQuantity,
         TargetReachedAtUtc = signal.TargetReachedAtUtc, RiskFreeReachedAtUtc = signal.RiskFreeReachedAtUtc,
@@ -379,6 +403,7 @@ public sealed class ServerOrderStore
         StopSimilarityPercent = signal.StopSimilarityPercent,
         SimilaritySampleCount = signal.SimilaritySampleCount,
         TechnicalFeatures = signal.TechnicalFeatures,
+        EntryTechnicalFeatures = signal.EntryTechnicalFeatures,
         AnalysisSummary = signal.AnalysisSummary,
         MarketRegime = signal.MarketRegime,
         FailureReason = signal.FailureReason,

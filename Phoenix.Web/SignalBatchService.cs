@@ -289,8 +289,8 @@ public sealed class SignalBatchService(
                             ranked[optionIndex + 1].Candles, ranked[optionIndex + 1].Interval, token)
                         : null;
                     if (EntryToTargetPercent(option.Candidate) < 0.5m ||
-                        !analysis.Prediction.TargetPercent.HasValue ||
-                        analysis.Prediction.TargetPercent.Value < minimumTargetProbability) continue;
+                        (analysis.Prediction.TargetPercent.HasValue &&
+                         analysis.Prediction.TargetPercent.Value < minimumTargetProbability)) continue;
                     var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N");
                     var decision = new TaskCompletionSource<BatchDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -352,8 +352,8 @@ public sealed class SignalBatchService(
                     var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
                         : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
                     var similarityLines = similarityResult.TargetPercent.HasValue
-                        ? $"\n\n🟢 <b>شباهت به سیگنال‌های تارگت‌خورده: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت به سیگنال‌های استاپ‌خورده: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های مقایسه: {similarityResult.CalibrationSampleCount}"
-                        : "\n📊 برای پیش‌بینی، دادهٔ فنی کافی نیست";
+                        ? $"\n\n🟢 <b>شباهت در صورت ورود به تارگت‌خورده‌ها: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت در صورت ورود به استاپ‌خورده‌ها: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\nمبنای مقایسه: شرایط ثبت‌شده هنگام ورود نمونه‌های قبلی؛ وضعیت این سیگنال هنگام ورود دوباره بررسی می‌شود.\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های مقایسه: {similarityResult.CalibrationSampleCount}"
+                        : "\n📊 نمونهٔ کافی با دادهٔ ثبت‌شده در لحظهٔ ورود وجود ندارد؛ شباهت پس از جمع‌آوری نمونه‌ها نمایش داده می‌شود.";
                     var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
                     byte[] image;
                     try

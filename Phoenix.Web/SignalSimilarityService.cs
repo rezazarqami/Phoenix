@@ -18,12 +18,17 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var targets = patterns.Where(x => x.Outcome == "Target").ToArray();
         var stops = patterns.Where(x => x.Outcome == "StopLoss").ToArray();
-        if (targets.Length == 0 || stops.Length == 0)
+        if (targets.Length < 5 || stops.Length < 5)
             return new(null, null, patterns.Count, targets.Length, stops.Length);
         // Score the nearest examples of each class independently. The larger
         // historical class cannot force the other score to be its complement.
         var targetScore = Score(targets);
         var stopScore = Score(stops);
+        // Distinguish the classes by their margin while retaining separate
+        // absolute resemblance scores. Identical evidence has no margin.
+        var margin = targetScore - stopScore;
+        targetScore = Math.Clamp(targetScore + 1.4d * margin, 0d, 1d);
+        stopScore = Math.Clamp(stopScore - 1.4d * margin, 0d, 1d);
         return new(Math.Round((decimal)(targetScore * 100d), 0),
             Math.Round((decimal)(stopScore * 100d), 0), patterns.Count,
             targets.Length, stops.Length, Math.Min(targets.Length, 12) + Math.Min(stops.Length, 12));
@@ -96,7 +101,9 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     {
         var isLong = signal.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase);
         var sign = isLong ? 1m : -1m;
-        return new(f.IchimokuPosition * sign, f.IchimokuCloudBias * sign,
+        // The level's cloud position is comparable before and at entry;
+        // the current candle's cloud position is not the planned entry.
+        return new((f.IchimokuEntryPosition ?? f.IchimokuPosition) * sign, f.IchimokuCloudBias * sign,
             isLong ? f.SupportDistanceAtr : f.ResistanceDistanceAtr,
             isLong ? f.ResistanceDistanceAtr : f.SupportDistanceAtr,
             f.IchimokuEntryPosition * sign, f.IchimokuStopPosition * sign,

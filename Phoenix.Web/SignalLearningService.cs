@@ -13,7 +13,6 @@ public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> 
 public sealed class SignalLearningService(
     ServerOrderStore store,
     ShadowSignalRuntime shadow,
-    ReviewArchiveStore reviews,
     ILogger<SignalLearningService> logger) : BackgroundService
 {
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
@@ -48,16 +47,13 @@ public sealed class SignalLearningService(
                 .Where(x => x.Outcome is "Target" or "StopLoss")
                 .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
                 .ToArray();
-            var archived = await reviews.GetTechnicalFeaturesAsync(completed.Select(x => x.Id).ToArray(), token);
             var patterns = new List<LearnedSignalPattern>(completed.Length);
             foreach (var signal in completed)
             {
-                archived.TryGetValue(signal.Id, out var archivedFeatures);
-                var features = signal.TechnicalFeatures ?? archivedFeatures;
-                if (features is not null && features.MultiScaleLevels is not { Count: > 0 } &&
-                    archivedFeatures?.MultiScaleLevels is { Count: > 0 } savedScales)
-                    features = features with { MultiScaleLevels = savedScales };
-                if (features is not null) patterns.Add(new(signal, signal.Outcome!, features));
+                // Proposal-time snapshots and archived review candles describe
+                // a different moment. Never relabel them as entry-time evidence.
+                if (signal.EntryTriggeredAtUtc is not null && signal.EntryTechnicalFeatures is { } features)
+                    patterns.Add(new(signal, signal.Outcome!, features));
             }
             _snapshot = new(patterns, DateTime.UtcNow);
             logger.LogInformation("Phoenix learned {Count} completed technical patterns.", patterns.Count);

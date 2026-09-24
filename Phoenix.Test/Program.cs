@@ -18,25 +18,43 @@ Run("Target and stop similarity are independent and ignore price action", () =>
         IchimokuStopPosition: -0.5m, IchimokuTargetPosition: 0.8m);
     var candidate = new ServerSignal { Direction = "Long", TechnicalFeatures = features };
     var historic = new ServerSignal { Direction = "Long", TechnicalFeatures = features };
-    var patterns = new[] { new LearnedSignalPattern(historic, "Target", features),
-        new LearnedSignalPattern(historic, "StopLoss", features with { PriceActionScore = 1m }) };
+    var patterns = Enumerable.Range(0, 5).SelectMany(_ => new[]
+    {
+        new LearnedSignalPattern(historic, "Target", features),
+        new LearnedSignalPattern(historic, "StopLoss", features with { PriceActionScore = 1m })
+    }).ToArray();
     var result = SignalSimilarityService.CalculateFromPatterns(candidate, patterns);
     Equal(100m, result.TargetPercent!.Value);
     Equal(100m, result.StopPercent!.Value);
-    Equal(2, result.CalibrationSampleCount);
+    Equal(10, result.CalibrationSampleCount);
     var changed = candidate.TechnicalFeatures with { Rsi14 = 0m, PriceActionScore = 1m,
         FibonacciAlignment = 0m, VolumeRatio = 3m };
     Equal(1d, SignalSimilarityService.TechnicalSimilarity(candidate, historic, changed, features));
     var distinct = features with { StopLevelStrength = 1m, IchimokuStopPosition = 1m };
     True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, distinct) < 1d);
     var separate = SignalSimilarityService.CalculateFromPatterns(candidate,
-        [patterns[0], new LearnedSignalPattern(historic, "StopLoss", distinct)]);
+        Enumerable.Range(0, 5).SelectMany(_ => new[]
+        { patterns[0], new LearnedSignalPattern(historic, "StopLoss", distinct) }).ToArray());
     Equal(100m, separate.TargetPercent!.Value);
     True(separate.StopPercent!.Value < separate.TargetPercent.Value);
     var legacy = features with { EntryLevelStrength = null, StopLevelStrength = null,
         TargetLevelStrength = null, IchimokuEntryPosition = null,
         IchimokuStopPosition = null, IchimokuTargetPosition = null };
     True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, legacy) > 0d);
+    var tooFew = SignalSimilarityService.CalculateFromPatterns(candidate,
+        [patterns[0], patterns[1]]);
+    False(tooFew.TargetPercent.HasValue);
+});
+
+Run("Entry fingerprints exclude unfinished and future candles", () =>
+{
+    var start = new DateTime(2026, 9, 24, 12, 0, 0, DateTimeKind.Utc);
+    var time = new DateTimeOffset(start).ToUnixTimeMilliseconds();
+    var candles = Enumerable.Range(0, 4).Select(i => new BybitKline(
+        time + i * 60_000L, 100m + i, 101m + i, 99m + i, 100m + i, 1m)).ToArray();
+    var visible = ProfessionalSignalAnalysisService.CandlesAvailableAt(candles, "1",
+        start.AddMinutes(2).AddSeconds(30));
+    True(visible.Select(x => x.OpenTime).SequenceEqual([time, time + 60_000L]));
 });
 
 Run("Target and stop similarity uses near and distant Fibonacci, cloud and levels", () =>

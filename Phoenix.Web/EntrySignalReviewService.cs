@@ -5,6 +5,7 @@ namespace Phoenix.Web;
 public sealed class EntrySignalReviewService(
     BybitDemoClient bybit,
     ProfessionalSignalAnalysisService professional,
+    ServerOrderStore store,
     TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ILogger<EntrySignalReviewService> logger)
@@ -28,11 +29,17 @@ public sealed class EntrySignalReviewService(
         ProfessionalSignalAnalysis? analysis = null;
         try
         {
-            analysis = await professional.AnalyzeAsync(candidate, candles, interval, token);
+            analysis = await professional.AnalyzeAsync(candidate, candles, interval, token,
+                signal.EntryTriggeredAtUtc);
             signal.TargetSimilarityPercent = analysis.Prediction.TargetPercent;
             signal.StopSimilarityPercent = analysis.Prediction.StopPercent;
             signal.SimilaritySampleCount = analysis.Prediction.SampleCount;
             signal.TechnicalFeatures = analysis.Features;
+            if (signal.EntryTriggeredAtUtc is { } entryAt)
+            {
+                await store.SaveEntryTechnicalFeaturesAsync(signal.Id, analysis.Features, entryAt, token);
+                signal.EntryTechnicalFeatures = analysis.Features;
+            }
             signal.AnalysisSummary = string.Join(" | ", analysis.Strengths.Concat(analysis.Risks));
             signal.MarketRegime = analysis.MarketRegime;
         }

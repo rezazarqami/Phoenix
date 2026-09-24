@@ -1171,7 +1171,7 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     Equal((byte)25, hourly.R);
     Equal((byte)111, current.R);
     True(SignalChartRenderer.WaveStyle("240", "240").Visible);
-    Equal("60", SignalBatchService.ReviewChartInterval("1"));
+    Equal("15", SignalBatchService.ReviewChartInterval("1"));
     Equal("60", SignalBatchService.ReviewChartInterval("5"));
     Equal("240", SignalBatchService.ReviewChartInterval("15"));
     Equal("D", SignalBatchService.ReviewChartInterval("60"));

@@ -456,11 +456,11 @@ public sealed class SignalBatchService(
     private static string[] Intervals(string filter) => filter == "All" ? ["1", "5", "15", "60", "240"] : [filter];
     public static string ReviewChartInterval(string signalInterval) => signalInterval switch
     {
-        "1" or "5" => "60", "15" => "240", "60" => "D", "240" => "W", _ => signalInterval
+        "1" => "15", "5" => "60", "15" => "240", "60" => "D", "240" => "W", _ => signalInterval
     };
     private static string ReviewChartFallbackInterval(string signalInterval) => signalInterval switch
     {
-        "1" => "15", "5" => "15", "15" => "60", "60" => "240", "240" => "D", _ => signalInterval
+        "5" => "15", "15" => "60", "60" => "240", "240" => "D", _ => signalInterval
     };
 
     public static bool ChartHasReadableAnchors(IReadOnlyList<BybitKline> candles, SignalCandidate candidate)

@@ -18,6 +18,8 @@ public sealed class SignalLearningService(
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private volatile SignalLearningSnapshot _snapshot = SignalLearningSnapshot.Empty;
 
+    public Task RefreshNowAsync(CancellationToken token) => RefreshAsync(token);
+
     public async Task<SignalLearningSnapshot> GetSnapshotAsync(CancellationToken token = default)
     {
         if (_snapshot.RefreshedAtUtc == DateTime.MinValue) await RefreshAsync(token);

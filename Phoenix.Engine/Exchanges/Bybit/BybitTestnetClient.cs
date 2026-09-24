@@ -51,7 +51,13 @@ public sealed partial class BybitDemoClient
         string symbol,
         string interval,
         int limit = 500,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await GetKlinesBeforeAsync(symbol, interval, null, limit, cancellationToken);
+
+    /// <summary>Historical candles ending at the requested UTC instant, without a look-ahead window.</summary>
+    public async Task<IReadOnlyList<BybitKline>> GetKlinesBeforeAsync(
+        string symbol, string interval, DateTime? endUtc,
+        int limit = 500, CancellationToken cancellationToken = default)
     {
         symbol = NormalizeSymbol(symbol);
         var allowedIntervals = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -65,7 +71,8 @@ public sealed partial class BybitDemoClient
             throw new ArgumentOutOfRangeException(nameof(limit), "Candle limit must be between 50 and 1000.");
 
         var path = $"/v5/market/kline?category=linear&symbol={Uri.EscapeDataString(symbol)}" +
-                   $"&interval={Uri.EscapeDataString(interval)}&limit={limit.ToString(CultureInfo.InvariantCulture)}";
+                   $"&interval={Uri.EscapeDataString(interval)}&limit={limit.ToString(CultureInfo.InvariantCulture)}" +
+                   (endUtc.HasValue ? $"&end={new DateTimeOffset(endUtc.Value.ToUniversalTime()).ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture)}" : "");
         using var response = await _httpClient.GetAsync(path, cancellationToken);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         response.EnsureSuccessStatusCode();

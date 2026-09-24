@@ -1079,6 +1079,51 @@ Run("Bybit candles are parsed and sorted oldest first", () =>
     Equal(23m, candles[1].Close);
 });
 
+Run("Historical Bybit candles request the exact entry cutoff", () =>
+{
+    Uri? requestUri = null;
+    var handler = new StubHttpHandler(request =>
+    {
+        requestUri = request.RequestUri;
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[[\"1000\",\"10\",\"11\",\"9\",\"10\",\"1\",\"0\"]]}}")
+        };
+    });
+    var client = new BybitDemoClient(new BybitDemoOptions(null, null), new HttpClient(handler));
+    var entry = new DateTime(2026, 9, 24, 12, 31, 0, DateTimeKind.Utc);
+    var candles = client.GetKlinesBeforeAsync("BTCUSDT", "15", entry, 100).GetAwaiter().GetResult();
+    Equal(1, candles.Count);
+    True(requestUri!.Query.Contains($"end={new DateTimeOffset(entry).ToUnixTimeMilliseconds()}"));
+    Equal(entry, HistoricalEntryBackfillWorker.EntryTime(new ServerSignal { FilledAtUtc = entry })!.Value);
+});
+
+Run("Completed historical entry fingerprints survive archive reload", () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "phoenix-entry-backfill-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var archive = new SignalHistoryStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.db"));
+        var signal = new ServerSignal
+        {
+            Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Status = "Completed",
+            Outcome = "Target", CreatedAtUtc = DateTime.UtcNow.AddDays(-1),
+            CompletedAtUtc = DateTime.UtcNow, EntryPrice = 100m, Ceiling = 110m, Floor = 90m
+        };
+        archive.UpsertAsync(signal, "Completed").GetAwaiter().GetResult();
+        var entry = signal.CreatedAtUtc.AddHours(2);
+        var features = new TechnicalFeatureSnapshot(.5m, 1m, .3m, .2m, .1m,
+            1m, 1m, .4m, .5m, 1m, .5m);
+        True(archive.SaveHistoricalEntryFeaturesAsync(signal.Id, entry, features).GetAwaiter().GetResult());
+        False(archive.SaveHistoricalEntryFeaturesAsync(signal.Id, entry, features).GetAwaiter().GetResult());
+        var saved = archive.GetAsync(30, 20).GetAwaiter().GetResult().Single().Signal;
+        Equal(entry, saved.EntryTriggeredAtUtc!.Value);
+        Equal(features.IchimokuPosition, saved.EntryTechnicalFeatures!.IchimokuPosition);
+    }
+    finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
+});
+
 Run("Elliott analyzer returns a valid bullish impulse", () =>
 {
     var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.01m).ToArray();

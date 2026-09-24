@@ -221,6 +221,25 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    public async Task<bool> SaveHistoricalEntryFeaturesAsync(Guid id, DateTime entryAtUtc,
+        TechnicalFeatureSnapshot features, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is not null && signal.EntryTechnicalFeatures is null)
+            {
+                signal.EntryTriggeredAtUtc ??= entryAtUtc;
+                signal.EntryTechnicalFeatures = features;
+                await SaveUnsafeAsync(signals, token);
+            }
+            return await _history.SaveHistoricalEntryFeaturesAsync(id, entryAtUtc, features, token);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<bool> RemoveAsync(Guid id, CancellationToken token = default)
     {
         await _gate.WaitAsync(token);

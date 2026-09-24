@@ -93,6 +93,28 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
+    public async Task<bool> SaveHistoricalEntryFeaturesAsync(Guid id, DateTime entryAtUtc,
+        TechnicalFeatureSnapshot features, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var signal = await ReadSnapshotAsync(connection, id, token);
+            if (signal is null || signal.EntryTechnicalFeatures is not null ||
+                signal.Outcome is not ("Target" or "StopLoss")) return false;
+            signal.EntryTriggeredAtUtc ??= entryAtUtc;
+            signal.EntryTechnicalFeatures = features;
+            var command = connection.CreateCommand();
+            command.CommandText = "UPDATE signals SET payload=$payload, updated_at_utc=$updated WHERE id=$id";
+            Add(command, "$payload", JsonSerializer.Serialize(signal, JsonOptions));
+            Add(command, "$updated", DateTime.UtcNow.ToString("O"));
+            Add(command, "$id", id.ToString());
+            return await command.ExecuteNonQueryAsync(token) > 0;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<IReadOnlyList<SignalHistoryItem>> GetAsync(int days, int limit, CancellationToken token = default)
     {
         days = Math.Clamp(days, 1, 3650);

@@ -1124,25 +1124,22 @@ Run("Completed historical entry fingerprints survive archive reload", () =>
     finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
 });
 
+ElliottRulesTests.RunAll(Run);
+
 Run("Elliott analyzer returns a valid bullish impulse", () =>
 {
-    var prices = Enumerable.Range(0, 100).Select(i => 100m + i * 0.01m).ToArray();
-    void Shape(int center, decimal price, bool high)
-    {
-        for (var offset = -3; offset <= 3; offset++)
-        {
-            var distance = Math.Abs(offset);
-            prices[center + offset] = high ? price - distance : price + distance;
-        }
-    }
-    Shape(10, 100m, false); Shape(25, 120m, true); Shape(38, 110m, false);
-    Shape(52, 145m, true); Shape(67, 130m, false); Shape(82, 155m, true);
-    var candles = prices.Select((price, index) => new BybitKline(index * 60_000L, price, price + 0.1m, price - 0.1m, price, 1m)).ToArray();
+    // Continuous legs: the former isolated spikes silently crossed the
+    // origin inside wave 2 and should be rejected by full-span validation.
+    decimal[] turns = [100,120,110,145,130,155,150];
+    var prices = new List<decimal> { turns[0] };
+    for(var leg=0;leg<turns.Length-1;leg++)
+        for(var i=1;i<=12;i++) prices.Add(turns[leg]+(turns[leg+1]-turns[leg])*i/12m);
+    var candles = prices.Select((price,index)=>new BybitKline(index*60_000L,price,price+.1m,price-.1m,price,1m)).ToArray();
     var analysis = new ElliottWaveAnalyzer().Analyze(candles, 3, 2m);
     True(analysis.Scenarios.Count > 0);
-    Equal("3.0-pdf", analysis.RuleSetVersion);
-    True(analysis.Scenarios[0].Rules.Where(x => x.IsHard).All(x => x.Passed));
-    Equal(candles[^1].OpenTime, analysis.Scenarios[0].Waves[^1].Time);
+    Equal(ElliottWaveAnalyzer.RuleSetVersion, analysis.RuleSetVersion);
+    True(analysis.Scenarios[0].Rules.Where(x => x.IsHard).All(x => x.Status != "Failed"));
+    True(analysis.Scenarios[0].Waves[^1].Time <= candles[^1].OpenTime);
     True(analysis.Scenarios.Any(x => x.Direction == "Bullish" &&
         x.Rules.Any(r => r.Code == "wave3-shortest" && r.Passed)));
 });

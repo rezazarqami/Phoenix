@@ -17,7 +17,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
         IReadOnlyList<BybitKline> currentCandles, CancellationToken token)
     {
         var target = Array.IndexOf(Degrees, interval.ToUpperInvariant());
-        if (target < 0) return analyzer.Analyze(currentCandles).Scenarios.FirstOrDefault();
+        if (target < 0) return analyzer.Analyze(ElliottWaveAnalyzer.ClosedCandles(currentCandles, interval, DateTimeOffset.UtcNow)).Scenarios.FirstOrDefault();
         await _gate.WaitAsync(token);
         try
         {
@@ -32,13 +32,13 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 CountSnapshot? previous = null;
                 try
                 {
-                    if (File.Exists(file)) previous = JsonSerializer.Deserialize<CountSnapshot>(await File.ReadAllTextAsync(file, token));
+                    if (File.Exists(file)) previous = JsonSerializer.Deserialize<CountSnapshot>(await File.ReadAllTextAsync(file, token), Json);
                 }
                 catch (Exception ex) when (ex is JsonException or IOException)
                 {
                     logger.LogWarning(ex, "Rebuilding Elliott count for {Symbol} {Interval}", symbol, tier);
                 }
-                if (previous?.RuleSet != ElliottWaveAnalyzer.RuleSetVersion) previous = null;
+                if (previous?.RuleSet != analyzer.CacheVersion) previous = null;
                 IReadOnlyList<BybitKline> recent;
                 try
                 {
@@ -54,6 +54,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                             .Select(w => w with { Degree = -(target - degree), Timeframe = tier }));
                     continue;
                 }
+                recent = ElliottWaveAnalyzer.ClosedCandles(recent, tier, DateTimeOffset.UtcNow);
                 if (recent.Count < 30) continue;
                 var missingOverlap = previous is not null && !recent.Any(c =>
                     previous.Candles.Any(old => old.OpenTime == c.OpenTime));
@@ -61,7 +62,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                     previous.Candles.Any(old => old.OpenTime == c.OpenTime && old != c &&
                         old.OpenTime != recent[^1].OpenTime));
                 if ((revised || missingOverlap) && degree != target)
-                    recent = await bybit.GetKlinesAsync(symbol, tier, 1000, token);
+                    recent = ElliottWaveAnalyzer.ClosedCandles(await bybit.GetKlinesAsync(symbol, tier, 1000, token), tier, DateTimeOffset.UtcNow);
                 IEnumerable<BybitKline> source = previous is null || revised || missingOverlap
                     ? recent : previous.Candles.Concat(recent);
                 var merged = source
@@ -73,7 +74,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 {
                     var temporary = file + ".tmp";
                     await File.WriteAllTextAsync(temporary,
-                        JsonSerializer.Serialize(new CountSnapshot(ElliottWaveAnalyzer.RuleSetVersion, merged, analysis), Json), token);
+                        JsonSerializer.Serialize(new CountSnapshot(analyzer.CacheVersion, merged, analysis), Json), token);
                     File.Move(temporary, file, true);
                 }
                 var selected = analysis.Scenarios.FirstOrDefault();

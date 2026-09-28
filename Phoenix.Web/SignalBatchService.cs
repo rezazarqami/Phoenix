@@ -358,7 +358,8 @@ public sealed class SignalBatchService(
                     byte[] image;
                     try
                     {
-                        image = SignalChartRenderer.Render(chartCandles, selected, option.LineMode,
+                        // Chart style is presentation-only; keep option.LineMode for analysis and review metadata.
+                        image = SignalChartRenderer.Render(chartCandles, selected, false,
                             TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
                             elliottScenario);
                         await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);

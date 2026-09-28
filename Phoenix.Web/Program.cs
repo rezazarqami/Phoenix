@@ -506,7 +506,7 @@ app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int?
         if (!await catalog.ContainsAsync(symbol, token))
             return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
         var candles = await bybit.GetKlinesAsync(symbol, interval ?? "60", Math.Clamp(limit ?? 500, 50, 1000), token);
-        var analysis = analyzer.Analyze(candles, Math.Clamp(depth ?? 5, 2, 20), deviation ?? 0.6m);
+        var analysis = analyzer.Analyze(ElliottWaveAnalyzer.ClosedCandles(candles, interval ?? "60", DateTimeOffset.UtcNow), Math.Clamp(depth ?? 5, 2, 20), deviation ?? 0.6m);
         return Results.Ok(new { symbol, interval = interval ?? "60", candles, analysis });
     }
     catch (Exception exception)

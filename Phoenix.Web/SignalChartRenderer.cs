@@ -111,7 +111,7 @@ public static class SignalChartRenderer
             {
                 var x = X(point.Index); var y = Y(point.Wave.Price);
                 var style = WaveStyle(point.Wave.Timeframe, imageInterval);
-                TryDrawWaveLabel(point.Wave.Label, x, y, style.Scale, style.R, style.G, style.B);
+                TryDrawWaveLabel(point.Wave.Label + (point.Wave.IsTentative ? "?" : ""), x, y, style.Scale, style.R, style.G, style.B);
             }
 
             // Raw close reversals and validated subdivisions participate in
@@ -321,7 +321,8 @@ public static class SignalChartRenderer
         'I' => [31, 4, 4, 4, 4, 4, 31], 'X' => [17, 17, 10, 4, 10, 17, 17],
         'U' => [17, 17, 17, 17, 17, 17, 14], 'V' => [17, 17, 17, 17, 17, 10, 4],
         'F' => [31, 16, 16, 30, 16, 16, 16], 'K' => [17, 18, 20, 24, 20, 18, 17],
-        'Y' => [17, 17, 10, 4, 4, 4, 4],
+        'Y' => [17, 17, 10, 4, 4, 4, 4], 'Z' => [31, 1, 2, 4, 8, 16, 31],
+        '?' => [14, 17, 1, 2, 4, 0, 4],
         'M' => [17, 27, 21, 21, 17, 17, 17], 'W' => [17, 17, 17, 21, 21, 21, 10],
         'H' => [17, 17, 17, 31, 17, 17, 17],
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],

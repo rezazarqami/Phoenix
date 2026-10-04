@@ -21,7 +21,8 @@ public static class ElliottRulesTests
         run("Elliott PDF does not confirm the live final leg",()=>{
             var (s,raw)=Fixture("Impulse",[100,120,110,150,130,160]);
             var r=new ElliottStructureValidator().Validate(s,raw[..^1]);
-            Check(r.Phase=="Developing" && r.Waves.All(w=>w.IsTentative));
+            Check(r.Phase=="Developing" && r.Waves[^1].IsTentative);
+            Check(r.Waves.Take(r.Waves.Count-1).All(w=>!w.IsTentative));
         });
         run("Elliott PDF rejects origin breaches hidden inside the second wave",()=>{
             var (s,raw)=Fixture("Impulse",[100,120,110,150,130,160]);
@@ -111,6 +112,64 @@ public static class ElliottRulesTests
             Check(clock.Elapsed<TimeSpan.FromSeconds(15));
             Check(result.Scenarios.All(s=>s.Phase!="Complete" || s.ValidationStatus=="Verified" && s.SubdivisionCoveragePercent==100));
         });
+        run("Elliott hierarchy finds the main five despite more than twenty internal turns",()=>{
+            var (_,raw)=Fixture("Impulse",[100,120,110,150,130,160]);
+            var candles=Candles(raw.Select(p=>p.Price).ToArray());
+            var analysis=new ElliottWaveAnalyzer(ElliottProfile.Classic).Analyze(candles,2,.05m);
+            var main=analysis.Scenarios.First();
+            Check(main.Pattern=="Impulse" && main.ValidationStatus=="Verified");
+            Check(main.Waves.Select(w=>w.Price).SequenceEqual(new decimal[]{100,120,110,150,130,160}));
+            Check(main.Subwaves.Any(w=>w.Label=="5" && w.Degree==1));
+            Check(main.Subwaves.Any(w=>w.Label=="C" && w.Degree==1));
+            Check(main.Waves.All(w=>!w.IsTentative));
+        });
+        run("Elliott a new ABC retains the verified parent and its subdivisions",()=>{
+            var (_,first)=Fixture("Impulse",[100,120,110,150,130,160]);
+            var (_,second)=Fixture("Zigzag",[160,140,150,125]);
+            var values=first[..^1].Select(p=>p.Price).Concat(second.Skip(1).Select(p=>p.Price)).ToArray();
+            var main=new ElliottWaveAnalyzer(ElliottProfile.Classic).Analyze(Candles(values),2,.05m).Scenarios.First();
+            var displayed=SignalChartRenderer.DisplayWaves(main);
+            Check(displayed.Any(w=>w.Label=="1" && w.Degree==0 && w.Price==120));
+            Check(displayed.Any(w=>w.Label=="5" && w.Degree==0 && w.Price==160));
+            Check(displayed.Any(w=>w.Label=="C" && w.Degree==0 && w.Price==125));
+            Check(displayed.Any(w=>w.Degree==1 && w.Label=="5"));
+        });
+        run("Elliott overlay separates structural degrees and excludes unverified foreign counts",()=>{
+            var (s,raw)=Fixture("Impulse",[100,120,110,150,130,160]);
+            var main=new ElliottStructureValidator().Validate(s,raw);
+            main=main with { Waves=main.Waves.Select(w=>w with { Timeframe="60" }).ToArray(),
+                ContextWaves=[new("W",4,125,-1){Timeframe="D",IsTentative=true}],
+                Subwaves=main.Subwaves.Select(w=>w with {Timeframe="60"}).ToArray() };
+            var displayed=SignalChartRenderer.DisplayWaves(main);
+            Check(displayed.Any(w=>w.Degree==1));
+            Check(displayed.All(w=>w.Timeframe!="D"));
+            Check(SignalChartRenderer.FormatWaveLabel(main.Waves[1])=="(1)");
+            Check(SignalChartRenderer.FormatWaveLabel(new("A",0,100,1))=="A");
+        });
+        run("Elliott degree grouping preserves outer extremes and endpoints",()=>{
+            var points=new decimal[]{100,120,110,150,130,160}.Select((p,i)=>new ElliottPivot(i,i,p,i%2==0?"Low":"High")).ToArray();
+            var degrees=ElliottPivotHierarchy.Degrees(points).ToArray();
+            Check(degrees.All(d=>d[0]==points[0] && d[^1]==points[^1]));
+            Check(degrees.All(d=>d.Zip(d.Skip(1)).All(x=>x.First.Kind!=x.Second.Kind)));
+        });
+        run("Elliott hierarchy keeps a triangle fourth wave at E rather than its deepest A",()=>{
+            var (s,raw)=Fixture("Impulse",[100,120,110,150,137,160]);
+            var (_,triangle)=Fixture("ContractingTriangle",[150,130,144,134,141,137]);
+            var values=raw.Where(p=>p.Time<=s.Waves[3].Time).Select(p=>p.Price)
+                .Concat(triangle[1..^1].Select(p=>p.Price))
+                .Concat(raw.Where(p=>p.Time>s.Waves[4].Time).Select(p=>p.Price)).ToArray();
+            var main=new ElliottWaveAnalyzer(ElliottProfile.Classic).Analyze(Candles(values),2,.05m).Scenarios.First();
+            Check(main.Pattern=="Impulse" && main.ValidationStatus=="Verified");
+            Check(main.Waves[4].Price==137 && main.Structure!.Children[3].Pattern=="ContractingTriangle");
+            Check(main.Subwaves.Any(w=>w.Label=="E"));
+        });
+    }
+    private static BybitKline[] Candles(decimal[] turns)
+    {
+        var values=new List<decimal>{turns[0]};
+        for(var leg=0;leg<turns.Length-1;leg++)
+            for(var step=1;step<=8;step++) values.Add(turns[leg]+(turns[leg+1]-turns[leg])*step/8m);
+        return values.Select((v,i)=>new BybitKline(i*60_000L,v,v+.1m,v-.1m,v,1)).ToArray();
     }
     private static void Check(bool condition) { if(!condition) throw new Exception("Elliott PDF rule assertion failed"); }
     private static bool Geometry(string pattern,decimal[] prices)=>ElliottStructureValidator.Geometry(pattern,

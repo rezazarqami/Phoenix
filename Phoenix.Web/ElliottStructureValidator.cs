@@ -15,11 +15,17 @@ public sealed record ElliottStructureNode(string Pattern, long Start, long End,
 public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottProfile.Classic)
 {
     private readonly Dictionary<string, ElliottStructureNode?> _memo = new();
+    private IReadOnlyList<ElliottPivot>? _raw;
     private int _remaining = 12000;
 
     public ElliottScenario Validate(ElliottScenario scenario, IReadOnlyList<ElliottPivot> raw,
         ElliottPosition position = ElliottPosition.Unknown)
     {
+        // The search cap belongs to this candidate, not to whichever unrelated
+        // candidate happened to be validated first. Cached successful parses
+        // are reusable; budget failures must not poison subsequent candidates.
+        _remaining = 12000;
+        if (!ReferenceEquals(_raw, raw)) { _memo.Clear(); _raw = raw; }
         var components = Components(scenario);
         var boundaryView = scenario.Waves.Select((w,i)=>new ElliottPivot(i,w.Time,w.Price,
             i%2==0 ? (scenario.Waves[1].Price>scenario.Waves[0].Price ? "Low" : "High") : (scenario.Waves[1].Price>scenario.Waves[0].Price ? "High" : "Low"))).ToArray();
@@ -45,7 +51,7 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
             if (child is null) continue;
             checkedLegs++;
             children.Add(child);
-            AddLabels(child, $"{start}:{b.Label}", 1, details, raw);
+            AddLabels(child, $"{a.Time}:{b.Time}:{b.Label}", 1, details, raw);
         }
         var placement = PlacementAllowed(scenario.Pattern, position);
         var placementKnown = !NeedsPosition(scenario.Pattern) || position != ElliottPosition.Unknown;
@@ -84,9 +90,15 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
             Profile = profile.ToString(), ValidationStatus = status, Phase = phase,
             Rules = rules,
             SearchLimitReached = _remaining <= 0,
-            Waves = scenario.Waves.Select(w=>w with { IsTentative = phase != "Complete" }).ToArray(),
+            // Open endpoint uncertainty does not erase evidence for every
+            // earlier pivot. Structural uncertainty remains explicit in status.
+            Waves = scenario.Waves.Select(w=>w with {
+                IsTentative = w.Time == scenario.Waves[^1].Time && phase != "Complete",
+                ValidationStatus = status
+            }).ToArray(),
             Structure = new(scenario.Pattern, scenario.Waves[0].Time, scenario.Waves[^1].Time, children),
-            Subwaves = details, SubdivisionCoveragePercent = components.Count == 0 ? 0 : Math.Round(100m * checkedLegs / components.Count, 1),
+            Subwaves = details.Select(w => w with { IsTentative = latestIsOpen && w.Time == scenario.Waves[^1].Time }).ToArray(),
+            SubdivisionCoveragePercent = components.Count == 0 ? 0 : Math.Round(100m * checkedLegs / components.Count, 1),
             CoveragePercent = raw.Count < 2 ? 0 : Math.Round(100m * span / raw.Count, 1),
             Summary = phase == "Complete" ? scenario.Summary
                 : phase == "Developing" ? "سناریوی در حال تشکیل؛ ساق جاری و پایان الگو قطعی نیست."
@@ -127,12 +139,13 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
     {
         if (p.Length < 2 || p[0].Price == p[^1].Price) return null;
         if (p.Length == 2) return allowAtomic ? new("ObservedLeg",p[0].Time,p[1].Time,[]) : null;
-        if (depth > 5 || --_remaining < 0) return null;
+        if (depth > 5) return null;
         // Prefer the fully observed five over a coarsened three. Otherwise a
         // clear impulse can be relabelled as a flat merely by dropping two turns.
         if (role == "Correction" && p.Length == 6 && Geometry("Impulse",p)) return null;
         var key = $"{p[0].Time}:{p[^1].Time}:{role}:{position}:{depth}";
         if (_memo.TryGetValue(key, out var cached)) return cached;
+        if (--_remaining < 0) return null;
         foreach (var view in Views(p))
         {
             foreach (var pattern in Patterns(role, position))
@@ -154,6 +167,9 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
                 if (ok) return _memo[key] = new(pattern,p[0].Time,p[^1].Time,nodes);
             }
         }
+        // A genuine failed parse can be reused. An exhausted search has not
+        // proved failure and must not become a cached negative result.
+        if (_remaining <= 0) return null;
         return _memo[key] = null;
     }
 
@@ -176,12 +192,7 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
         {
             if (p.Count is 4 or 6) yield return p.ToArray();
             if (p.Count <= 4) yield break;
-            var index = -1; var size = decimal.MaxValue;
-            for (var i = 1; i < p.Count - 2; i++)
-            {
-                var amplitude = Math.Abs(p[i+1].Price-p[i].Price);
-                if (amplitude < size) { index=i; size=amplitude; }
-            }
+            var index = ElliottPivotHierarchy.SmallestNestedPair(p);
             if (index < 0) yield break;
             p.RemoveRange(index,2);
         }
@@ -265,7 +276,7 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
         {
             var child=node.Children[i]; var pivot=raw.First(p=>p.Time==child.End);
             var label=combination is not null ? combination[i] : numeric ? (i+1).ToString() : ((char)('A'+i)).ToString();
-            output.Add(new(label,pivot.Time,pivot.Price,degree,parent));
+            output.Add(new(label,pivot.Time,pivot.Price,degree,parent) { ValidationStatus = "Verified" });
             AddLabels(child,$"{parent}/{label}",degree+1,output,raw);
         }
     }

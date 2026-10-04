@@ -180,6 +180,52 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<CryptoStatisticsItem>> GetCryptoStatisticsAsync(CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            // Aggregate snapshots, not events: repeated updates and queue removal must
+            // never count a trade twice. No date or row limit on lifetime statistics.
+            command.CommandText = """
+                WITH snapshots AS (
+                    SELECT UPPER(TRIM(symbol)) AS symbol, status,
+                        COALESCE(NULLIF(json_extract(payload, '$.outcome'), ''),
+                            CASE
+                                WHEN json_extract(payload, '$.targetReachedAtUtc') IS NOT NULL THEN 'Target'
+                                WHEN json_extract(payload, '$.riskFreeClosedAtUtc') IS NOT NULL THEN 'RiskFree'
+                                WHEN json_extract(payload, '$.stopLossReachedAtUtc') IS NOT NULL THEN 'StopLoss'
+                            END) AS outcome,
+                        json_extract(payload, '$.filledAtUtc') AS filled,
+                        json_extract(payload, '$.completedAtUtc') AS completed,
+                        json_extract(payload, '$.executedQuantity') AS quantity
+                    FROM signals WHERE symbol != 'DELETED' AND TRIM(symbol) != ''
+                ), trades AS (
+                    SELECT * FROM snapshots
+                    WHERE outcome IN ('Target', 'StopLoss', 'RiskFree', 'ManualClosed')
+                        OR filled IS NOT NULL OR quantity > 0 OR status IN ('Filled', 'Closing')
+                )
+                SELECT symbol, COUNT(*),
+                    SUM(CASE WHEN outcome IS NULL AND completed IS NULL THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome = 'Target' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome = 'StopLoss' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome = 'RiskFree' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome NOT IN ('Target', 'StopLoss', 'RiskFree')
+                        OR (outcome IS NULL AND completed IS NOT NULL) THEN 1 ELSE 0 END)
+                FROM trades GROUP BY symbol ORDER BY COUNT(*) DESC, symbol ASC;
+                """;
+            var result = new List<CryptoStatisticsItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+                result.Add(new(reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2),
+                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6)));
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<byte[]?> GetImageAsync(Guid id, CancellationToken token = default)
     {
         await _gate.WaitAsync(token);

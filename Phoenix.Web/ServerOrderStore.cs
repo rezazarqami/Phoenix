@@ -339,6 +339,12 @@ public sealed class ServerOrderStore
         int limit = 20000, CancellationToken token = default) =>
         _history.GetCreatedRangeAsync(fromUtc, toUtc, limit, token);
 
+    public async Task<IReadOnlyList<CryptoStatisticsItem>> GetCryptoStatisticsAsync(CancellationToken token = default)
+    {
+        await GetAllAsync(token); // Import legacy queue records before the first report.
+        return await _history.GetCryptoStatisticsAsync(token);
+    }
+
     public Task<byte[]?> GetHistoryImageAsync(Guid id, CancellationToken token = default) =>
         _history.GetImageAsync(id, token);
 

@@ -38,7 +38,7 @@
   }
 
   function activate(name, updateHash = true) {
-    if (name !== 'home' && !routes[name]) name = 'home';
+    if (!tabs.some(tab => tab.dataset.panel === name)) name = 'home';
     for (const tab of tabs) {
       const selected = tab.dataset.panel === name;
       tab.classList.toggle('active', selected);
@@ -56,6 +56,7 @@
       }
     }
     if (updateHash && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+    window.dispatchEvent(new CustomEvent('phoenix-tab-changed', { detail: name }));
   }
   tabs.forEach((tab, index) => {
     tab.addEventListener('click', () => activate(tab.dataset.panel));

@@ -80,6 +80,13 @@ public static class SignalChartRenderer
         var max = candles.Max(x => lineMode ? x.Close : x.High);
         min = Math.Min(min, Math.Min(candidate.Floor, Math.Min(candidate.TakeProfit, candidate.StopLoss)));
         max = Math.Max(max, Math.Max(candidate.Ceiling, Math.Max(candidate.TakeProfit, candidate.StopLoss)));
+        if (elliott is not null && min > 0)
+        {
+            // Reserve space around actual extremes for the main labels. A
+            // wave at the highest/lowest price must not be silently clipped.
+            var margin = Math.Max(.001d, Math.Log((double)(max / min)) * .12d);
+            min /= (decimal)Math.Exp(margin); max *= (decimal)Math.Exp(margin);
+        }
         int X(int index) => left + (int)Math.Round(index * (width - left - right - 1d) / Math.Max(1, candles.Count - 1));
         int Y(decimal price) => top + (int)Math.Round(
             LogarithmicYFraction(min, max, price) * (height - top - bottom - 1));
@@ -94,48 +101,50 @@ public static class SignalChartRenderer
                 var x = X(i); DrawLine(pixels, width, height, x, Y(candle.High), x, Y(candle.Low), color.R, color.G, color.B);
                 FillRect(pixels, width, height, x - 1, Math.Min(Y(candle.Open), Y(candle.Close)), 3, Math.Max(2, Math.Abs(Y(candle.Open) - Y(candle.Close))), color.R, color.G, color.B);
             }
+        Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
+        Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
         if (elliott is not null)
         {
             var occupied = new List<(int Left, int Top, int Right, int Bottom)>();
             var imageInterval = elliott.Waves.FirstOrDefault()?.Timeframe;
             // Monthly, weekly, daily and hourly colors are fixed regardless
             // of the image interval. A shorter active interval is a fifth degree.
-            var macroWaves = elliott.ContextWaves.Concat(elliott.Waves)
-                .Where(w => ShouldDisplayWaveLabel(w) && WaveStyle(w.Timeframe, imageInterval).Visible)
-                .OrderBy(w => WavePriority(w.Timeframe, imageInterval))
-                .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}|{w.Degree}").Select(g => g.First()).ToArray();
-            var wavePoints = macroWaves.Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
+            var wavePoints = DisplayWaves(elliott).Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
             // Keep the major count readable; an occupied spot is never painted over.
             foreach (var point in wavePoints)
             {
                 var x = X(point.Index); var y = Y(point.Wave.Price);
                 var style = WaveStyle(point.Wave.Timeframe, imageInterval);
-                TryDrawWaveLabel(point.Wave.Label + (point.Wave.IsTentative ? "?" : ""), x, y, style.Scale, style.R, style.G, style.B);
+                var degree = Math.Max(0, point.Wave.Degree);
+                var scale = degree == 0 ? style.Scale + 1 : Math.Max(2, style.Scale - degree + 1);
+                var color = degree == 1 ? (R: (byte)30, G: (byte)85, B: (byte)190)
+                    : degree == 2 ? (R: (byte)170, G: (byte)65, B: (byte)70) : (style.R, style.G, style.B);
+                var above = point.Index == 0 ? candles[0].Close >= candles[Math.Min(1, candles.Count - 1)].Close
+                    : point.Wave.Price >= candles[point.Index - 1].Close;
+                TryDrawWaveLabel(FormatWaveLabel(point.Wave), x, y, scale, color.Item1, color.Item2, color.Item3, above);
             }
 
-            // Raw close reversals and validated subdivisions participate in
-            // analysis, but labels on this overview show only major degrees.
-
-            void TryDrawWaveLabel(string label, int x, int y, int scale, byte r, byte g, byte b)
+            void TryDrawWaveLabel(string label, int x, int y, int scale, byte r, byte g, byte b, bool above)
             {
                 var textWidth = label.Length * 6 * scale;
-                var leftEdge = x - textWidth / 2;
-                foreach (var topEdge in new[] { y - 13 - 7 * scale, y + 12 })
+                var leftEdge = Math.Clamp(x - textWidth / 2, left + 4, width - right - textWidth - 4);
+                var direction = above ? -1 : 1;
+                foreach (var offset in new[] { 12, 32, 52, 72 })
                 {
+                    var topEdge = y + direction * offset - (above ? 7 * scale : 0);
                     var box = (Left: leftEdge - 3, Top: topEdge - 3,
                         Right: leftEdge + textWidth + 3, Bottom: topEdge + 7 * scale + 3);
                     if (box.Left < left || box.Right > width - right || box.Top < top || box.Bottom > height - bottom ||
                         occupied.Any(other => box.Left < other.Right && box.Right > other.Left &&
                             box.Top < other.Bottom && box.Bottom > other.Top)) continue;
+                    FillRect(pixels, width, height, box.Left, box.Top, box.Right - box.Left, box.Bottom - box.Top, 255, 255, 255);
                     DrawTinyText(pixels, width, height, leftEdge, topEdge, label, scale, r, g, b);
                     occupied.Add(box);
                     return;
                 }
             }
         }
-        Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
-        Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
         DrawLine(pixels, width, height, 0, footerTop - 8, width - 1, footerTop - 8, 218, 222, 225, 2);
         DrawBadge(pixels, width, height,
             string.IsNullOrWhiteSpace(timeframeBadge) ? "LOG" : $"{timeframeBadge} LOG", footerTop + 28);
@@ -150,6 +159,10 @@ public static class SignalChartRenderer
             if (elliott.Waves.FirstOrDefault()?.Timeframe is "15" or "5")
                 DrawTinyText(pixels, width, height, 625, footerTop + 30,
                     timeframeBadge ?? "", 2, 111, 63, 145);
+            DrawTinyText(pixels, width, height, 385, footerTop + 70,
+                elliott.ValidationStatus != "Verified" ? "ELLIOTT UNVERIFIED"
+                    : DisplayWaves(elliott).Any(w => w.ValidationStatus != "Verified") ? "ELLIOTT PARTIAL" : "ELLIOTT VERIFIED",
+                2, 70, 70, 70);
         }
         if (targetSimilarity.HasValue)
             DrawSimilarityBar(pixels, width, height, 18, footerTop, "TP", targetSimilarity.Value, 31, 170, 118);
@@ -173,6 +186,21 @@ public static class SignalChartRenderer
 
     public static bool ShouldDisplayWaveLabel(ElliottWavePoint wave) =>
         !string.IsNullOrWhiteSpace(wave.Label) && wave.Label != "0";
+
+    public static IReadOnlyList<ElliottWavePoint> DisplayWaves(ElliottScenario scenario)
+    {
+        var interval = scenario.Waves.FirstOrDefault()?.Timeframe;
+        return scenario.Waves.Concat(scenario.ContextWaves.Where(w => w.Timeframe == interval || w.ValidationStatus == "Verified"))
+            .Concat(scenario.Subwaves.Where(w => w.Degree <= 2 && w.ValidationStatus == "Verified"))
+            .Where(w => ShouldDisplayWaveLabel(w) && WaveStyle(w.Timeframe, interval).Visible)
+            .OrderBy(w => Math.Max(0, w.Degree)).ThenBy(w => WavePriority(w.Timeframe, interval))
+            .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}|{w.Degree}|{w.Timeframe}")
+            .Select(g => g.First()).ToArray();
+    }
+
+    public static string FormatWaveLabel(ElliottWavePoint wave) =>
+        (wave.Degree <= 0 ? $"({wave.Label})" : wave.Degree == 1 ? wave.Label : $"({wave.Label.ToLowerInvariant()})")
+        + (wave.IsTentative ? "?" : "");
 
     public static (byte R, byte G, byte B, int Scale, bool Visible) WaveStyle(
         string? timeframe, string? imageTimeframe) => timeframe switch
@@ -323,6 +351,7 @@ public static class SignalChartRenderer
         'F' => [31, 16, 16, 30, 16, 16, 16], 'K' => [17, 18, 20, 24, 20, 18, 17],
         'Y' => [17, 17, 10, 4, 4, 4, 4], 'Z' => [31, 1, 2, 4, 8, 16, 31],
         '?' => [14, 17, 1, 2, 4, 0, 4],
+        '(' => [2, 4, 8, 8, 8, 4, 2], ')' => [8, 4, 2, 2, 2, 4, 8],
         'M' => [17, 27, 21, 21, 17, 17, 17], 'W' => [17, 17, 17, 21, 21, 21, 10],
         'H' => [17, 17, 17, 31, 17, 17, 17],
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],

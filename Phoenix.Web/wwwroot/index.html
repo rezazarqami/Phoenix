@@ -14,7 +14,8 @@
   <link rel="stylesheet" href="/styles.css?v=5">
   <link rel="stylesheet" href="/security.css?v=2">
   <link rel="stylesheet" href="/professional-ui.css?v=1">
-  <link rel="stylesheet" href="/home-redesign.css?v=2">
+  <link rel="stylesheet" href="/home-redesign.css?v=3">
+  <link rel="stylesheet" href="/crypto-statistics.css?v=1">
   <title>Phoenix Trading Panel</title>
 </head>
 <body>
@@ -41,6 +42,7 @@
       <button class="home-tab" id="tab-signal" type="button" role="tab" aria-selected="false" aria-controls="panel-signal" data-panel="signal"><span>⌁</span> Signal Lab</button>
       <button class="home-tab" id="tab-elliott" type="button" role="tab" aria-selected="false" aria-controls="panel-elliott" data-panel="elliott"><span>∿</span> Elliott Wave Lab</button>
       <button class="home-tab" id="tab-strategy" type="button" role="tab" aria-selected="false" aria-controls="panel-strategy" data-panel="strategy"><span>Ⅱ</span> Strategy 2</button>
+      <button class="home-tab" id="tab-statistics" type="button" role="tab" aria-selected="false" aria-controls="panel-statistics" data-panel="statistics"><span>▤</span> آمار رمز ارزها</button>
     </nav>
 
     <div id="panel-home" class="home-section" role="tabpanel" aria-labelledby="tab-home">
@@ -111,6 +113,18 @@
     <section id="panel-signal" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-signal" hidden></section>
     <section id="panel-elliott" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-elliott" hidden></section>
     <section id="panel-strategy" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-strategy" hidden></section>
+    <section id="panel-statistics" class="home-section crypto-statistics" role="tabpanel" aria-labelledby="tab-statistics" hidden>
+      <div class="statistics-heading">
+        <div><span class="eyebrow">TRADE STATISTICS</span><h2>آمار رمز ارزها</h2><p>تمام تاریخچه · مرتب‌شده بر اساس بیشترین تعداد معاملات</p></div>
+        <label>استراتژی<select id="statisticsStrategy"><option value="main">استراتژی اصلی · واقعی</option><option value="strategy2">استراتژی ۲ · دمو</option></select></label>
+      </div>
+      <div class="statistics-summary" aria-live="polite"><span>رمز ارزها <b id="statisticsCoins">—</b></span><span>کل معاملات <b id="statisticsTotal">—</b></span><span class="stat-target">تارگت <b id="statisticsTargets">—</b></span><span class="stat-stop">استاپ <b id="statisticsStops">—</b></span></div>
+      <p id="statisticsStatus" class="statistics-status" role="status">با باز کردن این سربرگ، آمار دریافت می‌شود.</p>
+      <div class="statistics-table-wrap">
+        <table class="statistics-table"><caption class="sr-only">نتایج معاملات هر رمز ارز</caption><thead><tr><th scope="col">#</th><th scope="col">رمز ارز</th><th scope="col">کل</th><th scope="col">باز</th><th scope="col" class="stat-target">تارگت</th><th scope="col" class="stat-stop">استاپ</th><th scope="col">ریسک‌فری</th><th scope="col">سایر بسته</th></tr></thead><tbody id="statisticsRows"><tr><td colspan="8">در انتظار دریافت آمار…</td></tr></tbody></table>
+      </div>
+      <p class="statistics-note">کل = باز + تارگت + استاپ + ریسک‌فری + سایر بسته‌شده‌ها. سیگنال‌های منتظر ورود و منقضی یا لغوشده پیش از ورود شمرده نمی‌شوند. به‌روزرسانی خودکار هر ۵ ثانیه.</p>
+    </section>
   </main>
   <dialog id="installPhoenixDialog" class="install-phoenix-dialog" aria-labelledby="installPhoenixTitle">
     <div class="install-phoenix-content">
@@ -168,6 +182,7 @@
   <script src="/app.js?v=12"></script>
   <script src="/install-phoenix.js?v=2"></script>
   <script src="/bulk-controls.js?v=1"></script>
-  <script src="/home-tabs.js?v=2"></script>
+  <script src="/crypto-statistics.js?v=1"></script>
+  <script src="/home-tabs.js?v=3"></script>
 </body>
 </html>

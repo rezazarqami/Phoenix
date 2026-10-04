@@ -21,6 +21,8 @@ main{width:min(1480px,100%);padding-inline:clamp(14px,3vw,40px)!important}
 /* Embedded pages grow with their content so the whole home page scrolls. */
 .home-content-frame{height:100dvh;min-height:0;overflow:hidden}
 .brand p{font-size:9px;letter-spacing:.12em}
-.home-tabs{gap:5px;padding:5px;border-radius:16px}
+.home-tabs{grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;padding:5px;border-radius:16px}
 .home-tab{min-height:48px;gap:6px;padding:7px 9px;border-radius:11px;font-size:11px}
 @media(max-width:600px){.brand p{font-size:7px}.topbar{padding:15px!important;margin-bottom:12px!important}.home-tabs{gap:4px;padding:5px}.home-tab{min-height:44px;gap:4px;padding:6px;font-size:10px}.home-tab span{font-size:15px}}
+@media(max-width:980px){.home-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.home-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.home-tab:first-child{grid-column:auto}}

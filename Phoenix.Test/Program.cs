@@ -9,6 +9,9 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Crypto statistics include lifetime trades and ignore unentered signals", CryptoStatisticsTests.Lifetime);
+Run("Crypto statistics migrate queues, retain removed trades and refresh outcomes", CryptoStatisticsTests.Migration);
+
 Run("Target and stop similarity are independent and ignore price action", () =>
 {
     var features = new TechnicalFeatureSnapshot(0.5m, 1m, 0m, 0.4m, 0.2m,

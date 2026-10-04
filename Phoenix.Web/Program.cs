@@ -325,6 +325,17 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
 app.MapGet("/api/history", async (int? days, int? limit, ServerOrderStore store, CancellationToken token) =>
     Results.Ok(await store.GetHistoryAsync(days ?? 30, limit ?? 1000, token)));
 
+app.MapGet("/api/crypto-statistics", async (string? strategy, ServerOrderStore store,
+    Strategy2Runtime strategy2, HttpResponse response, CancellationToken token) =>
+{
+    if (strategy is not (null or "main" or "strategy2"))
+        return Results.BadRequest(new { error = "استراتژی نامعتبر است." });
+    response.Headers.CacheControl = "no-store";
+    var selected = strategy == "strategy2" ? strategy2.Store : store;
+    var items = await selected.GetCryptoStatisticsAsync(token);
+    return Results.Ok(new { strategy = strategy ?? "main", updatedAtUtc = DateTime.UtcNow, items });
+});
+
 app.MapGet("/api/strategy2/status", async (Strategy2Runtime strategy2, CancellationToken token) =>
 {
     if (!strategy2.Options.Enabled)

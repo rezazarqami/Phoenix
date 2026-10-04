@@ -18,3 +18,5 @@ jobs:
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter Elliott
       - name: Validate chart rendering
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter "Signal Lab candidate"
+      - name: Run cryptocurrency statistics regression
+        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter "Crypto statistics"

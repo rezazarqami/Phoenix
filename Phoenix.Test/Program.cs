@@ -1189,6 +1189,8 @@ Run("Elliott hard rules reject invalid impulse counts", () =>
     True(!HasOriginImpulse(Analyze(100m, 120m, 110m, 145m, 115m, 155m))); // wave 4 overlap
 });
 
+Run("Signal Lab candidate compact Elliott labels preserve chart detail", SignalChartLabelTests.CompactLabelsPreserveCandles);
+
 Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
 {
     Near(0.5m, (decimal)SignalChartRenderer.LogarithmicYFraction(100m, 400m, 200m));

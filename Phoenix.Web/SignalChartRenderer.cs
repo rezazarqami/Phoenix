@@ -106,6 +106,7 @@ public static class SignalChartRenderer
         if (elliott is not null)
         {
             var occupied = new List<(int Left, int Top, int Right, int Bottom)>();
+            var levelYs = new[] { candidate.Ceiling, candidate.Floor, candidate.EntryPrice, candidate.TakeProfit, candidate.StopLoss }.Select(Y).ToArray();
             var imageInterval = elliott.Waves.FirstOrDefault()?.Timeframe;
             // Monthly, weekly, daily and hourly colors are fixed regardless
             // of the image interval. A shorter active interval is a fifth degree.
@@ -117,29 +118,50 @@ public static class SignalChartRenderer
                 var x = X(point.Index); var y = Y(point.Wave.Price);
                 var style = WaveStyle(point.Wave.Timeframe, imageInterval);
                 var degree = Math.Max(0, point.Wave.Degree);
-                var scale = degree == 0 ? style.Scale + 1 : Math.Max(2, style.Scale - degree + 1);
+                var fontHeight = WaveLabelHeight(point.Wave, imageInterval);
                 var color = degree == 1 ? (R: (byte)30, G: (byte)85, B: (byte)190)
                     : degree == 2 ? (R: (byte)170, G: (byte)65, B: (byte)70) : (style.R, style.G, style.B);
                 var above = point.Index == 0 ? candles[0].Close >= candles[Math.Min(1, candles.Count - 1)].Close
                     : point.Wave.Price >= candles[point.Index - 1].Close;
-                TryDrawWaveLabel(FormatWaveLabel(point.Wave), x, y, scale, color.Item1, color.Item2, color.Item3, above);
+                TryDrawWaveLabel(FormatWaveLabel(point.Wave), x, y, fontHeight, color.Item1, color.Item2, color.Item3, above);
             }
 
-            void TryDrawWaveLabel(string label, int x, int y, int scale, byte r, byte g, byte b, bool above)
+            void TryDrawWaveLabel(string label, int x, int y, int fontHeight, byte r, byte g, byte b, bool above)
             {
-                var textWidth = label.Length * 6 * scale;
-                var leftEdge = Math.Clamp(x - textWidth / 2, left + 4, width - right - textWidth - 4);
+                var textWidth = (int)Math.Ceiling((label.Length * 6 - 1) * fontHeight / 7d);
                 var direction = above ? -1 : 1;
-                foreach (var offset in new[] { 12, 32, 52, 72 })
+                // Stay near the pivot, but search empty space around its candle.
+                // Labels reserve space without erasing any chart pixels.
+                foreach (var offset in new[] { 6, 12, 20, 30, 42, 56 })
+                foreach (var shift in new[] { 0, -10, 10 })
                 {
-                    var topEdge = y + direction * offset - (above ? 7 * scale : 0);
-                    var box = (Left: leftEdge - 3, Top: topEdge - 3,
-                        Right: leftEdge + textWidth + 3, Bottom: topEdge + 7 * scale + 3);
-                    if (box.Left < left || box.Right > width - right || box.Top < top || box.Bottom > height - bottom ||
+                    var leftEdge = Math.Clamp(x - textWidth / 2 + shift, left + 3, width - right - textWidth - 3);
+                    var topEdge = y + direction * offset - (above ? fontHeight : 0);
+                    var box = (Left: leftEdge - 2, Top: topEdge - 2,
+                        Right: leftEdge + textWidth + 2, Bottom: topEdge + fontHeight + 2);
+                    if (box.Top < top || box.Bottom > height - bottom ||
+                        levelYs.Any(levelY => levelY + 2 > box.Top && levelY - 2 < box.Bottom) ||
                         occupied.Any(other => box.Left < other.Right && box.Right > other.Left &&
                             box.Top < other.Bottom && box.Bottom > other.Top)) continue;
-                    FillRect(pixels, width, height, box.Left, box.Top, box.Right - box.Left, box.Bottom - box.Top, 255, 255, 255);
-                    DrawTinyText(pixels, width, height, leftEdge, topEdge, label, scale, r, g, b);
+                    var touchesPrice = false;
+                    for (var i = 0; i < candles.Count; i++)
+                    {
+                        if (lineMode)
+                        {
+                            var next = Math.Min(i + 1, candles.Count - 1);
+                            if (X(i) - 2 >= box.Right || X(next) + 2 <= box.Left) continue;
+                            touchesPrice = Math.Min(Y(candles[i].Close), Y(candles[next].Close)) - 2 < box.Bottom &&
+                                Math.Max(Y(candles[i].Close), Y(candles[next].Close)) + 2 > box.Top;
+                        }
+                        else
+                        {
+                            if (X(i) - 2 >= box.Right || X(i) + 2 <= box.Left) continue;
+                            touchesPrice = Y(candles[i].High) - 2 < box.Bottom && Y(candles[i].Low) + 2 > box.Top;
+                        }
+                        if (touchesPrice) break;
+                    }
+                    if (touchesPrice) continue;
+                    DrawWaveText(pixels, width, height, leftEdge, topEdge, label, fontHeight, r, g, b);
                     occupied.Add(box);
                     return;
                 }
@@ -215,6 +237,41 @@ public static class SignalChartRenderer
         _ when timeframe == imageTimeframe => (25, 25, 25, 3, true),
         _ => (25, 25, 25, 3, false)
     };
+
+    // Actual pixel heights: a monthly label is 19px, an hourly label 13px.
+    // Subdegrees get smaller rather than making the main count larger.
+    public static int WaveLabelHeight(ElliottWavePoint wave, string? imageTimeframe) =>
+        Math.Max(9, 7 + 2 * WaveStyle(wave.Timeframe, imageTimeframe).Scale - 2 * Math.Max(0, wave.Degree));
+
+    private static void DrawWaveText(byte[] pixels, int width, int height, int x, int y,
+        string text, int fontHeight, byte r, byte g, byte b)
+    {
+        var glyphs = text.Select(Glyph).ToArray();
+        var scale = fontHeight / 7d;
+        var textWidth = (int)Math.Ceiling((text.Length * 6 - 1) * scale);
+        // Area sampling supports compact fractional sizes without jagged blocks.
+        for (var yy = 0; yy < fontHeight; yy++)
+        for (var xx = 0; xx < textWidth; xx++)
+        {
+            var coverage = 0;
+            for (var sy = 0; sy < 4; sy++)
+            for (var sx = 0; sx < 4; sx++)
+            {
+                var glyphX = (int)((xx + (sx + .5d) / 4) / scale);
+                var glyphY = (int)((yy + (sy + .5d) / 4) / scale);
+                var character = glyphX / 6;
+                var column = glyphX % 6;
+                if (character < text.Length && column < 5 && glyphY < 7 &&
+                    (glyphs[character][glyphY] & (1 << (4 - column))) != 0) coverage++;
+            }
+            var px = x + xx; var py = y + yy;
+            if (coverage == 0 || px < 0 || py < 0 || px >= width || py >= height) continue;
+            var index = (py * width + px) * 3;
+            pixels[index] = (byte)((pixels[index] * (16 - coverage) + r * coverage) / 16);
+            pixels[index + 1] = (byte)((pixels[index + 1] * (16 - coverage) + g * coverage) / 16);
+            pixels[index + 2] = (byte)((pixels[index + 2] * (16 - coverage) + b * coverage) / 16);
+        }
+    }
 
     private static int WavePriority(string? timeframe, string? imageTimeframe) => timeframe switch
     {

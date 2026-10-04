@@ -270,7 +270,7 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
     private static void AddLabels(ElliottStructureNode node,string parent,int degree,List<ElliottWavePoint> output,IReadOnlyList<ElliottPivot> raw)
     {
         if (node.Children.Count==0) return;
-        var numeric = node.Pattern is "Impulse" or "LeadingDiagonal" or "EndingDiagonal";
+        var numeric = node.Pattern is "Impulse" or "TruncatedImpulse" or "HarmonicImpulse" or "LeadingDiagonal" or "EndingDiagonal";
         string[]? combination = node.Pattern == "DoubleThree" ? ["W","X","Y"] : node.Pattern == "TripleThree" ? ["W","X","Y","X","Z"] : null;
         for(var i=0;i<node.Children.Count;i++)
         {

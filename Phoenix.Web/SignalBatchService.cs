@@ -343,7 +343,8 @@ public sealed class SignalBatchService(
                     catch (Exception exception)
                     {
                         logger.LogWarning(exception, "Elliott count unavailable for {Symbol}", selected.Symbol);
-                        elliottScenario = null;
+                        elliottScenario = ElliottCoverage.Unavailable(new(0, 0, 0, 0, [],
+                            chartCandles.Count < 2 ? [] : [new(chartCandles[0].OpenTime, chartCandles[^1].OpenTime, "DataUnavailable")]));
                     }
                     var technicalFeatures = analysis.Features;
                     var similarityResult = analysis.Prediction;

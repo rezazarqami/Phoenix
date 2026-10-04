@@ -22,6 +22,9 @@ internal static class SignalChartLabelTests
             waves.Add(new("A", candles[164].OpenTime, candles[164].High) { Timeframe = tf, ValidationStatus = "Verified" });
         var empty = new ElliottScenario("Bullish", 80m, [], [], 99m, 102m,
             new(.5m, 1.6m, .3m), "Impulse", "Developing", "5", "");
+        var report = new ElliottCoverageReport(0, 1, 0, 0, [],
+            [new(candles[0].OpenTime, candles[^1].OpenTime, "SubdivisionUnknown")]);
+        empty = empty with { Coverage = report };
         var scenario = empty with { Waves = waves };
         foreach (var mode in new[] { false, true })
         {
@@ -43,6 +46,18 @@ internal static class SignalChartLabelTests
                     !labeled.AsSpan(p, 3).ContainsAnyExcept((byte)255))
                     throw new Exception("A label background erased chart detail.");
             }
+            // Coverage diagnostics occupy their own footer row and do not
+            // disappear when no valid count is available.
+            var noCount = Decode(SignalChartRenderer.Render(candles, candidate, mode, "15M", 82m, 78m,
+                ElliottCoverage.Unavailable(report)));
+            var footerInk = 0;
+            for (var y = 697; y < 712; y++)
+            for (var x = 30; x < 975; x++)
+            {
+                var p = (y * 1000 + x) * 3;
+                if (!noCount.AsSpan(p, 3).SequenceEqual(new byte[] { 255, 255, 255 })) footerInk++;
+            }
+            if (footerInk < 100) throw new Exception("No-count diagnostics are missing from the footer.");
             if (changed < 150 || changed > 2500) throw new Exception($"Unexpected label ink area: {changed}.");
             var output = Environment.GetEnvironmentVariable("PHOENIX_CHART_PREVIEW_DIR");
             if (!string.IsNullOrWhiteSpace(output))

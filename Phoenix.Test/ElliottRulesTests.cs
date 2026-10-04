@@ -5,6 +5,7 @@ public static class ElliottRulesTests
 {
     public static void RunAll(Action<string,Action> run)
     {
+        ElliottCoverageTests.RunAll(run);
         run("Elliott PDF confirms a full 5-3-5-3-5 with exact parent boundaries",()=>{
             var (s,raw)=Fixture("Impulse",[100,120,110,150,130,160]);
             var r=new ElliottStructureValidator().Validate(s,raw);
@@ -133,6 +134,11 @@ public static class ElliottRulesTests
             Check(displayed.Any(w=>w.Label=="5" && w.Degree==0 && w.Price==160));
             Check(displayed.Any(w=>w.Label=="C" && w.Degree==0 && w.Price==125));
             Check(displayed.Any(w=>w.Degree==1 && w.Label=="5"));
+            Check(main.Coverage!.Sections.Count >= 2);
+            foreach (var section in main.Coverage.Sections)
+                Check(main.Subwaves.Where(w => w.Time > section.Start && w.Time <= section.End)
+                    .All(w => w.Parent!.StartsWith(section.Id + "/", StringComparison.Ordinal)));
+            Check(main.Coverage.Sections.All(section => section.Waves.All(w => w.Parent == section.Id)));
         });
         run("Elliott overlay separates structural degrees and excludes unverified foreign counts",()=>{
             var (s,raw)=Fixture("Impulse",[100,120,110,150,130,160]);
@@ -164,7 +170,7 @@ public static class ElliottRulesTests
             Check(main.Subwaves.Any(w=>w.Label=="E"));
         });
     }
-    private static BybitKline[] Candles(decimal[] turns)
+    internal static BybitKline[] Candles(decimal[] turns)
     {
         var values=new List<decimal>{turns[0]};
         for(var leg=0;leg<turns.Length-1;leg++)
@@ -174,7 +180,7 @@ public static class ElliottRulesTests
     private static void Check(bool condition) { if(!condition) throw new Exception("Elliott PDF rule assertion failed"); }
     private static bool Geometry(string pattern,decimal[] prices)=>ElliottStructureValidator.Geometry(pattern,
         prices.Select((v,i)=>new ElliottPivot(i,i,v,(i%2==0)==(prices[1]>prices[0])?"Low":"High")).ToArray());
-    private static (ElliottScenario,ElliottPivot[]) Fixture(string pattern,decimal[] prices,bool firstAsCorrection=false)
+    internal static (ElliottScenario,ElliottPivot[]) Fixture(string pattern,decimal[] prices,bool firstAsCorrection=false)
     {
         var points=new List<ElliottPivot>(); var waves=new List<ElliottWavePoint>();
         string[] labels=pattern is "Zigzag" or "Flat" or "ExpandedFlat" ? ["0","A","B","C"]

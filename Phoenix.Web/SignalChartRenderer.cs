@@ -103,6 +103,7 @@ public static class SignalChartRenderer
             }
         Level(candidate.Ceiling, 240, 185, 11); Level(candidate.Floor, 169, 108, 242);
         Level(candidate.EntryPrice, 70, 166, 255); Level(candidate.TakeProfit, 56, 211, 159); Level(candidate.StopLoss, 255, 97, 117);
+        var placedLabels = 0; var eligibleLabels = 0;
         if (elliott is not null)
         {
             var occupied = new List<(int Left, int Top, int Right, int Bottom)>();
@@ -112,6 +113,7 @@ public static class SignalChartRenderer
             // of the image interval. A shorter active interval is a fifth degree.
             var wavePoints = DisplayWaves(elliott).Where(w => w.Time >= candles[0].OpenTime && w.Time <= candles[^1].OpenTime)
                 .Select(w => (Wave: w, Index: FindNearestIndex(candles, w.Time))).ToArray();
+            eligibleLabels = wavePoints.Length;
             // Keep the major count readable; an occupied spot is never painted over.
             foreach (var point in wavePoints)
             {
@@ -163,6 +165,7 @@ public static class SignalChartRenderer
                     if (touchesPrice) continue;
                     DrawWaveText(pixels, width, height, leftEdge, topEdge, label, fontHeight, r, g, b);
                     occupied.Add(box);
+                    placedLabels++;
                     return;
                 }
             }
@@ -182,9 +185,27 @@ public static class SignalChartRenderer
                 DrawTinyText(pixels, width, height, 625, footerTop + 30,
                     timeframeBadge ?? "", 2, 111, 63, 145);
             DrawTinyText(pixels, width, height, 385, footerTop + 70,
-                elliott.ValidationStatus != "Verified" ? "ELLIOTT UNVERIFIED"
+                elliott.ValidationStatus == "Unavailable" ? "ELLIOTT NO COUNT"
+                    : elliott.ValidationStatus != "Verified" ? "ELLIOTT UNVERIFIED"
                     : DisplayWaves(elliott).Any(w => w.ValidationStatus != "Verified") ? "ELLIOTT PARTIAL" : "ELLIOTT VERIFIED",
                 2, 70, 70, 70);
+        }
+        if (elliott?.Coverage is { } report)
+        {
+            var visibleTimes = candles.Take(candles.Count - 1).Select(c => c.OpenTime).ToArray();
+            var covered = visibleTimes.Count(t => report.Sections.Any(s => t >= s.Start && t < s.End));
+            var percent = visibleTimes.Length == 0 ? 0 : (int)Math.Round(100d * covered / visibleTimes.Length);
+            var gaps = report.Gaps.Where(g => g.Start < candles[^1].OpenTime && g.End > candles[0].OpenTime).ToArray();
+            DrawTinyText(pixels, width, height, left, footerTop + 112,
+                $"VERIFIED {percent}%  GAPS {gaps.Length}  LABELS {placedLabels}/{eligibleLabels}", 2, 80, 80, 80);
+            var reason = gaps.Select(g => g.Reason).FirstOrDefault();
+            var note = reason switch
+            {
+                "SearchLimit" => "SEARCH LIMIT", "ParentUnknown" => "PARENT UNKNOWN",
+                "SubdivisionUnknown" => "SUBDIVISIONS UNKNOWN", "InsufficientCandles" => "DATA SHORT",
+                "DataUnavailable" => "DATA UNAVAILABLE", "NoValidStructure" => "NO VALID STRUCTURE", _ => ""
+            };
+            if (note.Length > 0) DrawTinyText(pixels, width, height, 650, footerTop + 112, note, 2, 100, 100, 100);
         }
         if (targetSimilarity.HasValue)
             DrawSimilarityBar(pixels, width, height, 18, footerTop, "TP", targetSimilarity.Value, 31, 170, 118);
@@ -213,9 +234,10 @@ public static class SignalChartRenderer
     {
         var interval = scenario.Waves.FirstOrDefault()?.Timeframe;
         return scenario.Waves.Concat(scenario.ContextWaves.Where(w => w.Timeframe == interval || w.ValidationStatus == "Verified"))
-            .Concat(scenario.Subwaves.Where(w => w.Degree <= 2 && w.ValidationStatus == "Verified"))
+            .Concat(scenario.Subwaves.Where(w => w.Degree <= 1 && w.ValidationStatus == "Verified"))
             .Where(w => ShouldDisplayWaveLabel(w) && WaveStyle(w.Timeframe, interval).Visible)
-            .OrderBy(w => Math.Max(0, w.Degree)).ThenBy(w => WavePriority(w.Timeframe, interval))
+            .OrderBy(w => w.Origin == "Context" ? 2 : Math.Max(0, w.Degree)).ThenBy(w => WavePriority(w.Timeframe, interval))
+            .ThenBy(w => w.Time)
             .GroupBy(w => $"{w.Time}|{w.Label}|{w.Price}|{w.Degree}|{w.Timeframe}")
             .Select(g => g.First()).ToArray();
     }
@@ -414,7 +436,7 @@ public static class SignalChartRenderer
         'L' => [16, 16, 16, 16, 16, 16, 31], 'O' => [14, 17, 17, 17, 17, 17, 14],
         'G' => [14, 17, 16, 23, 17, 17, 15], 'T' => [31, 4, 4, 4, 4, 4, 4],
         'P' => [30, 17, 17, 30, 16, 16, 16], 'S' => [15, 16, 16, 14, 1, 1, 30],
-        '%' => [17, 2, 4, 8, 17, 0, 0], '.' => [0, 0, 0, 0, 0, 12, 12],
+        '/' => [1, 2, 2, 4, 8, 8, 16], '%' => [17, 2, 4, 8, 17, 0, 0], '.' => [0, 0, 0, 0, 0, 12, 12],
         ':' => [0, 12, 12, 0, 12, 12, 0],
         ' ' => [0, 0, 0, 0, 0, 0, 0],
         _ => [0, 0, 0, 0, 0, 0, 0]

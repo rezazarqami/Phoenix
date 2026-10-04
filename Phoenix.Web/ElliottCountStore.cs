@@ -17,13 +17,19 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
         IReadOnlyList<BybitKline> currentCandles, CancellationToken token)
     {
         var target = Array.IndexOf(Degrees, interval.ToUpperInvariant());
-        if (target < 0) return analyzer.Analyze(ElliottWaveAnalyzer.ClosedCandles(currentCandles, interval, DateTimeOffset.UtcNow)).Scenarios.FirstOrDefault();
+        if (target < 0)
+        {
+            var local = analyzer.Analyze(ElliottWaveAnalyzer.ClosedCandles(currentCandles, interval, DateTimeOffset.UtcNow));
+            return local.Scenarios.FirstOrDefault() ?? ElliottCoverage.Unavailable(local.Coverage);
+        }
         await _gate.WaitAsync(token);
         try
         {
             Directory.CreateDirectory(_directory);
             var context = new List<ElliottWavePoint>();
             ElliottScenario? active = null;
+            ElliottCoverageReport? coverage = null;
+            var dataIssues = new List<string>();
             for (var degree = 0; degree <= target; degree++)
             {
                 token.ThrowIfCancellationRequested();
@@ -48,14 +54,15 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
                 catch (Exception ex) when (degree != target)
                 {
+                    dataIssues.Add($"{tier}:DataUnavailable");
                     logger.LogWarning(ex, "Using saved Elliott count for {Symbol} {Interval}", symbol, tier);
                     if (previous?.Analysis.Scenarios.FirstOrDefault() is { } saved)
                         context.AddRange(saved.ContextWaves.Concat(saved.Waves)
-                            .Select(w => w with { Degree = -(target - degree), Timeframe = tier }));
+                            .Select(w => w with { Degree = -(target - degree), Timeframe = tier, Origin = "Context" }));
                     continue;
                 }
                 recent = ElliottWaveAnalyzer.ClosedCandles(recent, tier, DateTimeOffset.UtcNow);
-                if (recent.Count < 30) continue;
+                if (recent.Count < 30) { dataIssues.Add($"{tier}:InsufficientCandles"); continue; }
                 var missingOverlap = previous is not null && !recent.Any(c =>
                     previous.Candles.Any(old => old.OpenTime == c.OpenTime));
                 var revised = previous is not null && recent.Any(c =>
@@ -77,20 +84,27 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                         JsonSerializer.Serialize(new CountSnapshot(analyzer.CacheVersion, merged, analysis), Json), token);
                     File.Move(temporary, file, true);
                 }
+                if (degree == target) coverage = analysis.Coverage;
                 var selected = analysis.Scenarios.FirstOrDefault();
                 if (selected is null) continue;
                 if (degree == target) active = selected;
                 else context.AddRange(selected.ContextWaves.Concat(selected.Waves)
-                    .Select(w => w with { Degree = -(target - degree), Timeframe = tier }));
+                    .Select(w => w with { Degree = -(target - degree), Timeframe = tier, Origin = "Context" }));
             }
-            if (active is null) return null;
+            if (active is null)
+            {
+                coverage ??= new(0, 0, 0, 0, [], currentCandles.Count < 2 ? []
+                    : [new(currentCandles[0].OpenTime, currentCandles[^1].OpenTime, "InsufficientCandles")]);
+                return ElliottCoverage.Unavailable(coverage with { DataIssues = dataIssues });
+            }
             // The analyzer already retains all non-overlapping valid structures
             // on the requested interval. Higher degrees provide market context.
             return active with
             {
                 Waves = active.Waves.Select(w => w with { Timeframe = interval }).ToArray(),
                 ContextWaves = context.Concat(active.ContextWaves.Select(w => w with { Timeframe = interval })).ToArray(),
-                Subwaves = active.Subwaves.Select(w => w with { Timeframe = interval }).ToArray()
+                Subwaves = active.Subwaves.Select(w => w with { Timeframe = interval }).ToArray(),
+                Coverage = active.Coverage is null ? coverage : active.Coverage with { DataIssues = dataIssues }
             };
         }
         finally { _gate.Release(); }

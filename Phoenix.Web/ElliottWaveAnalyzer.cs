@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 /// <summary>Hard Elliott rules invalidate counts; ratios and alternation only rank them.</summary>
 public sealed class ElliottWaveAnalyzer
 {
-    public const string RuleSetVersion = "4.1-pdf-hierarchy";
+    public const string RuleSetVersion = "4.2-coverage-roots";
     public ElliottProfile Profile { get; }
     public string CacheVersion => $"{RuleSetVersion}-{Profile}";
     public ElliottWaveAnalyzer() : this(Enum.TryParse<ElliottProfile>(
@@ -16,7 +16,8 @@ public sealed class ElliottWaveAnalyzer
     public ElliottAnalysis Analyze(IReadOnlyList<BybitKline> candles, int depth = 5, decimal deviationPercent = 0.6m)
     {
         candles = candles.GroupBy(c=>c.OpenTime).Select(g=>g.Last()).OrderBy(c=>c.OpenTime).ToArray();
-        if (candles.Count < 30) return new([], [], "برای تحلیل حداقل ۳۰ کندل لازم است.", RuleSetVersion);
+        if (candles.Count < 30) return new([], [], "برای تحلیل حداقل ۳۰ کندل لازم است.", RuleSetVersion)
+            { Coverage = new(0, 0, 0, 0, [], candles.Count < 2 ? [] : [new(candles[0].OpenTime, candles[^1].OpenTime, "InsufficientCandles")]) };
         // Elliott form is extracted from the line chart (Close), even when the
         // presentation requested by the user is candlesticks. Wicks must not
         // create a different count from the corresponding line chart.
@@ -88,6 +89,12 @@ public sealed class ElliottWaveAnalyzer
             .OrderByDescending(x => x.Waves[^1].Time - x.Waves[0].Time)
             .Take(192).Concat(found.OrderByDescending(x => x.Waves[^1].Time)
                 .ThenByDescending(x => x.Score).Take(64))
+            // Reserve validation capacity across the full history, including
+            // early patterns separated from the live count by an unknown span.
+            .Concat(found.GroupBy(x => Math.Min(7, (int)(8d * (x.Waves[0].Time - candles[0].OpenTime) /
+                    Math.Max(1d, candles[^1].OpenTime - candles[0].OpenTime))))
+                .SelectMany(g => g.OrderByDescending(x => x.Waves[^1].Time - x.Waves[0].Time)
+                    .ThenByDescending(x => x.Score).Take(8)))
             .DistinctBy(x => $"{x.Pattern}|{string.Join(',', x.Waves.Select(w => w.Time))}")
             .Select(x => ElliottGuidelines.Apply(validator.Validate(x, detailPivots)))
             .Where(x => x.ValidationStatus != "Invalid")
@@ -119,8 +126,12 @@ public sealed class ElliottWaveAnalyzer
             var subwaves = active.Subwaves.ToList();
             void Include(ElliottScenario value)
             {
-                context.AddRange(value.Waves);
-                subwaves.AddRange(value.Subwaves);
+                // Verified roots are selected globally by ElliottCoverage. Keep
+                // only a developing continuation here, with its own identity.
+                if (value.ValidationStatus == "Verified") return;
+                var id = ElliottCoverage.CountId(value);
+                context.AddRange(value.Waves.Select(w => w with { Parent = id, Origin = "Continuation" }));
+                subwaves.AddRange(value.Subwaves.Select(w => w with { Parent = $"{id}/{w.Parent}", Origin = "Continuation" }));
             }
             var cursor = active.Waves[0].Time;
             while (decorated.Where(x => x.ValidationStatus == "Verified" && x.Phase == "Complete" &&
@@ -145,7 +156,10 @@ public sealed class ElliottWaveAnalyzer
         var message = ranked.Length == 0
             ? "ساختار معتبر پیدا نشد؛ پیوت‌های مهم برای بررسی دستی نمایش داده شده‌اند."
             : "قواعد ساختاری و ریزموج‌ها جدا از راهنماها بررسی شدند؛ سناریوی تأییدنشده قطعی نیست و امتیاز الگو احتمال تارگت نیست.";
-        return new(pivots, ranked, message, RuleSetVersion);
+        var coverage = ElliottCoverage.Build(decorated, candles.Select(c => c.OpenTime).ToArray(), ranked.FirstOrDefault());
+        ranked = ranked.Select((scenario, index) => ElliottCoverage.Attach(scenario,
+            index == 0 ? coverage : ElliottCoverage.Build(decorated, candles.Select(c => c.OpenTime).ToArray(), scenario))).ToArray();
+        return new(pivots, ranked, message, RuleSetVersion) { Coverage = coverage };
     }
 
     /// <summary>Only closed bars may confirm a turn. Monthly bars use calendar months.</summary>
@@ -412,7 +426,10 @@ public sealed class ElliottWaveAnalyzer
     private static decimal Fib(decimal value, params decimal[] targets) => Math.Max(0, 1 - targets.Min(x => Math.Abs(value - x) / Math.Max(x, .0001m)));
 }
 
-public sealed record ElliottAnalysis(IReadOnlyList<ElliottPivot> Pivots, IReadOnlyList<ElliottScenario> Scenarios, string Message, string RuleSetVersion);
+public sealed record ElliottAnalysis(IReadOnlyList<ElliottPivot> Pivots, IReadOnlyList<ElliottScenario> Scenarios, string Message, string RuleSetVersion)
+{
+    public ElliottCoverageReport? Coverage { get; init; }
+}
 public sealed record ElliottPivot(int Index, long Time, decimal Price, string Kind);
 public sealed record ElliottScenario(string Direction, decimal Score, IReadOnlyList<ElliottWavePoint> Waves,
     IReadOnlyList<ElliottRule> Rules, decimal StartInvalidation, decimal Wave4Invalidation, ElliottRatios Ratios,
@@ -427,10 +444,12 @@ public sealed record ElliottScenario(string Direction, decimal Score, IReadOnlyL
     public string Profile { get; init; } = "Classic";
     public bool SearchLimitReached { get; init; }
     public ElliottStructureNode? Structure { get; init; }
+    public ElliottCoverageReport? Coverage { get; init; }
 }
 public sealed record ElliottWavePoint(string Label, long Time, decimal Price, int Degree = 0, string? Parent = null)
 {
     public string? Timeframe { get; init; }
+    public string Origin { get; init; } = "Active";
     public bool IsTentative { get; init; }
     public string ValidationStatus { get; init; } = "Unverified";
 }

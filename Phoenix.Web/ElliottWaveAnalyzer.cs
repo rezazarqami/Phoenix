@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 /// <summary>Hard Elliott rules invalidate counts; ratios and alternation only rank them.</summary>
 public sealed class ElliottWaveAnalyzer
 {
-    public const string RuleSetVersion = "4.0-pdf-structure";
+    public const string RuleSetVersion = "4.1-pdf-hierarchy";
     public ElliottProfile Profile { get; }
     public string CacheVersion => $"{RuleSetVersion}-{Profile}";
     public ElliottWaveAnalyzer() : this(Enum.TryParse<ElliottProfile>(
@@ -28,35 +28,75 @@ public sealed class ElliottWaveAnalyzer
         var found = new List<ElliottScenario>();
         var validator = new ElliottStructureValidator(Profile);
         void Add(ElliottScenario? value) { if (value is not null) found.Add(value); }
-        for (var start = 0; start < pivots.Count; start++)
+        // Search structural degrees as well as the user's pivot view. A single
+        // six-pivot sliding window cannot see a parent containing subwaves.
+        var degrees = new[] { pivots.ToArray() }.Concat(ElliottPivotHierarchy.Degrees(detailPivots))
+            .GroupBy(p => string.Join(',', p.Select(x => x.Time))).Select(g => g.First());
+        void Search(IEnumerable<ElliottPivot[]> views)
         {
-            var left = pivots.Count - start;
-            if (left >= 12) Add(ScoreTripleThree(pivots.Skip(start).Take(12).ToArray()));
-            if (left >= 8) Add(ScoreDoubleThree(pivots.Skip(start).Take(8).ToArray()));
-            if (left >= 6)
+            foreach (var degree in views)
             {
-                var six = pivots.Skip(start).Take(6).ToArray();
-                Add(Profile == ElliottProfile.Copsey ? ScoreHarmonic(six) : ScoreImpulse(six));
-                if (Profile == ElliottProfile.Classic) { Add(ScoreDiagonal(six, false)); Add(ScoreDiagonal(six, true)); }
-                Add(ScoreTriangle(six)); Add(ScoreCombination(six));
-            }
-            if (left >= 4)
-            {
-                var four = pivots.Skip(start).Take(4).ToArray();
-                Add(ScoreCorrection(four)); Add(ScoreCorrection(four, true)); Add(ScoreCombination(four));
+                for (var start = 0; start < degree.Length; start++)
+                {
+                    var remaining = degree.Length - start;
+                    if (remaining >= 12) Add(ScoreTripleThree(degree.Skip(start).Take(12).ToArray()));
+                    if (remaining >= 8) Add(ScoreDoubleThree(degree.Skip(start).Take(8).ToArray()));
+                    if (remaining >= 6)
+                    {
+                        var six = degree.Skip(start).Take(6).ToArray();
+                        Add(Profile == ElliottProfile.Copsey ? ScoreHarmonic(six) : ScoreImpulse(six));
+                        if (Profile == ElliottProfile.Classic) { Add(ScoreDiagonal(six, false)); Add(ScoreDiagonal(six, true)); }
+                        Add(ScoreTriangle(six)); Add(ScoreCombination(six));
+                    }
+                    if (remaining >= 4)
+                    {
+                        var four = degree.Skip(start).Take(4).ToArray();
+                        Add(ScoreCorrection(four)); Add(ScoreCorrection(four, true)); Add(ScoreCombination(four));
+                    }
+                }
+                foreach (var count in new[] { 5, 4, 3 })
+                    if (Profile == ElliottProfile.Classic && degree.Length >= count) Add(ScoreDeveloping(degree.TakeLast(count).ToArray()));
             }
         }
-        foreach (var count in new[] { 5, 4, 3 })
-            if (Profile == ElliottProfile.Classic && pivots.Count >= count) Add(ScoreDeveloping(pivots.TakeLast(count).ToArray()));
+        Search(degrees);
+        // Inspect local endpoint-preserving degrees too. Reducing the whole
+        // chart first can absorb E into the following rally before the five
+        // corrective legs have been recognized as a triangle.
+        foreach (var count in new[] { 16, 18, 20, 22, 24, 32, 48, 64 })
+            for (var start = 0; start + count <= detailPivots.Count; start++)
+                foreach (var view in ElliottPivotHierarchy.Degrees(detailPivots.Skip(start).Take(count).ToArray()))
+                    if (view.Length == 6) Add(ScoreTriangle(view));
+        // E of a triangle need not be its deepest/highest point. Ordinary
+        // extreme reduction cannot recover that parent boundary. Promote a
+        // fully parsed triangle as a single candidate leg, then validate its
+        // actual position inside the parent (a triangle in wave 2 still fails).
+        var triangleLegs = found.Where(s => s.Pattern.EndsWith("Triangle"))
+            .DistinctBy(s => (s.Waves[0].Time, s.Waves[^1].Time))
+            .OrderByDescending(s => s.Waves[^1].Time - s.Waves[0].Time).Take(96)
+            .Where(s => validator.Validate(s, detailPivots, ElliottPosition.Wave4).ValidationStatus == "Verified")
+            .Take(16).ToArray();
+        foreach (var triangle in triangleLegs)
+        {
+            var grouped = detailPivots.Where(p => p.Time <= triangle.Waves[0].Time || p.Time >= triangle.Waves[^1].Time).ToArray();
+            Search(ElliottPivotHierarchy.Degrees(grouped));
+        }
         var decorated = found.GroupBy(x => $"{x.Pattern}|{string.Join(',', x.Waves.Select(w => w.Time))}")
             .Select(x => x.MaxBy(y => y.Score)!)
+            // Spend the bounded validation work on broad candidates first,
+            // then reserve space for recent local continuations. Cheap geometry
+            // candidates must not starve the live structures of a shared budget.
+            .OrderByDescending(x => x.Waves[^1].Time - x.Waves[0].Time)
+            .Take(192).Concat(found.OrderByDescending(x => x.Waves[^1].Time)
+                .ThenByDescending(x => x.Score).Take(64))
+            .DistinctBy(x => $"{x.Pattern}|{string.Join(',', x.Waves.Select(w => w.Time))}")
             .Select(x => ElliottGuidelines.Apply(validator.Validate(x, detailPivots)))
             .Where(x => x.ValidationStatus != "Invalid")
             .ToArray();
         var ranked = decorated
-            .Where(x => x.CoveragePercent >= 18m)
-            .OrderByDescending(x => (x.ValidationStatus == "Verified" ? 100m : 0m) + x.Score + Math.Min(30m, x.CoveragePercent * .45m)
-                + (x.Subwaves.Count > 0 ? 8m : 0m))
+            .OrderByDescending(x => x.ValidationStatus == "Verified")
+            .ThenByDescending(x => x.CoveragePercent)
+            .ThenByDescending(x => x.SubdivisionCoveragePercent)
+            .ThenByDescending(x => x.Score)
             .ThenByDescending(x => x.Waves[^1].Time).Take(5).ToArray();
         // The chart overlay must describe the live/right-hand side of the chart.
         // A high-scoring completed structure in the past is useful context, but
@@ -65,25 +105,39 @@ public sealed class ElliottWaveAnalyzer
         if (decorated.Length > 0)
         {
             var newestEnd = decorated.Max(x => x.Waves[^1].Time);
-            var active = decorated.Where(x => x.Waves[^1].Time == newestEnd)
+            var live = decorated.Where(x => x.Waves[^1].Time == newestEnd)
                 .OrderByDescending(x => x.ValidationStatus == "Verified")
-                .ThenByDescending(x => x.CoveragePercent)
-                .ThenByDescending(x => x.Score)
-                .First();
-            var prior = new List<ElliottScenario>();
-            var cursor = active.Waves[0].Time;
-            while (true)
+                .ThenByDescending(x => x.SubdivisionCoveragePercent)
+                .ThenByDescending(x => x.CoveragePercent).ThenByDescending(x => x.Score).First();
+            // Preserve a verified broad parent even when a small correction is
+            // newest. Continuations join at the exact boundary, never by merely
+            // stacking unrelated overlapping ABC/WXY candidates.
+            var broad = ranked[0];
+            var active = broad.ValidationStatus == "Verified" && broad.CoveragePercent > live.CoveragePercent
+                ? broad : live;
+            var context = new List<ElliottWavePoint>();
+            var subwaves = active.Subwaves.ToList();
+            void Include(ElliottScenario value)
             {
-                var candidates = decorated.Where(x => x.ValidationStatus == "Verified" && x.Phase == "Complete" && x.Waves[^1].Time == cursor && x.Waves[0].Time < cursor);
-                // The previous C/5 endpoint is the next count's implicit origin.
-                // Prefer a structure sharing that exact pivot whenever valid.
-                var preceding = candidates.OrderByDescending(x => x.Score).FirstOrDefault();
-                if (preceding is null) break;
-                prior.Add(preceding);
-                cursor = preceding.Waves[0].Time;
+                context.AddRange(value.Waves);
+                subwaves.AddRange(value.Subwaves);
             }
-            active = active with { ContextWaves = prior.AsEnumerable().Reverse()
-                .SelectMany(x => x.Waves).ToArray() };
+            var cursor = active.Waves[0].Time;
+            while (decorated.Where(x => x.ValidationStatus == "Verified" && x.Phase == "Complete" &&
+                    x.Waves[^1].Time == cursor && x.Waves[0].Time < cursor)
+                .OrderByDescending(x => x.CoveragePercent).ThenByDescending(x => x.Score).FirstOrDefault() is { } preceding)
+            {
+                Include(preceding); cursor = preceding.Waves[0].Time;
+            }
+            cursor = active.Waves[^1].Time;
+            while (decorated.Where(x => x.Waves[0].Time == cursor && x.Waves[^1].Time > cursor &&
+                    (x.ValidationStatus == "Verified" || x.Waves[^1].Time == newestEnd))
+                .OrderByDescending(x => x.ValidationStatus == "Verified")
+                .ThenByDescending(x => x.CoveragePercent).ThenByDescending(x => x.Score).FirstOrDefault() is { } following)
+            {
+                Include(following); cursor = following.Waves[^1].Time;
+            }
+            active = active with { ContextWaves = context.OrderBy(w => w.Time).ToArray(), Subwaves = subwaves };
             ranked = new[] { active }.Concat(ranked.Where(x =>
                     x.Pattern != active.Pattern || !x.Waves.Select(w => w.Time).SequenceEqual(active.Waves.Select(w => w.Time))))
                 .Take(5).ToArray();
@@ -378,6 +432,7 @@ public sealed record ElliottWavePoint(string Label, long Time, decimal Price, in
 {
     public string? Timeframe { get; init; }
     public bool IsTentative { get; init; }
+    public string ValidationStatus { get; init; } = "Unverified";
 }
 public sealed record ElliottRule(string Code, string Description, bool Passed, bool IsHard)
 {

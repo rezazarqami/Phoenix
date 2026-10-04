@@ -14,3 +14,7 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build and run similarity regression
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release -- --filter "Target and stop similarity"
+      - name: Validate Elliott hierarchy and PDF rules
+        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter Elliott
+      - name: Validate chart rendering
+        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter "Signal Lab candidate"

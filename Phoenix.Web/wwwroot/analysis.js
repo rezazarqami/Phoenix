@@ -13,7 +13,12 @@ function showScenario(index){
   markers=[];
   if(selected){
     const candles=currentData.candles||[],positions=new Map(candles.map((c,i)=>[c.openTime,i])),seen=new Set();
-    const waves=[...selected.waves,...(selected.contextWaves||[]),...(selected.subwaves||[]).filter(w=>w.degree<=1&&w.validationStatus==='Verified')];
+    const roots=selected.coverage?.sections||[];
+    const waves=[...(selected.validationStatus==='Verified'?selected.waves:[]),
+      ...(selected.contextWaves||[]).filter(w=>w.validationStatus==='Verified'),
+      ...(selected.subwaves||[]).filter(w=>w.degree<=1&&w.validationStatus==='Verified'&&
+        (w.origin==='Subdivision'&&roots.some(s=>w.parent?.startsWith(s.id+'/'))||
+         selected.validationStatus==='Verified'&&w.origin!=='Continuation'))];
     markers=waves.filter(w=>{
       const key=`${w.time}:${w.label}:${w.degree||0}`;
       if(w.label==='0'||!positions.has(w.time)||seen.has(key))return false;

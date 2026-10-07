@@ -7,6 +7,7 @@ public sealed class TelegramCommandWorker(
     TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ServerOrderStore store,
+    SignalCancellationService cancellation,
     ServerState state,
     BybitDemoOptions options,
     BybitDemoClient bybit,
@@ -143,17 +144,7 @@ public sealed class TelegramCommandWorker(
         string answer;
         try
         {
-            var signal = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
-            if (signal is null || signal.Status is "Filled" or "Closing")
-                answer = "این سیگنال دیگر قابل لغو نیست.";
-            else
-            {
-                if (signal.Status == "Submitted" && !string.IsNullOrWhiteSpace(signal.BybitOrderId))
-                    await bybit.CancelOrderAsync(signal.Symbol, signal.BybitOrderId, token);
-                answer = await store.CancelEntryReviewAsync(id, token)
-                    ? "سیگنال در بررسی لحظه ورود لغو شد 🚫"
-                    : "این سیگنال قبلاً بسته یا لغو شده است.";
-            }
+            answer = (await cancellation.CancelAsync(id, token)).Message;
         }
         catch (Exception exception)
         {

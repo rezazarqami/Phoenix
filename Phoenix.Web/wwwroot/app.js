@@ -304,7 +304,7 @@ async function refreshSignals() {
       <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
       <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
       <div class="similarity ${s.targetSimilarityPercent == null ? 'insufficient' : ''}">${s.targetSimilarityPercent == null ? `برای پیش‌بینی، دادهٔ فنی کافی نیست (${fa.format(s.similaritySampleCount || 0)} نتیجه)` : `<div class="similarity-meter target-similarity"><span>شباهت به تارگت‌ها <b>${fa.format(s.targetSimilarityPercent ?? 0)}٪</b></span><i><em style="width:${Math.max(0,Math.min(100,s.targetSimilarityPercent ?? 0))}%"></em></i></div><div class="similarity-meter stop-similarity"><span>شباهت به استاپ‌ها <b>${fa.format(s.stopSimilarityPercent ?? 0)}٪</b></span><i><em style="width:${Math.max(0,Math.min(100,s.stopSimilarityPercent ?? 0))}%"></em></i></div><small>${fa.format(s.similaritySampleCount)} نتیجهٔ فنی آموخته‌شده</small>`}</div>
-      <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'حذف از صف'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
+      <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'لغو سیگنال'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
   } catch { /* status indicator already reports connectivity */ }
 }
 
@@ -354,10 +354,16 @@ function escapeHtml(value) {
 }
 
 async function removeSignal(id) {
-  if (!confirm('این سفارش حذف یا لغو شود؟')) return;
-  const response = await fetch('/api/signals/' + id, { method:'DELETE' });
-  if (!response.ok) { const data = await response.json(); alert(data.error || 'عملیات ناموفق بود.'); }
-  await refreshSignals(); await refreshHistory();
+  if (!await phoenixConfirm('این سیگنال یا سفارش لغو شود؟')) return;
+  message.textContent = 'در حال لغو…';
+  try {
+    const response = await fetch('/api/signals/' + id, { method:'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || (response.status === 401
+      ? 'نشست شما منقضی شده است؛ دوباره وارد شوید.' : 'لغو انجام نشد؛ دوباره تلاش کنید.'));
+    message.textContent = data.message || 'سیگنال لغو شد.';
+    await refreshSignals(); await refreshHistory();
+  } catch (error) { message.textContent = error.message; }
 }
 
 form.addEventListener('submit', async event => {

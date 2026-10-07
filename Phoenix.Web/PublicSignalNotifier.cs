@@ -15,7 +15,7 @@ public sealed record PublicSignalTelegramOptions(string? BotToken, string? ChatI
 
 public sealed class PublicSignalNotifier
 {
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(35) };
     private readonly PublicSignalTelegramOptions _options;
     private readonly DedicatedTelegramOptions _dedicatedOptions;
     private readonly ILogger<PublicSignalNotifier> _logger;
@@ -60,6 +60,20 @@ public sealed class PublicSignalNotifier
                 callback.GetProperty("id").GetString()));
         }
         return result;
+    }
+
+    public async Task<bool> IsChannelAdministratorAsync(TelegramCommand command, CancellationToken token)
+    {
+        if (!_options.IsConfigured || command.UserId <= 0) return false;
+        // Check the destination configured for this bot, never an arbitrary forwarded chat.
+        using var response = await (_httpClient ?? Client).PostAsJsonAsync(
+            $"https://api.telegram.org/bot{_options.BotToken}/getChatMember",
+            new { chat_id = _options.ChatId, user_id = command.UserId }, token);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
+        var root = document.RootElement;
+        return root.GetProperty("ok").GetBoolean() &&
+            root.GetProperty("result").GetProperty("status").GetString() is "creator" or "administrator";
     }
 
     public async Task AnswerCallbackAsync(string callbackId, string text, CancellationToken token)

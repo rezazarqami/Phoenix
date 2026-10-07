@@ -9,6 +9,7 @@ builder.Services.AddSingleton(BybitDemoOptions.FromEnvironment());
 builder.Services.AddSingleton<BybitDemoClient>();
 builder.Services.AddSingleton<ServerState>();
 builder.Services.AddSingleton<ServerOrderStore>();
+builder.Services.AddSingleton<SignalCancellationService>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
 builder.Services.AddHttpClient<MarketCapCatalog>(client =>
 {
@@ -104,6 +105,7 @@ app.Use(async (context, next) =>
                 context.Response.Redirect("/login");
             return;
         }
+        PhoenixSessionAuth.RenewSessionCookie(context, identity);
         if (identity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
             path is not "/api/analysis/auth/logout")
         {
@@ -140,6 +142,7 @@ app.Use(async (context, next) =>
             context.Response.Redirect("/login");
         return;
     }
+    PhoenixSessionAuth.RenewSessionCookie(context, phoenixIdentity);
     if (phoenixIdentity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
         path is not "/api/auth/logout")
     {
@@ -173,25 +176,19 @@ app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse respons
         return Results.Json(new { error = "نام کاربری یا رمز عبور صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
     var viewerOnly = !admin && user!.ViewerOnly;
     var token = PhoenixSessionAuth.CreateToken(request.Username, viewerOnly, admin);
-    response.Cookies.Append(PhoenixSessionAuth.CookieName, token, new CookieOptions
-    {
-        HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = false,
-        MaxAge = TimeSpan.FromHours(12), Path = "/"
-    });
+    PhoenixSessionAuth.WriteSessionCookie(response, token);
     return Results.Ok(new { loggedIn = true, viewerOnly });
 });
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
 {
-    response.Cookies.Delete(PhoenixSessionAuth.CookieName, new CookieOptions { Path = "/" });
-    response.Cookies.Delete(AnalysisSessionAuth.CookieName, new CookieOptions { Path = "/" });
+    PhoenixSessionAuth.ClearSessionCookies(response);
     return Results.Ok(new { loggedOut = true });
 });
 app.MapPost("/api/analysis/auth/login", () =>
     Results.Json(new { error = "ورود تحلیل با فونیکس یکپارچه شده است؛ از صفحه ورود اصلی وارد شوید." }, statusCode: 410));
 app.MapPost("/api/analysis/auth/logout", (HttpResponse response) =>
 {
-    response.Cookies.Delete(PhoenixSessionAuth.CookieName, new CookieOptions { Path = "/" });
-    response.Cookies.Delete(AnalysisSessionAuth.CookieName, new CookieOptions { Path = "/" });
+    PhoenixSessionAuth.ClearSessionCookies(response);
     return Results.Ok(new { loggedOut = true });
 });
 app.MapGet("/api/auth/me", (HttpRequest request) =>
@@ -591,31 +588,23 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
     return await submission.SubmitAsync(request, token, identity.Username);
 });
 
-app.MapDelete("/api/signals/{id:guid}", async (Guid id, ServerOrderStore store, BybitDemoClient bybit,
-    TelegramNotifier telegram, CancellationToken token) =>
+app.MapDelete("/api/signals/{id:guid}", async (Guid id, SignalCancellationService cancellation,
+    CancellationToken token) =>
 {
-    var signal = (await store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
-    if (signal is null) return Results.NotFound(new { error = "سفارش پیدا نشد." });
-    if (signal.Status is "Filled" or "Closing")
-        return Results.Conflict(new { error = "پوزیشن فعال را از صف حذف نکنید؛ از گزینه بستن پوزیشن‌ها استفاده کنید." });
-    if (signal.Status == "Submitting")
-        return Results.Conflict(new { error = "سفارش در حال ارسال است؛ چند ثانیه بعد دوباره تلاش کنید." });
-    var cancelledAtBybit = signal.Status == "Submitted" && !string.IsNullOrWhiteSpace(signal.BybitOrderId);
-    if (cancelledAtBybit)
+    try
     {
-        try { await bybit.CancelOrderAsync(signal.Symbol, signal.BybitOrderId!, token); }
-        catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+        var result = await cancellation.CancelAsync(id, token);
+        if (result.Cancelled) return Results.Ok(new { message = result.Message });
+        return Results.Conflict(new { error = result.Message });
     }
-    await store.RemoveAsync(id, token);
-    await telegram.RemovedAsync(signal, cancelledAtBybit, token);
-    return Results.NoContent();
+    catch (Exception exception) { return Results.BadRequest(new { error = "لغو انجام نشد: " + exception.Message }); }
 });
 
 app.MapPost("/api/signals/cancel-pending/{direction}", async (string direction, HttpRequest request,
     ServerOrderStore store, CancellationToken token) =>
 {
     if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
-        return Results.StatusCode(403);
+        return Results.Json(new { error = "برای لغو گروهی باید با حساب مدیر وارد شوید." }, statusCode: 403);
     if (direction is not ("All" or "Long" or "Short")) return Results.BadRequest(new { error = "جهت نامعتبر است." });
     await store.ExecutionGate.WaitAsync(token);
     try { return Results.Ok(new { cancelled = await store.CancelPendingAsync(direction, token) }); }

@@ -10,7 +10,6 @@ public sealed class TelegramCommandWorker(
     SignalCancellationService cancellation,
     ServerState state,
     BybitDemoOptions options,
-    BybitDemoClient bybit,
     SignalBatchService batches,
     ILogger<TelegramCommandWorker> logger) : BackgroundService
 {

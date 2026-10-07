@@ -10,6 +10,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 
 public final class MainActivity extends Activity {
     private static final String HOME = "https://marketsignalist.ir/";
@@ -31,7 +32,11 @@ public final class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptCookie(true);
+        browser.setWebChromeClient(new WebChromeClient());
         browser.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                CookieManager.getInstance().flush();
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String host = request.getUrl().getHost();
                 if ("marketsignalist.ir".equalsIgnoreCase(host) && "https".equalsIgnoreCase(request.getUrl().getScheme())) return false;
@@ -41,6 +46,11 @@ public final class MainActivity extends Activity {
         });
         if (state == null) browser.loadUrl(HOME);
         else browser.restoreState(state);
+    }
+
+    @Override protected void onPause() {
+        CookieManager.getInstance().flush();
+        super.onPause();
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {

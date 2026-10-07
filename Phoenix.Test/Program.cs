@@ -9,6 +9,17 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Persistent session survives elapsed hours and preserves every user role", PersistentSessionTests.PersistentRoles);
+Run("Persistent session upgrades valid legacy login but rejects expired and tampered tokens", PersistentSessionTests.LegacyAndTampering);
+Run("Persistent session cookie renews across main and analysis pages and clears on manual logout", PersistentSessionTests.CookieLifecycle);
+
+Run("Cancellation Telegram channel owner and administrator can cancel without panel registration", CancellationTests.ChannelAdmins);
+Run("Cancellation denies ordinary and disabled users without changing a signal", CancellationTests.Unauthorized);
+Run("Cancellation owner fallback works with public channel and existing access list", CancellationTests.ConfiguredOwner);
+Run("Cancellation public callback cancels persisted pending signal and prevents stale reentry", CancellationTests.PendingCallback);
+Run("Cancellation exchange failures, filled orders and in-flight submissions never report success", CancellationTests.ExchangeStates);
+Run("Cancellation bulk handles All Long Short and preserves active positions", CancellationTests.Bulk);
+
 Run("Crypto statistics include lifetime trades and ignore unentered signals", CryptoStatisticsTests.Lifetime);
 Run("Crypto statistics migrate queues, retain removed trades and refresh outcomes", CryptoStatisticsTests.Migration);
 
@@ -311,9 +322,11 @@ Run("Bulk cancellation is direction-filtered and cannot cancel filled or claimed
         False(store.TryClaimSubmissionAsync(signals[0].Id, 100).GetAwaiter().GetResult());
         store.UpdateAsync(signals[0]).GetAwaiter().GetResult();
         Equal("Cancelled", store.GetAllAsync().GetAwaiter().GetResult().Single(x => x.Id == signals[0].Id).Status);
+        // Entries are no longer persistently paused by bulk operations. Cancelling
+        // Long must leave the unrelated pending Short available for later handling.
         store.SetEntriesPausedAsync(true).GetAwaiter().GetResult();
-        False(store.TryClaimSubmissionAsync(signals[1].Id, 100).GetAwaiter().GetResult());
-        True(new ServerOrderStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.db")).EntriesPaused);
+        False(new ServerOrderStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.db")).EntriesPaused);
+        Equal("Pending", store.GetAllAsync().GetAwaiter().GetResult().Single(x => x.Id == signals[1].Id).Status);
         Equal(1, store.CancelPendingAsync("All").GetAwaiter().GetResult());
         Equal(1, store.GetAllAsync().GetAwaiter().GetResult().Count(x => x.Status == "Filled"));
         Equal(1, store.GetAllAsync().GetAwaiter().GetResult().Count(x => x.Status == "Submitting"));

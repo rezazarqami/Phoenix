@@ -265,7 +265,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
-            if (signal is null || signal.Status is "Filled" or "Closing" || signal.CompletedAtUtc is not null)
+            if (signal is null || signal.Status is not ("Pending" or "Submitted" or "Error") || signal.FilledAtUtc is not null || signal.CompletedAtUtc is not null)
                 return false;
             signal.Status = "Cancelled";
             signal.Outcome = "Cancelled";

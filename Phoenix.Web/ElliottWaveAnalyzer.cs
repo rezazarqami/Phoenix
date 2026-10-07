@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 /// <summary>Hard Elliott rules invalidate counts; ratios and alternation only rank them.</summary>
 public sealed class ElliottWaveAnalyzer
 {
-    public const string RuleSetVersion = "4.2-coverage-roots";
+    public const string RuleSetVersion = "4.3-verified-overlays";
     public ElliottProfile Profile { get; }
     public string CacheVersion => $"{RuleSetVersion}-{Profile}";
     public ElliottWaveAnalyzer() : this(Enum.TryParse<ElliottProfile>(

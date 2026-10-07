@@ -26,6 +26,28 @@ internal static class ElliottCoverageTests
             Check(report.VerifiedPercent == 0 && report.Sections.Count == 0 && report.Gaps.Single().Reason == "SearchLimit");
             Check(ElliottCoverage.Attach(unknown, report).ValidationStatus == "Unverified");
         });
+        run("Elliott unknown parent does not conceal overlapping verified history", () =>
+        {
+            var verified = Verified("Impulse", [100,120,110,150,130,160]);
+            var unknown = verified with { ValidationStatus = "Unverified", Pattern = "DoubleThree" };
+            var report = ElliottCoverage.Build([verified, unknown],
+                Enumerable.Range(0, (int)verified.Waves[^1].Time + 1).Select(i => (long)i).ToArray(), unknown);
+            Check(report.VerifiedPercent == 100 && report.Sections.Count == 1);
+            var attached = ElliottCoverage.Attach(unknown, report);
+            Check(SignalChartRenderer.DisplayWaves(attached).All(w => w.Origin != "Active"));
+            Check(SignalChartRenderer.DisplayWaves(attached).Any(w => w.Label == "1"));
+        });
+        run("Elliott zero verified coverage draws no unsupported ABC WXY or orphan subdivisions", () =>
+        {
+            var unknown = Verified("Zigzag", [160,140,150,125]) with { ValidationStatus = "Unverified" };
+            unknown = unknown with {
+                Waves = unknown.Waves.Select(w => w with { ValidationStatus = "Unverified" }).ToArray(),
+                ContextWaves = [new("W", 3, 150) { Origin = "Continuation" }]
+            };
+            var report = ElliottCoverage.Build([unknown], [0, 1, unknown.Waves[^1].Time], unknown);
+            Check(report.VerifiedPercent == 0);
+            Check(SignalChartRenderer.DisplayWaves(ElliottCoverage.Attach(unknown, report)).Count == 0);
+        });
         run("Elliott coverage chooses compatible broad roots without double counting", () =>
         {
             var first = Verified("Impulse", [100,120,110,150,130,160]);

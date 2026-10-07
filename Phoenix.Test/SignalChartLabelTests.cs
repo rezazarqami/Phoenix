@@ -16,7 +16,7 @@ internal static class SignalChartLabelTests
             candles[145].OpenTime, candles[20].OpenTime, 0, candles[^1].OpenTime, candles.Length, "", false, null);
         var waves = new List<ElliottWavePoint>();
         foreach (var (index, label) in new[] { (14, "W"), (42, "X"), (70, "Y"), (98, "A"), (126, "B"), (164, "C") })
-            waves.Add(new(label, candles[index].OpenTime, candles[index].High) { Timeframe = "60" });
+            waves.Add(new(label, candles[index].OpenTime, candles[index].High) { Timeframe = "60", ValidationStatus = "Verified" });
         // Reproduce the crowded right edge with multiple degrees on one pivot.
         foreach (var tf in new[] { "M", "W", "D", "15" })
             waves.Add(new("A", candles[164].OpenTime, candles[164].High) { Timeframe = tf, ValidationStatus = "Verified" });
@@ -25,7 +25,8 @@ internal static class SignalChartLabelTests
         var report = new ElliottCoverageReport(0, 1, 0, 0, [],
             [new(candles[0].OpenTime, candles[^1].OpenTime, "SubdivisionUnknown")]);
         empty = empty with { Coverage = report };
-        var scenario = empty with { Waves = waves };
+        // This fixture tests typography for accepted labels; unverified labels are tested separately.
+        var scenario = empty with { Waves = waves, ValidationStatus = "Verified" };
         foreach (var mode in new[] { false, true })
         {
             var baseline = SignalChartRenderer.Render(candles, candidate, mode, "15M", 82m, 78m, empty);

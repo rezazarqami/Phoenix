@@ -233,8 +233,12 @@ public static class SignalChartRenderer
     public static IReadOnlyList<ElliottWavePoint> DisplayWaves(ElliottScenario scenario)
     {
         var interval = scenario.Waves.FirstOrDefault()?.Timeframe;
-        return scenario.Waves.Concat(scenario.ContextWaves.Where(w => w.Timeframe == interval || w.ValidationStatus == "Verified"))
-            .Concat(scenario.Subwaves.Where(w => w.Degree <= 1 && w.ValidationStatus == "Verified"))
+        return (scenario.ValidationStatus == "Verified" ? scenario.Waves : Array.Empty<ElliottWavePoint>())
+            .Concat(scenario.ContextWaves.Where(w => w.ValidationStatus == "Verified"))
+            .Concat(scenario.Subwaves.Where(w => w.Degree <= 1 && w.ValidationStatus == "Verified"
+                && (w.Origin == "Subdivision" && scenario.Coverage?.Sections.Any(s =>
+                    w.Parent?.StartsWith(s.Id + "/", StringComparison.Ordinal) == true) == true
+                    || scenario.ValidationStatus == "Verified" && w.Origin != "Continuation")))
             .Where(w => ShouldDisplayWaveLabel(w) && WaveStyle(w.Timeframe, interval).Visible)
             .OrderBy(w => w.Origin == "Context" ? 2 : Math.Max(0, w.Degree)).ThenBy(w => WavePriority(w.Timeframe, interval))
             .ThenBy(w => w.Time)

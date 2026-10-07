@@ -22,7 +22,7 @@ public static class ElliottCoverage
             .DistinctBy(CountId).ToArray();
         // The selected active count owns its span. Historical alternatives may
         // touch its endpoints but cannot overwrite or overlap its interior.
-        var available = verified.Where(s => active is null || active.Waves.Count < 2 ||
+        var available = verified.Where(s => active is null || active.ValidationStatus != "Verified" || active.Waves.Count < 2 ||
                 s.Waves[^1].Time <= active.Waves[0].Time || s.Waves[0].Time >= active.Waves[^1].Time)
             .OrderBy(s => s.Waves[^1].Time).ThenBy(s => s.Waves[0].Time).ToArray();
         var weights = new decimal[available.Length + 1];

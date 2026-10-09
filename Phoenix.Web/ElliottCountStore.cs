@@ -93,7 +93,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 }
                 // Reuse does not extend freshness; target bars always come from the caller.
                 if (degree == target || previous is null || DateTime.UtcNow - cached.At >= TimeSpan.FromSeconds(45))
-                    _snapshots[cacheKey] = (new CountSnapshot(analyzer.CacheVersion, merged, analysis), DateTime.UtcNow);
+                    CacheSnapshot(cacheKey, new CountSnapshot(analyzer.CacheVersion, merged, analysis));
                 if (degree == target) coverage = analysis.Coverage;
                 var selected = analysis.Scenarios.FirstOrDefault();
                 if (selected is null) continue;
@@ -118,6 +118,14 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
             };
         }
         finally { gate.Release(); }
+    }
+
+    private void CacheSnapshot(string key, CountSnapshot snapshot)
+    {
+        _snapshots[key] = (snapshot, DateTime.UtcNow);
+        // Retain recent working context, not every 1000-bar symbol/tier forever.
+        foreach (var entry in _snapshots.OrderBy(x => x.Value.At).Take(Math.Max(0, _snapshots.Count - 64)))
+            _snapshots.TryRemove(entry.Key, out _);
     }
 
     private sealed record CountSnapshot(string RuleSet, BybitKline[] Candles, ElliottAnalysis Analysis);

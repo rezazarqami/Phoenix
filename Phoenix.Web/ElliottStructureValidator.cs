@@ -12,9 +12,10 @@ public sealed record ElliottStructureNode(string Pattern, long Start, long End,
 /// Copsey handout pp.5-16. Ratios never rescue an invalid structural parse.
 /// Parsing is bounded, endpoint-preserving and local to a single analysis.
 /// </summary>
-public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottProfile.Classic)
+public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottProfile.Classic, CancellationToken token = default)
 {
     private readonly Dictionary<string, ElliottStructureNode?> _memo = new();
+    private readonly Dictionary<(long, long), ElliottPivot[][]> _views = new();
     private IReadOnlyList<ElliottPivot>? _raw;
     private int _remaining = 12000;
 
@@ -24,8 +25,9 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
         // The search cap belongs to this candidate, not to whichever unrelated
         // candidate happened to be validated first. Cached successful parses
         // are reusable; budget failures must not poison subsequent candidates.
+        token.ThrowIfCancellationRequested();
         _remaining = 12000;
-        if (!ReferenceEquals(_raw, raw)) { _memo.Clear(); _raw = raw; }
+        if (!ReferenceEquals(_raw, raw)) { _memo.Clear(); _views.Clear(); _raw = raw; }
         var components = Components(scenario);
         var boundaryView = scenario.Waves.Select((w,i)=>new ElliottPivot(i,w.Time,w.Price,
             i%2==0 ? (scenario.Waves[1].Price>scenario.Waves[0].Price ? "Low" : "High") : (scenario.Waves[1].Price>scenario.Waves[0].Price ? "High" : "Low"))).ToArray();
@@ -137,6 +139,7 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
 
     private ElliottStructureNode? Match(ElliottPivot[] p, string role, ElliottPosition position, int depth, bool allowAtomic)
     {
+        token.ThrowIfCancellationRequested();
         if (p.Length < 2 || p[0].Price == p[^1].Price) return null;
         if (p.Length == 2) return allowAtomic ? new("ObservedLeg",p[0].Time,p[1].Time,[]) : null;
         if (depth > 5) return null;
@@ -185,17 +188,23 @@ public sealed class ElliottStructureValidator(ElliottProfile profile = ElliottPr
 
     // Remove the least significant PAIR of turns, retaining both endpoints and
     // every raw leg in the child spans. No arbitrary window or stride sampling.
-    private static IEnumerable<ElliottPivot[]> Views(ElliottPivot[] raw)
+    private IEnumerable<ElliottPivot[]> Views(ElliottPivot[] raw)
     {
+        token.ThrowIfCancellationRequested();
+        var key = (raw[0].Time, raw[^1].Time);
+        if (_views.TryGetValue(key, out var cached)) return cached;
         var p = raw.ToList();
+        var result = new List<ElliottPivot[]>();
         while (p.Count >= 4)
         {
-            if (p.Count is 4 or 6) yield return p.ToArray();
-            if (p.Count <= 4) yield break;
+            token.ThrowIfCancellationRequested();
+            if (p.Count is 4 or 6) result.Add(p.ToArray());
+            if (p.Count <= 4) break;
             var index = ElliottPivotHierarchy.SmallestNestedPair(p);
-            if (index < 0) yield break;
-            p.RemoveRange(index,2);
+            if (index < 0) break;
+            p.RemoveRange(index, 2);
         }
+        return _views[key] = result.ToArray();
     }
 
     private static IEnumerable<string> Patterns(string role, ElliottPosition position) => role switch

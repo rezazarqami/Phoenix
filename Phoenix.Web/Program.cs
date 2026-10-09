@@ -75,7 +75,7 @@ app.Use(async (context, next) =>
         return;
     }
     var analysisAsset = context.Request.Path.StartsWithSegments("/analysis-assets") ||
-        path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/professional-ui.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or
+        path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/professional-ui.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or "/signal-batch-controls.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -514,7 +514,7 @@ app.MapGet("/api/analysis/candles", async (string symbol, string? interval, int?
         if (!await catalog.ContainsAsync(symbol, token))
             return Results.BadRequest(new { error = "نماد انتخاب‌شده در بازار فعال Bybit Futures وجود ندارد." });
         var candles = await bybit.GetKlinesAsync(symbol, interval ?? "60", Math.Clamp(limit ?? 500, 50, 1000), token);
-        var analysis = analyzer.Analyze(ElliottWaveAnalyzer.ClosedCandles(candles, interval ?? "60", DateTimeOffset.UtcNow), Math.Clamp(depth ?? 5, 2, 20), deviation ?? 0.6m);
+        var analysis = await analyzer.AnalyzeAsync(ElliottWaveAnalyzer.ClosedCandles(candles, interval ?? "60", DateTimeOffset.UtcNow), token, Math.Clamp(depth ?? 5, 2, 20), deviation ?? 0.6m);
         return Results.Ok(new { symbol, interval = interval ?? "60", candles, analysis });
     }
     catch (Exception exception)

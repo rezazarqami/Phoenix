@@ -20,6 +20,8 @@ jobs:
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter "Signal Lab candidate"
       - name: Run cryptocurrency statistics regression
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter "Crypto statistics"
+      - name: Verify signal responsiveness and active cancellation
+        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter Responsiveness
       - name: Verify cancellation authorization and state transitions
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release --no-build -- --filter Cancellation
       - name: Verify persistent login and shared analysis session
@@ -31,3 +33,5 @@ jobs:
           node-version: '22'
       - name: Verify Android-compatible cancellation controls
         run: node Phoenix.Test/cancellation-ui-tests.cjs
+      - name: Verify batch controls under delayed responses
+        run: node Phoenix.Test/batch-controls-tests.cjs

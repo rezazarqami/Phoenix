@@ -9,6 +9,10 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Responsiveness interrupts active Elliott CPU and preserves results", ResponsivenessTests.ActiveCancellation);
+Run("Responsiveness isolates symbols and reuses higher tiers without stale target bars", ResponsivenessTests.IndependentSymbolsAndCache);
+Run("Responsiveness batch stop cancels stalled network and permits restart", ResponsivenessTests.BatchStopAndRestart);
+
 Run("Persistent session survives elapsed hours and preserves every user role", PersistentSessionTests.PersistentRoles);
 Run("Persistent session upgrades valid legacy login but rejects expired and tampered tokens", PersistentSessionTests.LegacyAndTampering);
 Run("Persistent session cookie renews across main and analysis pages and clears on manual logout", PersistentSessionTests.CookieLifecycle);

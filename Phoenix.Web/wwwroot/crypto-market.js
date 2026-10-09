@@ -77,55 +77,6 @@ document.querySelector('#marketRows').addEventListener('click', event => {
 });
 document.querySelector('#marketFilter').addEventListener('change', renderMarket);
 document.querySelector('#marketRefresh').addEventListener('click', loadMarket);
-document.querySelector('#batchSize').value = localStorage.getItem('phoenix.signal.positionSizeUsdt') || '10';
-document.querySelector('#batchMinTarget').value = localStorage.getItem('phoenix.signal.minimumTargetProbability') || '55';
-const timedMode = document.querySelector('#batchTimedMode');
-const batchCount = document.querySelector('#batchCount');
-const batchDuration = document.querySelector('#batchDuration');
-function renderBatchMode() {
-  batchCount.disabled = timedMode.checked;
-  batchDuration.disabled = !timedMode.checked;
-  batchCount.closest('label').classList.toggle('is-disabled', timedMode.checked);
-  batchDuration.closest('label').classList.toggle('is-disabled', !timedMode.checked);
-  document.querySelector('#startBatch').textContent = timedMode.checked ? 'شروع جست‌وجوی زمان‌دار' : 'ایجاد سیگنال';
-}
-timedMode.addEventListener('change', renderBatchMode);
-renderBatchMode();
-document.querySelector('#startBatch').addEventListener('click', async () => {
-  const button = document.querySelector('#startBatch'); button.disabled = true;
-  try {
-    const response = await fetch('/api/analysis/signal-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ count: Number(batchCount.value), positionSizeUsdt: Number(document.querySelector('#batchSize').value), minimumTargetProbability: Number(document.querySelector('#batchMinTarget').value), directionFilter: document.querySelector('#batchDirection').value, chartFilter: document.querySelector('#batchChart').value, timeframeFilter: document.querySelector('#batchTimeframe').value, timedMode: timedMode.checked, durationMinutes: Number(batchDuration.value) }) });
-    const data = await response.json(); if (!response.ok) throw new Error(data.error || 'شروع صف ناموفق بود.');
-    localStorage.setItem('phoenix.signal.positionSizeUsdt', document.querySelector('#batchSize').value);
-    localStorage.setItem('phoenix.signal.minimumTargetProbability', document.querySelector('#batchMinTarget').value); renderBatch(data);
-  } catch (error) { document.querySelector('#marketMessage').textContent = error.message; }
-  finally { button.disabled = false; }
-});
-document.querySelector('#stopBatch').addEventListener('click', async () => {
-  const button = document.querySelector('#stopBatch');
-  button.disabled = true;
-  try {
-    const response = await fetch('/api/analysis/signal-batch/stop', { method: 'POST' });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'توقف ارسال ناموفق بود.');
-    renderBatch(data);
-  } catch (error) { document.querySelector('#marketMessage').textContent = error.message; }
-  finally { await pollBatch(); }
-});
-function renderBatch(state) {
-  const status = document.querySelector('#batchStatus');
-  status.classList.toggle('running', state.running);
-  const remainingMinutes = state.endsAtUtc ? Math.max(0, Math.ceil((new Date(state.endsAtUtc) - Date.now()) / 60000)) : 0;
-  const probabilityFilter = state.minimumTargetProbability > 0 ? ` · حداقل شباهت به تارگت‌ها ${faMarket.format(state.minimumTargetProbability)}٪` : '';
-  const progress = state.timedMode
-    ? `تأیید ${faMarket.format(state.approved)} · پیشنهاد ${faMarket.format(state.proposed)} · باقی‌مانده حدود ${faMarket.format(remainingMinutes)} دقیقه`
-    : `تأیید ${faMarket.format(state.approved)} از ${faMarket.format(state.target)}`;
-  status.textContent = state.running ? `${state.message} · ${progress}${probabilityFilter} · بررسی‌شده ${faMarket.format(state.checked)} · ردشده ${faMarket.format(state.rejected)}` : state.message;
-  document.querySelector('#startBatch').disabled = state.running;
-  document.querySelector('#stopBatch').disabled = !state.running;
-}
-async function pollBatch() { try { const response = await fetch('/api/analysis/signal-batch', { cache: 'no-store' }); if (response.ok) renderBatch(await response.json()); } catch {} }
-setInterval(pollBatch, 4000); pollBatch();
 const shadowStatus = s => s.outcome === 'Target' ? 'تارگت ✅' : s.outcome === 'StopLoss' ? 'استاپ ❌' : s.status === 'Filled' ? 'ورود فعال شده' : 'منتظر ورود';
 async function loadShadowSignals() {
   try {

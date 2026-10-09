@@ -188,6 +188,7 @@ public sealed class SignalBatchService(
         CancellationTokenSource runCancellation)
     {
         var token = runCancellation.Token;
+        Task<PreparedProposal?>? prepared = null;
         try
         {
             var assets = await markets.GetAsync(token);
@@ -207,9 +208,12 @@ public sealed class SignalBatchService(
                     await Task.Delay(TimeSpan.FromSeconds(45), token);
                     continue;
                 }
+                token.ThrowIfCancellationRequested();
                 var pool = new List<RankedCandidate>();
-                while (nextAsset < assets.Count && pool.Count < priorityWindow && ShouldContinue())
+                var windowEnd = Math.Min(assets.Count, nextAsset + priorityWindow);
+                while (nextAsset < windowEnd && ShouldContinue())
                 {
+                    token.ThrowIfCancellationRequested();
                     var asset = assets[nextAsset++];
                     Update(state => state with
                     {
@@ -264,14 +268,14 @@ public sealed class SignalBatchService(
                     }
                 }
                 var ranked = pool.OrderBy(x => x.EntryDistancePercent).ToArray();
-                Task<ProfessionalSignalAnalysis>? prepared = null;
                 for (var optionIndex = 0; optionIndex < ranked.Length; optionIndex++)
                 {
+                    token.ThrowIfCancellationRequested();
                     if (!ShouldContinue()) break;
                     var option = ranked[optionIndex];
-                    prepared ??= professional.AnalyzeAsync(option.Candidate, option.Candles, option.Interval, token);
-                    ProfessionalSignalAnalysis analysis;
-                    try { analysis = await prepared; }
+                    prepared ??= PrepareProposalAsync(option, positionSizeUsdt, minimumTargetProbability, token);
+                    PreparedProposal? proposal;
+                    try { proposal = await prepared; }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
                     catch (Exception exception)
                     {
@@ -285,97 +289,24 @@ public sealed class SignalBatchService(
                         continue;
                     }
                     prepared = optionIndex + 1 < ranked.Length
-                        ? professional.AnalyzeAsync(ranked[optionIndex + 1].Candidate,
-                            ranked[optionIndex + 1].Candles, ranked[optionIndex + 1].Interval, token)
+                        ? PrepareProposalAsync(ranked[optionIndex + 1], positionSizeUsdt, minimumTargetProbability, token)
                         : null;
-                    if (EntryToTargetPercent(option.Candidate) < 0.5m ||
-                        (analysis.Prediction.TargetPercent.HasValue &&
-                         analysis.Prediction.TargetPercent.Value < minimumTargetProbability)) continue;
+                    if (proposal is null) continue;
+                    var analysis = proposal.Analysis;
+                    var technicalFeatures = analysis.Features;
                     var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N");
                     var decision = new TaskCompletionSource<BatchDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
                     lock (_sync) { _decision = decision; _decisionKey = key; }
-                    var chartInterval = ReviewChartInterval(option.Interval);
-                    IReadOnlyList<BybitKline> chartCandles;
-                    try
-                    {
-                        chartCandles = chartInterval == option.Interval
-                            ? option.Candles
-                            : await bybit.GetKlinesAsync(selected.Symbol, chartInterval, 1000, token);
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception exception)
-                    {
-                        logger.LogWarning(exception, "Falling back to signal timeframe for {Symbol} chart", selected.Symbol);
-                        chartInterval = option.Interval;
-                        chartCandles = option.Candles;
-                    }
-                    // Prefer the broader degree only if its closes still cover
-                    // the selected ceiling/floor and contain enough turns to count.
-                    // The signal itself continues to use option.Interval.
-                    if (!ChartHasReadableAnchors(chartCandles, selected))
-                    {
-                        var intermediate = ReviewChartFallbackInterval(option.Interval);
-                        if (intermediate != option.Interval)
-                            try
-                            {
-                                var alternative = await bybit.GetKlinesAsync(selected.Symbol, intermediate, 1000, token);
-                                if (ChartHasReadableAnchors(alternative, selected))
-                                {
-                                    chartInterval = intermediate;
-                                    chartCandles = alternative;
-                                }
-                            }
-                            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                            catch (Exception exception)
-                            {
-                                logger.LogWarning(exception, "Intermediate chart unavailable for {Symbol}", selected.Symbol);
-                            }
-                        if (!ChartHasReadableAnchors(chartCandles, selected))
-                        {
-                            chartInterval = option.Interval;
-                            chartCandles = option.Candles;
-                        }
-                    }
-                    ElliottScenario? elliottScenario;
-                    try { elliottScenario = await elliottCounts.AnalyzeAsync(selected.Symbol, chartInterval, chartCandles, token); }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception exception)
-                    {
-                        logger.LogWarning(exception, "Elliott count unavailable for {Symbol}", selected.Symbol);
-                        elliottScenario = ElliottCoverage.Unavailable(new(0, 0, 0, 0, [],
-                            chartCandles.Count < 2 ? [] : [new(chartCandles[0].OpenTime, chartCandles[^1].OpenTime, "DataUnavailable")]));
-                    }
-                    var technicalFeatures = analysis.Features;
-                    var similarityResult = analysis.Prediction;
-                    var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
-                        : string.Join("\n", analysis.Strengths.Select(x => $"• {x}"));
-                    var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
-                        : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
-                    var similarityLines = similarityResult.TargetPercent.HasValue
-                        ? $"\n\n🟢 <b>شباهت در صورت ورود به تارگت‌خورده‌ها: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت در صورت ورود به استاپ‌خورده‌ها: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\nمبنای مقایسه: شرایط ثبت‌شده هنگام ورود نمونه‌های قبلی؛ وضعیت این سیگنال هنگام ورود دوباره بررسی می‌شود.\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های مقایسه: {similarityResult.CalibrationSampleCount}"
-                        : "\n📊 نمونهٔ کافی با دادهٔ ثبت‌شده در لحظهٔ ورود وجود ندارد؛ شباهت پس از جمع‌آوری نمونه‌ها نمایش داده می‌شود.";
-                    var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
-                    byte[] image;
-                    try
-                    {
-                        // Chart style is presentation-only; keep option.LineMode for analysis and review metadata.
-                        image = SignalChartRenderer.Render(chartCandles, selected, false,
-                            TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
-                            elliottScenario);
-                        await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception exception)
-                    {
-                        logger.LogWarning(exception, "Skipping {Symbol}; chart rendering/archive failed", selected.Symbol);
-                        continue;
-                    }
+                    var caption = proposal.Caption;
+                    var image = proposal.Image;
+                    await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
                     Update(state => state with
                     {
                         Proposed = state.Proposed + 1, CurrentSymbol = selected.Symbol,
                         Message = $"منتظر پاسخ تلگرام برای {selected.Symbol}؛ فاصله تا ورود {Format(option.EntryDistancePercent)}٪"
                     });
+                    token.ThrowIfCancellationRequested();
                     var sent = dedicatedRoute
                         ? await dedicatedTelegram.SendCandidateAsync(image, caption, key, token)
                         : await telegram.SendCandidateAsync(image, caption, key, token);
@@ -440,6 +371,11 @@ public sealed class SignalBatchService(
         }
         finally
         {
+            runCancellation.Cancel();
+            if (prepared is not null)
+                try { await prepared; }
+                catch (OperationCanceledException) { }
+                catch (Exception exception) { logger.LogDebug(exception, "Unused proposal preparation ended"); }
             lock (_sync)
             {
                 if (ReferenceEquals(_runCancellation, runCancellation))
@@ -453,6 +389,87 @@ public sealed class SignalBatchService(
             runCancellation.Dispose();
         }
     }
+
+    private Task<PreparedProposal?> PrepareProposalAsync(RankedCandidate option,
+        decimal positionSizeUsdt, decimal minimumTargetProbability, CancellationToken token) =>
+        Task.Run(async () =>
+        {
+            token.ThrowIfCancellationRequested();
+            var selected = option.Candidate;
+            var analysis = await professional.AnalyzeAsync(selected, option.Candles, option.Interval, token);
+            if (EntryToTargetPercent(selected) < 0.5m ||
+                (analysis.Prediction.TargetPercent is { } probability && probability < minimumTargetProbability))
+                return (PreparedProposal?)null;
+            var chartInterval = ReviewChartInterval(option.Interval);
+            IReadOnlyList<BybitKline> chartCandles;
+            try
+            {
+                chartCandles = chartInterval == option.Interval
+                    ? option.Candles
+                    : await bybit.GetKlinesAsync(selected.Symbol, chartInterval, 1000, token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Falling back to signal timeframe for {Symbol} chart", selected.Symbol);
+                chartInterval = option.Interval;
+                chartCandles = option.Candles;
+            }
+            // Prefer the broader degree only if its closes still cover
+            // the selected ceiling/floor and contain enough turns to count.
+            // The signal itself continues to use option.Interval.
+            if (!ChartHasReadableAnchors(chartCandles, selected))
+            {
+                var intermediate = ReviewChartFallbackInterval(option.Interval);
+                if (intermediate != option.Interval)
+                    try
+                    {
+                        var alternative = await bybit.GetKlinesAsync(selected.Symbol, intermediate, 1000, token);
+                        if (ChartHasReadableAnchors(alternative, selected))
+                        {
+                            chartInterval = intermediate;
+                            chartCandles = alternative;
+                        }
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception exception)
+                    {
+                        logger.LogWarning(exception, "Intermediate chart unavailable for {Symbol}", selected.Symbol);
+                    }
+                if (!ChartHasReadableAnchors(chartCandles, selected))
+                {
+                    chartInterval = option.Interval;
+                    chartCandles = option.Candles;
+                }
+            }
+            ElliottScenario? elliottScenario;
+            try { elliottScenario = await elliottCounts.AnalyzeAsync(selected.Symbol, chartInterval, chartCandles, token); }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Elliott count unavailable for {Symbol}", selected.Symbol);
+                elliottScenario = ElliottCoverage.Unavailable(new(0, 0, 0, 0, [],
+                    chartCandles.Count < 2 ? [] : [new(chartCandles[0].OpenTime, chartCandles[^1].OpenTime, "DataUnavailable")]));
+            }
+            var similarityResult = analysis.Prediction;
+            var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
+                : string.Join("\n", analysis.Strengths.Select(x => $"• {x}"));
+            var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
+                : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
+            var similarityLines = similarityResult.TargetPercent.HasValue
+                ? $"\n\n🟢 <b>شباهت در صورت ورود به تارگت‌خورده‌ها: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت در صورت ورود به استاپ‌خورده‌ها: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\nمبنای مقایسه: شرایط ثبت‌شده هنگام ورود نمونه‌های قبلی؛ وضعیت این سیگنال هنگام ورود دوباره بررسی می‌شود.\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های مقایسه: {similarityResult.CalibrationSampleCount}"
+                : "\n📊 نمونهٔ کافی با دادهٔ ثبت‌شده در لحظهٔ ورود وجود ندارد؛ شباهت پس از جمع‌آوری نمونه‌ها نمایش داده می‌شود.";
+            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
+            token.ThrowIfCancellationRequested();
+            // Chart style is presentation-only; analysis retains the requested mode.
+            var image = SignalChartRenderer.Render(chartCandles, selected, false,
+                TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
+                elliottScenario);
+            token.ThrowIfCancellationRequested();
+            return new PreparedProposal(analysis, caption, image);
+        }, token);
+
+    private sealed record PreparedProposal(ProfessionalSignalAnalysis Analysis, string Caption, byte[] Image);
 
     private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
     private static string[] Intervals(string filter) => filter == "All" ? ["1", "5", "15", "60", "240"] : [filter];

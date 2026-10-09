@@ -3,13 +3,15 @@ namespace Phoenix.Web;
 /// <summary>Structural degrees of the same close path, independent of candle interval.</summary>
 public static class ElliottPivotHierarchy
 {
-    public static IEnumerable<ElliottPivot[]> Degrees(IReadOnlyList<ElliottPivot> raw)
+    public static IEnumerable<ElliottPivot[]> Degrees(IReadOnlyList<ElliottPivot> raw, CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
         var points = raw.ToList();
         var lastCount = points.Count;
         yield return points.ToArray();
         while (points.Count > 4)
         {
+            token.ThrowIfCancellationRequested();
             var index = SmallestNestedPair(points);
             if (index < 0) yield break;
             points.RemoveRange(index, 2);

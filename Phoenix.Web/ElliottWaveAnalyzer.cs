@@ -13,8 +13,25 @@ public sealed class ElliottWaveAnalyzer
         && Enum.IsDefined(value) ? value : ElliottProfile.Classic) { }
     public ElliottWaveAnalyzer(ElliottProfile profile) { Profile = profile; }
 
-    public ElliottAnalysis Analyze(IReadOnlyList<BybitKline> candles, int depth = 5, decimal deviationPercent = 0.6m)
+    private readonly SemaphoreSlim _analysisGate = new(1, 1);
+
+    // Keep CPU parsing off HTTP/Telegram pool threads and bound parallel CPU work.
+    public async Task<ElliottAnalysis> AnalyzeAsync(IReadOnlyList<BybitKline> candles,
+        CancellationToken token, int depth = 5, decimal deviationPercent = 0.6m)
     {
+        await _analysisGate.WaitAsync(token);
+        try
+        {
+            return await Task.Factory.StartNew(() => Analyze(candles, depth, deviationPercent, token),
+                token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+        finally { _analysisGate.Release(); }
+    }
+
+    public ElliottAnalysis Analyze(IReadOnlyList<BybitKline> candles, int depth = 5,
+        decimal deviationPercent = 0.6m, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
         candles = candles.GroupBy(c=>c.OpenTime).Select(g=>g.Last()).OrderBy(c=>c.OpenTime).ToArray();
         if (candles.Count < 30) return new([], [], "برای تحلیل حداقل ۳۰ کندل لازم است.", RuleSetVersion)
             { Coverage = new(0, 0, 0, 0, [], candles.Count < 2 ? [] : [new(candles[0].OpenTime, candles[^1].OpenTime, "InsufficientCandles")]) };
@@ -27,11 +44,11 @@ public sealed class ElliottWaveAnalyzer
         // legs remain available to validate the subdivisions of each pattern.
         var detailPivots = CloseTurns(candles);
         var found = new List<ElliottScenario>();
-        var validator = new ElliottStructureValidator(Profile);
+        var validator = new ElliottStructureValidator(Profile, token);
         void Add(ElliottScenario? value) { if (value is not null) found.Add(value); }
         // Search structural degrees as well as the user's pivot view. A single
         // six-pivot sliding window cannot see a parent containing subwaves.
-        var degrees = new[] { pivots.ToArray() }.Concat(ElliottPivotHierarchy.Degrees(detailPivots))
+        var degrees = new[] { pivots.ToArray() }.Concat(ElliottPivotHierarchy.Degrees(detailPivots, token))
             .GroupBy(p => string.Join(',', p.Select(x => x.Time))).Select(g => g.First());
         void Search(IEnumerable<ElliottPivot[]> views)
         {
@@ -39,6 +56,7 @@ public sealed class ElliottWaveAnalyzer
             {
                 for (var start = 0; start < degree.Length; start++)
                 {
+                    token.ThrowIfCancellationRequested();
                     var remaining = degree.Length - start;
                     if (remaining >= 12) Add(ScoreTripleThree(degree.Skip(start).Take(12).ToArray()));
                     if (remaining >= 8) Add(ScoreDoubleThree(degree.Skip(start).Take(8).ToArray()));
@@ -65,8 +83,8 @@ public sealed class ElliottWaveAnalyzer
         // corrective legs have been recognized as a triangle.
         foreach (var count in new[] { 16, 18, 20, 22, 24, 32, 48, 64 })
             for (var start = 0; start + count <= detailPivots.Count; start++)
-                foreach (var view in ElliottPivotHierarchy.Degrees(detailPivots.Skip(start).Take(count).ToArray()))
-                    if (view.Length == 6) Add(ScoreTriangle(view));
+                foreach (var view in ElliottPivotHierarchy.Degrees(detailPivots.Skip(start).Take(count).ToArray(), token))
+                    { token.ThrowIfCancellationRequested(); if (view.Length == 6) Add(ScoreTriangle(view)); }
         // E of a triangle need not be its deepest/highest point. Ordinary
         // extreme reduction cannot recover that parent boundary. Promote a
         // fully parsed triangle as a single candidate leg, then validate its
@@ -79,7 +97,7 @@ public sealed class ElliottWaveAnalyzer
         foreach (var triangle in triangleLegs)
         {
             var grouped = detailPivots.Where(p => p.Time <= triangle.Waves[0].Time || p.Time >= triangle.Waves[^1].Time).ToArray();
-            Search(ElliottPivotHierarchy.Degrees(grouped));
+            Search(ElliottPivotHierarchy.Degrees(grouped, token));
         }
         var decorated = found.GroupBy(x => $"{x.Pattern}|{string.Join(',', x.Waves.Select(w => w.Time))}")
             .Select(x => x.MaxBy(y => y.Score)!)
@@ -156,6 +174,7 @@ public sealed class ElliottWaveAnalyzer
         var message = ranked.Length == 0
             ? "ساختار معتبر پیدا نشد؛ پیوت‌های مهم برای بررسی دستی نمایش داده شده‌اند."
             : "قواعد ساختاری و ریزموج‌ها جدا از راهنماها بررسی شدند؛ سناریوی تأییدنشده قطعی نیست و امتیاز الگو احتمال تارگت نیست.";
+        token.ThrowIfCancellationRequested();
         var coverage = ElliottCoverage.Build(decorated, candles.Select(c => c.OpenTime).ToArray(), ranked.FirstOrDefault());
         ranked = ranked.Select((scenario, index) => ElliottCoverage.Attach(scenario,
             index == 0 ? coverage : ElliottCoverage.Build(decorated, candles.Select(c => c.OpenTime).ToArray(), scenario))).ToArray();

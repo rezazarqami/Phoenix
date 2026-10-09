@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Phoenix.Engine.Exchanges.Bybit;
 
 namespace Phoenix.Web;
@@ -8,7 +9,8 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
 {
     private static readonly string[] Degrees = ["M", "W", "D", "240", "60", "15", "5", "1"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (CountSnapshot Snapshot, DateTime At)> _snapshots = new();
     private readonly string _directory = Environment.GetEnvironmentVariable("PHOENIX_ELLIOTT_COUNT_DIR")
         ?? Path.Combine(Path.GetDirectoryName(Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
             ?? Path.Combine(AppContext.BaseDirectory, "data", "server-signals.json"))!, "elliott-counts");
@@ -19,10 +21,11 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
         var target = Array.IndexOf(Degrees, interval.ToUpperInvariant());
         if (target < 0)
         {
-            var local = analyzer.Analyze(ElliottWaveAnalyzer.ClosedCandles(currentCandles, interval, DateTimeOffset.UtcNow));
+            var local = await analyzer.AnalyzeAsync(ElliottWaveAnalyzer.ClosedCandles(currentCandles, interval, DateTimeOffset.UtcNow), token);
             return local.Scenarios.FirstOrDefault() ?? ElliottCoverage.Unavailable(local.Coverage);
         }
-        await _gate.WaitAsync(token);
+        var gate = _gates.GetOrAdd(symbol, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(token);
         try
         {
             Directory.CreateDirectory(_directory);
@@ -35,10 +38,12 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 token.ThrowIfCancellationRequested();
                 var tier = Degrees[degree];
                 var file = Path.Combine(_directory, $"{symbol.ToUpperInvariant()}-{tier}.json");
-                CountSnapshot? previous = null;
+                var cacheKey = $"{symbol.ToUpperInvariant()}-{tier}";
+                var cached = _snapshots.GetValueOrDefault(cacheKey);
+                CountSnapshot? previous = cached.Snapshot;
                 try
                 {
-                    if (File.Exists(file)) previous = JsonSerializer.Deserialize<CountSnapshot>(await File.ReadAllTextAsync(file, token), Json);
+                    if (previous is null && File.Exists(file)) previous = JsonSerializer.Deserialize<CountSnapshot>(await File.ReadAllTextAsync(file, token), Json);
                 }
                 catch (Exception ex) when (ex is JsonException or IOException)
                 {
@@ -49,6 +54,8 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 try
                 {
                     recent = degree == target ? currentCandles
+                        : previous is not null && DateTime.UtcNow - cached.At < TimeSpan.FromSeconds(45)
+                            ? previous.Candles
                         : await bybit.GetKlinesAsync(symbol, tier, previous is null ? 1000 : 50, token);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -76,7 +83,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                     .GroupBy(c => c.OpenTime).Select(g => g.Last()).OrderBy(c => c.OpenTime).TakeLast(1000).ToArray();
                 var changed = previous is null || revised || missingOverlap || merged.Length != previous.Candles.Length ||
                     merged[^1] != previous.Candles[^1];
-                var analysis = changed ? analyzer.Analyze(merged) : previous!.Analysis;
+                var analysis = changed ? await analyzer.AnalyzeAsync(merged, token) : previous!.Analysis;
                 if (changed)
                 {
                     var temporary = file + ".tmp";
@@ -84,6 +91,9 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                         JsonSerializer.Serialize(new CountSnapshot(analyzer.CacheVersion, merged, analysis), Json), token);
                     File.Move(temporary, file, true);
                 }
+                // Reuse does not extend freshness; target bars always come from the caller.
+                if (degree == target || previous is null || DateTime.UtcNow - cached.At >= TimeSpan.FromSeconds(45))
+                    _snapshots[cacheKey] = (new CountSnapshot(analyzer.CacheVersion, merged, analysis), DateTime.UtcNow);
                 if (degree == target) coverage = analysis.Coverage;
                 var selected = analysis.Scenarios.FirstOrDefault();
                 if (selected is null) continue;
@@ -107,7 +117,7 @@ public sealed class ElliottCountStore(BybitDemoClient bybit, ElliottWaveAnalyzer
                 Coverage = active.Coverage is null ? coverage : active.Coverage with { DataIssues = dataIssues }
             };
         }
-        finally { _gate.Release(); }
+        finally { gate.Release(); }
     }
 
     private sealed record CountSnapshot(string RuleSet, BybitKline[] Candles, ElliottAnalysis Analysis);

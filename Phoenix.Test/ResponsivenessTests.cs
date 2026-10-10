@@ -97,6 +97,37 @@ internal static class ResponsivenessTests
         Check(batch.Stop(out _), "Restarted batch must also stop");
     }
 
+    public static void MarketProviderTimeoutAndCache()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "phoenix-market-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var bybit = new BybitDemoClient(new(null, null), new HttpClient(new Handler((_, _) =>
+                Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(
+                    "{\"retCode\":0,\"result\":{\"list\":[{\"symbol\":\"BTCUSDT\",\"status\":\"Trading\"},{\"symbol\":\"ETHUSDT\",\"status\":\"Trading\"}]}}") }))));
+            var calls = 0;
+            using var http = new HttpClient(new Handler(async (_, token) => {
+                Interlocked.Increment(ref calls);
+                await Task.Delay(Timeout.Infinite, token);
+                throw new InvalidOperationException();
+            }));
+            var orders = new ServerOrderStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.json"));
+            var catalog = new MarketCapCatalog(http, new BybitInstrumentCatalog(bybit), orders);
+            var watch = Stopwatch.StartNew();
+            var assets = catalog.GetAsync(default).GetAwaiter().GetResult();
+            Check(watch.Elapsed < TimeSpan.FromSeconds(6), "Optional market caps must not block the Bybit list");
+            Check(assets.Count == 2 && assets.All(x => x.ActiveCount == 0), "Provider timeout must retain tradable symbols");
+            orders.AddAsync(new ServerSignal { Id = Guid.NewGuid(), Symbol = "BTCUSDT", Direction = "Long", Status = "Pending" })
+                .GetAwaiter().GetResult();
+            assets = catalog.GetAsync(default).GetAwaiter().GetResult();
+            Check(calls == 1, "Repeated loads must reuse the market catalog");
+            Check(assets.Single(x => x.Symbol == "BTCUSDT").ActiveLong == 1,
+                "Cached market metadata must still refresh live signal counts");
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private static BybitKline[] Bars(int count, string interval) => Enumerable.Range(0, count).Select(i => {
         var date = interval == "M" ? new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(i)
             : new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero).AddDays(i * 7);

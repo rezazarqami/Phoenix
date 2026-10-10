@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../Phoenix.Web/wwwroot/signal-batch-controls.js'), 'utf8');
-function setup() {
+function setup(storageBlocked = false) {
   const nodes = new Map();
   const calls = [], timers = new Map(); let nextTimer = 0;
   function node(id) {
@@ -12,7 +12,7 @@ function setup() {
       addEventListener(type, callback) {this[type] = callback;}});
     return nodes.get(id);
   }
-  const context = {document: {querySelector: node}, localStorage: {getItem() {return null;}, setItem() {}},
+  const context = {document: {querySelector: node}, localStorage: {getItem() {if (storageBlocked) throw new Error('Storage denied'); return null;}, setItem() {if (storageBlocked) throw new Error('Storage denied');}},
     faMarket: new Intl.NumberFormat('fa-IR'), AbortController,
     setTimeout(callback, ms) {timers.set(++nextTimer, {callback, ms}); return nextTimer;},
     clearTimeout(id) {timers.delete(id);},
@@ -22,7 +22,7 @@ function setup() {
       calls.push({url, options, resolve(data) {resolve({ok: true, json: async () => data});}, reject});
       return task;
     }};
-  vm.createContext(context); vm.runInContext(source, context);
+  vm.createContext(context); vm.runInContext(source.replace('watchBatch();', 'globalThis.pollBatch = pollBatch; watchBatch();'), context);
   return {nodes, node, calls, timers, context};
 }
 const state = running => ({running, message: running ? 'بررسی بازار' : 'متوقف شد', approved: 0, target: 1, checked: 1, rejected: 0});
@@ -67,5 +67,13 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   const poll = h.context.pollBatch(); const count = h.calls.length;
   await h.context.pollBatch(); assert.equal(h.calls.length, count);
   h.calls.at(-1).resolve(state(true)); await poll;
+  assert.match(h.node('#batchError').textContent, /پاسخ سرور/);
+  const blocked = setup(true);
+  assert.equal(blocked.node('#batchSize').value, '10');
+  const blockedStart = blocked.node('#startBatch').click();
+  blocked.calls[1].resolve(state(true)); await flush();
+  blocked.calls[0].resolve(state(false)); await flush();
+  blocked.calls.at(-1).resolve(state(true)); await blockedStart;
+  assert.equal(blocked.node('#stopBatch').disabled, false);
   console.log('PASS batch controls: immediate pending feedback, duplicate prevention, stale poll rejection, stop, timeout reconciliation and single-flight polling.');
 })().catch(error => {console.error(error); process.exit(1);});

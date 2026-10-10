@@ -1,5 +1,18 @@
-document.querySelector('#batchSize').value = localStorage.getItem('phoenix.signal.positionSizeUsdt') || '10';
-document.querySelector('#batchMinTarget').value = localStorage.getItem('phoenix.signal.minimumTargetProbability') || '55';
+(() => {
+const faMarket = new Intl.NumberFormat('fa-IR');
+const batchError = document.querySelector('#batchError');
+function showBatchError(message) {
+  if (batchError) batchError.textContent = message;
+  document.querySelector('#marketMessage').textContent = message;
+}
+function readBatchSetting(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+}
+function saveBatchSetting(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* Storage is optional in Android WebView. */ }
+}
+document.querySelector('#batchSize').value = readBatchSetting('phoenix.signal.positionSizeUsdt', '10');
+document.querySelector('#batchMinTarget').value = readBatchSetting('phoenix.signal.minimumTargetProbability', '55');
 const timedMode = document.querySelector('#batchTimedMode');
 const batchCount = document.querySelector('#batchCount');
 const batchDuration = document.querySelector('#batchDuration');
@@ -22,7 +35,8 @@ async function batchRequest(url, options) {
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch(url, {...options, signal: controller.signal, cache: 'no-store'});
-    const data = await response.json();
+    if (response.status === 401) { location.replace('/login'); throw new Error('نشست ورود پایان یافته است؛ دوباره وارد شوید.'); }
+    const data = await response.json().catch(() => { throw new Error('پاسخ سرور معتبر نیست؛ دوباره تلاش کنید.'); });
     if (!response.ok) throw new Error(data.error || 'دستور انجام نشد؛ وضعیت صف را بررسی کنید.');
     return data;
   } catch (error) {
@@ -38,14 +52,14 @@ async function batchCommand(url, options, message) {
   document.querySelector('#startBatch').disabled = true;
   document.querySelector('#stopBatch').disabled = true;
   document.querySelector('#batchStatus').textContent = message;
-  document.querySelector('#marketMessage').textContent = '';
+  showBatchError('');
   try {
     const data = await batchRequest(url, options);
     batchCommandPending = false;
     renderBatch(data);
     return true;
   } catch (error) {
-    document.querySelector('#marketMessage').textContent = error.message;
+    showBatchError(error.message);
   } finally {
     batchCommandPending = false;
     if (lastBatchState) renderBatch(lastBatchState);
@@ -65,8 +79,8 @@ document.querySelector('#startBatch').addEventListener('click', async () => {
       durationMinutes: Number(batchDuration.value)})
   }, 'در حال ارسال دستور شروع…');
   if (started) {
-    localStorage.setItem('phoenix.signal.positionSizeUsdt', document.querySelector('#batchSize').value);
-    localStorage.setItem('phoenix.signal.minimumTargetProbability', document.querySelector('#batchMinTarget').value);
+    saveBatchSetting('phoenix.signal.positionSizeUsdt', document.querySelector('#batchSize').value);
+    saveBatchSetting('phoenix.signal.minimumTargetProbability', document.querySelector('#batchMinTarget').value);
   }
 });
 document.querySelector('#stopBatch').addEventListener('click', () =>
@@ -96,7 +110,10 @@ async function pollBatch() {
       const response = await fetch('/api/analysis/signal-batch', {cache: 'no-store', signal: controller.signal});
       const data = await response.json();
       if (response.ok && revision === batchRevision && !batchCommandPending) renderBatch(data);
-    } catch {}
+    } catch (error) {
+      if (revision === batchRevision && !batchCommandPending && error.name !== 'AbortError')
+        showBatchError('دریافت وضعیت صف ناموفق بود؛ اتصال را بررسی کنید.');
+    }
     finally { clearTimeout(timeout); batchPollController = null; }
   })();
   try { await batchPollTask; }
@@ -104,6 +121,8 @@ async function pollBatch() {
 }
 async function watchBatch() {
   await pollBatch();
-  setTimeout(watchBatch, 1500);
+  setTimeout(watchBatch, lastBatchState?.running ? 3000 : 10000);
 }
 watchBatch();
+
+})();

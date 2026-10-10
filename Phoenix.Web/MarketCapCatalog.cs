@@ -19,12 +19,14 @@ public sealed class MarketCapCatalog(HttpClient http, BybitInstrumentCatalog ins
             {
                 var tradable = await instruments.GetAsync(token);
                 var markets = new List<CoinGeckoMarket>();
+                using var enrichment = CancellationTokenSource.CreateLinkedTokenSource(token);
+                enrichment.CancelAfter(TimeSpan.FromSeconds(3));
                 try
                 {
                     for (var page = 1; page <= 4; page++)
                     {
                         var rows = await http.GetFromJsonAsync<List<CoinGeckoMarket>>(
-                            $"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page={page}&sparkline=false", token) ?? [];
+                            $"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page={page}&sparkline=false", enrichment.Token) ?? [];
                         markets.AddRange(rows);
                         if (rows.Count < 250) break;
                     }

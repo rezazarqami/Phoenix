@@ -11,11 +11,14 @@ builder.Services.AddSingleton<ServerState>();
 builder.Services.AddSingleton<ServerOrderStore>();
 builder.Services.AddSingleton<SignalCancellationService>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
-builder.Services.AddHttpClient<MarketCapCatalog>(client =>
+builder.Services.AddHttpClient("MarketCap", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Phoenix-Signal-Lab/1.0");
 });
+builder.Services.AddSingleton(provider => new MarketCapCatalog(
+    provider.GetRequiredService<IHttpClientFactory>().CreateClient("MarketCap"),
+    provider.GetRequiredService<BybitInstrumentCatalog>(), provider.GetRequiredService<ServerOrderStore>()));
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<PhoenixUserStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();

@@ -1,0 +1,33 @@
+name: Full Phoenix regression and stop reproduction
+on:
+  push:
+    branches: [codex/verify-stop-regression]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Run complete Phoenix regression suite
+        run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release
+      - name: Confirm the regression detects synchronous cancellation blocking
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Phoenix.Web/SignalBatchService.cs')
+          s = p.read_text()
+          before = '_cancellationCompletion ??= cancellation.CancelAsync();'
+          assert before in s
+          p.write_text(s.replace(before, '_cancellationCompletion = Task.CompletedTask; cancellation.Cancel();'))
+          PY
+          if dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release -- --filter 'blocked cancellation callbacks'; then
+            echo 'Regression failed to detect synchronous stop blocking'
+            exit 1
+          fi
+          echo 'Regression correctly rejected synchronous cancellation'

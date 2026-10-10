@@ -1,0 +1,28 @@
+name: Diagnose Phoenix stop HTTP routing
+on:
+  push:
+    branches: [codex/diagnose-stop-http-routing]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Compare application, nginx and public stop routing
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 91.216.104.210
+          username: phoenix-deploy
+          key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            systemctl show phoenix.service --property=ActiveState,MainPID,NRestarts
+            grep -R -n -E 'location |proxy_pass|listen |server_name|proxy_.*timeout|client_body' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null || true
+            ps -C python3 -o pid=,args= | awk '{print $1, $2, $3}'
+            curl --max-time 6 -sS -o /dev/null -w 'DIRECT_STATUS code=%{http_code} time=%{time_total}\n' http://127.0.0.1:5000/api/analysis/signal-batch || true
+            curl --max-time 6 -sS -o /dev/null -w 'DIRECT_STOP code=%{http_code} time=%{time_total}\n' -X POST http://127.0.0.1:5000/api/analysis/signal-batch/stop || true
+            curl --max-time 6 -sS -o /dev/null -w 'NGINX_STOP code=%{http_code} time=%{time_total}\n' --resolve marketsignalist.ir:443:127.0.0.1 -X POST https://marketsignalist.ir/api/analysis/signal-batch/stop || true
+            curl --max-time 6 -sS -o /dev/null -w 'PUBLIC_EMPTY_STOP code=%{http_code} time=%{time_total}\n' -X POST https://marketsignalist.ir/api/analysis/signal-batch/stop || true
+            curl --max-time 6 -sS -o /dev/null -w 'PUBLIC_JSON_STOP code=%{http_code} time=%{time_total}\n' -H 'Content-Type: application/json' -d '{}' https://marketsignalist.ir/api/analysis/signal-batch/stop || true
+            curl --max-time 6 -sS -o /dev/null -w 'PUBLIC_START code=%{http_code} time=%{time_total}\n' -H 'Content-Type: application/json' -d '{}' https://marketsignalist.ir/api/analysis/signal-batch || true

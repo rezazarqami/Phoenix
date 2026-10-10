@@ -84,6 +84,8 @@ internal static class ResponsivenessTests
         var batch = new SignalBatchService(markets, bybit, null!, null!, null!, telegram, dedicated,
             null!, null!, null!, new Lifetime(), NullLogger<SignalBatchService>.Instance, null!);
         Check(batch.Start(1, 10m, "All", "All", "All", 0, false, 30, null, out _), "Start must be accepted");
+        var firstRunId = batch.Status.RunId;
+        Check(firstRunId is not null, "An active queue must have an identity");
         entered.Task.WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
         var watch = Stopwatch.StartNew();
         Check(batch.Stop(out _) && !batch.Status.Running, "Stop must update status immediately");
@@ -94,7 +96,10 @@ internal static class ResponsivenessTests
             if (!restarted) Thread.Sleep(10);
         }
         Check(restarted, "Cancelled IO must release the batch for restart");
-        Check(batch.Stop(out _), "Restarted batch must also stop");
+        Check(batch.Status.RunId != firstRunId, "A restarted queue must have a new identity");
+        Check(!batch.Stop(out _, firstRunId) && batch.Status.Running,
+            "A delayed stop for the previous queue must not cancel the new queue");
+        Check(batch.Stop(out _, batch.Status.RunId), "The current queue must accept its own stop");
     }
 
     public static void StopDoesNotAwaitCancellationCallbacks()

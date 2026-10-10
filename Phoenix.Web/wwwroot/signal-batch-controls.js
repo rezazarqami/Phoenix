@@ -32,8 +32,11 @@ let batchRevision = 0;
 let lastBatchState = null;
 let commandUnconfirmed = false;
 let unconfirmedCommand = null;
-async function batchRequest(url, options) {
+async function batchRequest(url, options, cancellation) {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (cancellation?.aborted) controller.abort();
+  cancellation?.addEventListener('abort', abort, {once: true});
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch(url, {...options, signal: controller.signal, cache: 'no-store'});
@@ -48,7 +51,38 @@ async function batchRequest(url, options) {
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('پاسخ سرور طول کشید؛ وضعیت صف در حال بررسی است.');
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); cancellation?.removeEventListener('abort', abort); }
+}
+function stopPause(signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); reject(new Error('Stop verification cancelled')); };
+    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, 1500);
+    signal.addEventListener('abort', abort, {once: true});
+    if (signal.aborted) abort();
+  });
+}
+async function requestStop(url, options) {
+  const runId = lastBatchState?.runId;
+  const controller = new AbortController();
+  const verification = (async () => {
+    while (!controller.signal.aborted) {
+      await stopPause(controller.signal);
+      try {
+        const state = await batchRequest('/api/analysis/signal-batch', {}, controller.signal);
+        // Verify this queue only; a delayed retry must never stop a newer queue.
+        if (!state.running && (!runId || state.runId === runId)) return state;
+      } catch (error) { if (controller.signal.aborted) throw error; }
+    }
+  })();
+  const stopUrl = runId ? `${url}?runId=${encodeURIComponent(runId)}` : url;
+  try {
+    try { return await Promise.race([batchRequest(stopUrl, options, controller.signal), verification]); }
+    catch (error) {
+      if (error.commandRejected || !runId) throw error;
+      document.querySelector('#batchStatus').textContent = 'پاسخ توقف نرسید؛ در حال بررسی و تلاش دوباره…';
+      return await Promise.race([batchRequest(stopUrl, options, controller.signal), verification]);
+    }
+  } finally { controller.abort(); }
 }
 async function batchCommand(url, options, message) {
   if (batchCommandPending) return;
@@ -61,7 +95,7 @@ async function batchCommand(url, options, message) {
   document.querySelector('#batchStatus').textContent = message;
   showBatchError('');
   try {
-    const data = await batchRequest(url, options);
+    const data = await (url.endsWith('/stop') ? requestStop(url, options) : batchRequest(url, options));
     batchCommandPending = false;
     renderBatch(data);
     return true;
@@ -69,6 +103,7 @@ async function batchCommand(url, options, message) {
     commandUnconfirmed = !error.commandRejected;
     unconfirmedCommand = commandUnconfirmed ? url : null;
     showBatchError(error.message);
+    if (url.endsWith('/stop')) document.querySelector('#stopBatch').disabled = false;
   } finally {
     batchCommandPending = false;
     // Keep the pending message instead of restoring a pre-command Running state.
@@ -101,7 +136,7 @@ document.querySelector('#startBatch').addEventListener('click', async () => {
   }
 });
 document.querySelector('#stopBatch').addEventListener('click', () =>
-  batchCommand('/api/analysis/signal-batch/stop', {method: 'POST'}, 'در حال ارسال دستور توقف…'));
+  batchCommand('/api/analysis/signal-batch/stop', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}, 'در حال ارسال دستور توقف…'));
 function renderBatch(state) {
   if (batchCommandPending) return;
   lastBatchState = state;

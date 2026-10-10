@@ -40,6 +40,7 @@ public sealed class SignalBatchService(
             _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null,
                 directionFilter, chartFilter, timeframeFilter)
             {
+                RunId = Guid.NewGuid().ToString("N"),
                 MinimumTargetProbability = minimumTargetProbability,
                 TimedMode = timedMode, DurationMinutes = timedMode ? durationMinutes : 0, EndsAtUtc = endsAt
             };
@@ -53,11 +54,16 @@ public sealed class SignalBatchService(
         }
     }
 
-    public bool Stop(out string? error)
+    public bool Stop(out string? error, string? expectedRunId = null)
     {
         CancellationTokenSource cancellation;
         lock (_sync)
         {
+            if (expectedRunId is not null && expectedRunId != _state.RunId)
+            {
+                error = "این درخواست توقف مربوط به صف قبلی است؛ وضعیت صف را دوباره دریافت کنید.";
+                return false;
+            }
             if (!_state.Running || _runCancellation is null)
             {
                 // Stop is idempotent, including while cancelled work is draining.
@@ -539,6 +545,7 @@ public sealed record BatchState(bool Running, int Target, int Approved, int Reje
     string? CurrentSymbol, string Message, string? Error, string DirectionFilter, string ChartFilter,
     string TimeframeFilter)
 {
+    public string? RunId { get; init; }
     public bool Stopping { get; init; }
     public int Proposed { get; init; }
     public int Observed { get; init; }

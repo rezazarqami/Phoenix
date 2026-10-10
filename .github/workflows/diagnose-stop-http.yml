@@ -17,8 +17,5 @@ jobs:
           key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
           command_timeout: 90s
           script: |
-            systemctl show phoenix.service --property=ExecStart,WorkingDirectory,User,EnvironmentFiles
-            ps -C dotnet -o pid=,args=
-            ls -l /opt/Phoenix/Phoenix.Web/bin/Debug/net10.0/Phoenix.Web.dll /opt/Phoenix/Phoenix.Web/bin/Release/net10.0/Phoenix.Web.dll
-            cat /etc/nginx/snippets/torsepan-relay.conf
+            sudo -n -l
             

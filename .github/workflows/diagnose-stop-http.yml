@@ -17,41 +17,8 @@ jobs:
           key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
           command_timeout: 90s
           script: |
-            test -r /etc/phoenix/phoenix.env && echo AUTH_CONFIG_READABLE || true
-            python3 - <<'PY'
-            import os, json, time, urllib.request, http.cookiejar
-            envfile = '/etc/phoenix/phoenix.env'
-            if not os.access(envfile, os.R_OK):
-                print('AUTHENTICATED_PROBE_UNAVAILABLE_CONFIG_PERMISSION')
-                raise SystemExit(0)
-            values = {}
-            for line in open(envfile):
-                key, sep, value = line.strip().partition('=')
-                if key in ('PHOENIX_AUTH_USERNAME', 'PHOENIX_AUTH_PASSWORD'):
-                    values[key] = value.strip('"').strip("'")
-            if len(values) != 2:
-                print('AUTHENTICATED_PROBE_UNAVAILABLE_CONFIG_KEYS')
-                raise SystemExit(0)
-            jar = http.cookiejar.CookieJar()
-            client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-            def probe(base, path, body=None):
-                start = time.monotonic()
-                req = urllib.request.Request(base + path, data=body, headers={'Content-Type':'application/json'})
-                try:
-                    with client.open(req, timeout=15) as response:
-                        data = response.read()
-                        print('PROBE', base, path, response.status, round(time.monotonic()-start,3))
-                        if path.startswith('/api/analysis/signal-batch'):
-                            state = json.loads(data)
-                            print('BATCH_STATE', {k:state.get(k) for k in ('running','stopping','checked','approved','message')})
-                except Exception as error:
-                    print('PROBE_FAILED', base, path, type(error).__name__, round(time.monotonic()-start,3))
-            body = json.dumps({'username':values['PHOENIX_AUTH_USERNAME'], 'password':values['PHOENIX_AUTH_PASSWORD']}).encode()
-            probe('http://127.0.0.1:5000', '/api/auth/login', body)
-            probe('http://127.0.0.1:5000', '/api/analysis/signal-batch')
-            probe('http://127.0.0.1:5000', '/api/analysis/signal-batch/stop', b'{}')
-            probe('http://127.0.0.1:5000', '/api/analysis/signal-batch')
-            PY
-            ls -l /etc/phoenix/phoenix.env /var/log/nginx/access.log
-            sed -n '1,120p' /usr/local/sbin/deploy-phoenix
+            systemctl show phoenix.service --property=ExecStart,WorkingDirectory,User,EnvironmentFiles
+            ps -C dotnet -o pid=,args=
+            ls -l /opt/Phoenix/Phoenix.Web/bin/Debug/net10.0/Phoenix.Web.dll /opt/Phoenix/Phoenix.Web/bin/Release/net10.0/Phoenix.Web.dll
+            cat /etc/nginx/snippets/torsepan-relay.conf
             

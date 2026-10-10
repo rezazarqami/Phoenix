@@ -35,3 +35,5 @@ jobs:
         run: node Phoenix.Test/cancellation-ui-tests.cjs
       - name: Verify batch controls under delayed responses
         run: node Phoenix.Test/batch-controls-tests.cjs
+      - name: Verify complete Crypto Markets page initialization
+        run: node Phoenix.Test/crypto-market-ui-tests.cjs

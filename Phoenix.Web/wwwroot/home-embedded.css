@@ -5,3 +5,11 @@ html.embedded-view main{padding:12px!important;margin:0!important;max-width:none
 html.embedded-view .market-page{background:#111419!important}
 html.embedded-view .hero{padding-top:12px!important}
 @media(max-width:600px){html.embedded-view main{padding:9px!important}}
+
+/* Intrinsic content height avoids feeding the iframe viewport back into its size. */
+html.embedded-view body{min-height:0!important}
+#batchError{grid-column:1/-1;color:#ff8797!important;margin:0;text-align:center}
+#batchError:empty{display:none}
+#marketMore{display:block;margin:16px auto;padding:12px 24px;border:1px solid #c59a46;border-radius:10px;background:#1c2027;color:#f7d589}
+#marketMore[hidden]{display:none}
+@media(max-width:600px){.topbar,body>header{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}}

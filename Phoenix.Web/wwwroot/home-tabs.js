@@ -18,8 +18,8 @@
       requestAnimationFrame(() => {
         queued = false;
         const doc = frame.contentDocument;
-        if (!doc?.body) return;
-        const height = Math.ceil(Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight));
+        if (!doc?.body || !frame.getClientRects().length) return;
+        const height = Math.ceil(Math.max(doc.body.scrollHeight, doc.body.offsetHeight));
         if (height > 0 && Math.abs(frame.getBoundingClientRect().height - height) > 2)
           frame.style.height = `${height}px`;
       });
@@ -35,6 +35,7 @@
       } catch { /* External navigation cannot be measured. */ }
     });
     window.addEventListener('resize', measure);
+    window.addEventListener('phoenix-tab-changed', measure);
   }
 
   function activate(name, updateHash = true) {

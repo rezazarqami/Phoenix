@@ -1,7 +1,10 @@
+(() => {
 const faMarket = new Intl.NumberFormat('fa-IR');
 const usdMarket = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
 const escapeMarket = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 let marketAssets = [];
+let marketLimit = 50;
+let marketLoading = false;
 
 document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
 <details class="results-report"><summary>آرشیو تأیید و رد پیشنهادها — خروجی برای تحلیل</summary>
@@ -42,21 +45,26 @@ function renderMarket() {
     const matches = !query || asset.symbol.includes(query) || asset.baseSymbol.includes(query) || asset.name.toUpperCase().includes(query);
     return matches && (filter === 'all' || (filter === 'free' ? asset.activeCount === 0 : asset.activeCount > 0));
   });
-  document.querySelector('#marketRows').innerHTML = rows.map((asset, index) => {
+  document.querySelector('#marketRows').innerHTML = rows.slice(0, marketLimit).map((asset, index) => {
     const rank = asset.marketCapRank ? `#${faMarket.format(asset.marketCapRank)}` : `—`;
-    const image = asset.image ? `<img src="${escapeMarket(asset.image)}" alt="">` : `<i>${escapeMarket(asset.baseSymbol.slice(0, 2))}</i>`;
+    const image = asset.image ? `<img src="${escapeMarket(asset.image)}" alt="" loading="lazy" decoding="async" width="34" height="34">` : `<i>${escapeMarket(asset.baseSymbol.slice(0, 2))}</i>`;
     const longState = asset.activeLong ? `<b class="long">LONG ${faMarket.format(asset.activeLong)}</b>` : '<span>LONG ندارد</span>';
     const shortState = asset.activeShort ? `<b class="short">SHORT ${faMarket.format(asset.activeShort)}</b>` : '<span>SHORT ندارد</span>';
     return `<article class="market-row"><div class="asset"><em>${rank}</em>${image}<div><strong>${escapeMarket(asset.symbol)}</strong><small>${escapeMarket(asset.name)}</small></div></div><div class="cap">${asset.marketCap ? '$' + usdMarket.format(asset.marketCap) : 'نامشخص'}</div><div class="signal-state">${longState}${shortState}<small>${faMarket.format(asset.activeCount)} از ۲ فعال</small></div><a href="/analysis/signals?symbol=${encodeURIComponent(asset.symbol)}">باز کردن در Signal Lab</a></article>`;
   }).join('') || '<div class="market-loading">رمزارزی با این فیلتر پیدا نشد.</div>';
+  document.querySelector('#marketMore').hidden = rows.length <= marketLimit;
 }
 
 async function loadMarket() {
+  if (marketLoading) return;
+  marketLoading = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
   const rows = document.querySelector('#marketRows');
   rows.innerHTML = '<div class="market-loading">در حال دریافت فهرست Bybit و اطلاعات مارکت‌کپ…</div>';
   document.querySelector('#marketMessage').textContent = '';
   try {
-    const response = await fetch('/api/analysis/coins', { cache: 'no-store' });
+    const response = await fetch('/api/analysis/coins', { cache: 'no-store', signal: controller.signal });
     if (response.status === 401) return location.replace('/login');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'اطلاعات بازار دریافت نشد.');
@@ -65,17 +73,23 @@ async function loadMarket() {
     document.querySelector('#activeCount').textContent = faMarket.format(marketAssets.reduce((sum, asset) => sum + asset.activeCount, 0));
     document.querySelector('#freeCount').textContent = faMarket.format(marketAssets.filter(asset => asset.activeCount === 0).length);
     renderMarket();
-  } catch (error) { rows.innerHTML = '<div class="market-loading error">دریافت اطلاعات ناموفق بود.</div>'; document.querySelector('#marketMessage').textContent = error.message; }
+  } catch (error) { rows.innerHTML = '<div class="market-loading error">دریافت اطلاعات ناموفق بود.</div>'; document.querySelector('#marketMessage').textContent = error.name === 'AbortError' ? 'دریافت بازار طول کشید؛ به‌روزرسانی را بزنید.' : error.message; }
+  finally { clearTimeout(timeout); marketLoading = false; }
 }
 
-document.querySelector('#marketSearch').addEventListener('input', renderMarket);
+document.querySelector('#marketMore').addEventListener('click', () => { marketLimit += 50; renderMarket(); });
+let marketSearchTimer;
+document.querySelector('#marketSearch').addEventListener('input', () => {
+  clearTimeout(marketSearchTimer);
+  marketSearchTimer = setTimeout(() => { marketLimit = 50; renderMarket(); }, 150);
+});
 document.querySelector('#marketRows').addEventListener('click', event => {
   const link = event.target.closest('.market-row>a');
   if (!link || !document.documentElement.classList.contains('embedded-view')) return;
   event.preventDefault();
   window.parent.postMessage({ type: 'phoenix-open-signal', symbol: new URL(link.href).searchParams.get('symbol') }, location.origin);
 });
-document.querySelector('#marketFilter').addEventListener('change', renderMarket);
+document.querySelector('#marketFilter').addEventListener('change', () => { marketLimit = 50; renderMarket(); });
 document.querySelector('#marketRefresh').addEventListener('click', loadMarket);
 const shadowStatus = s => s.outcome === 'Target' ? 'تارگت ✅' : s.outcome === 'StopLoss' ? 'استاپ ❌' : s.status === 'Filled' ? 'ورود فعال شده' : 'منتظر ورود';
 async function loadShadowSignals() {
@@ -140,3 +154,5 @@ document.querySelector('#loadResults').addEventListener('click', async () => {
 });
 document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); location.replace('/login'); });
 loadMarket();
+
+})();

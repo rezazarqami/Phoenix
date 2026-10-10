@@ -11,6 +11,7 @@ var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
 Run("Responsiveness interrupts active Elliott CPU and preserves results", ResponsivenessTests.ActiveCancellation);
 Run("Responsiveness isolates symbols and reuses higher tiers without stale target bars", ResponsivenessTests.IndependentSymbolsAndCache);
+Run("Responsiveness stop acknowledges during blocked cancellation callbacks", ResponsivenessTests.StopDoesNotAwaitCancellationCallbacks);
 Run("Responsiveness market provider timeout retains symbols and refreshes signal counts", ResponsivenessTests.MarketProviderTimeoutAndCache);
 Run("Responsiveness batch stop cancels stalled network and permits restart", ResponsivenessTests.BatchStopAndRestart);
 

@@ -30,6 +30,8 @@ let batchPollController = null;
 let batchPollTask = null;
 let batchRevision = 0;
 let lastBatchState = null;
+let commandUnconfirmed = false;
+let unconfirmedCommand = null;
 async function batchRequest(url, options) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
@@ -37,7 +39,11 @@ async function batchRequest(url, options) {
     const response = await fetch(url, {...options, signal: controller.signal, cache: 'no-store'});
     if (response.status === 401) { location.replace('/login'); throw new Error('نشست ورود پایان یافته است؛ دوباره وارد شوید.'); }
     const data = await response.json().catch(() => { throw new Error('پاسخ سرور معتبر نیست؛ دوباره تلاش کنید.'); });
-    if (!response.ok) throw new Error(data.error || 'دستور انجام نشد؛ وضعیت صف را بررسی کنید.');
+    if (!response.ok) {
+      const error = new Error(data.error || 'دستور انجام نشد؛ وضعیت صف را بررسی کنید.');
+      error.commandRejected = true;
+      throw error;
+    }
     return data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('پاسخ سرور طول کشید؛ وضعیت صف در حال بررسی است.');
@@ -47,6 +53,7 @@ async function batchRequest(url, options) {
 async function batchCommand(url, options, message) {
   if (batchCommandPending) return;
   batchCommandPending = true;
+  commandUnconfirmed = false;
   batchRevision++;
   batchPollController?.abort();
   document.querySelector('#startBatch').disabled = true;
@@ -59,14 +66,24 @@ async function batchCommand(url, options, message) {
     renderBatch(data);
     return true;
   } catch (error) {
+    commandUnconfirmed = !error.commandRejected;
+    unconfirmedCommand = commandUnconfirmed ? url : null;
     showBatchError(error.message);
   } finally {
     batchCommandPending = false;
-    if (lastBatchState) renderBatch(lastBatchState);
-    else { document.querySelector('#startBatch').disabled = false; document.querySelector('#stopBatch').disabled = false; }
-    // Reconcile after a timeout; never automatically resend a state-changing command.
+    // Keep the pending message instead of restoring a pre-command Running state.
+    // A lost response is not evidence that stop failed or that start succeeded.
     if (batchPollTask) await batchPollTask;
-    await pollBatch();
+    const confirmed = await pollBatch();
+    if (confirmed && url.endsWith('/stop') && !confirmed.running) {
+      commandUnconfirmed = false;
+      showBatchError('');
+    }
+    if (!confirmed && commandUnconfirmed) {
+      document.querySelector('#batchStatus').textContent = 'وضعیت دستور هنوز تأیید نشده؛ در حال بررسی اتصال…';
+      document.querySelector('#startBatch').disabled = true;
+      document.querySelector('#stopBatch').disabled = false;
+    }
   }
 }
 document.querySelector('#startBatch').addEventListener('click', async () => {
@@ -96,7 +113,7 @@ function renderBatch(state) {
     ? `تأیید ${faMarket.format(state.approved)} · پیشنهاد ${faMarket.format(state.proposed)} · باقی‌مانده حدود ${faMarket.format(remainingMinutes)} دقیقه`
     : `تأیید ${faMarket.format(state.approved)} از ${faMarket.format(state.target)}`;
   status.textContent = state.running ? `${state.message} · ${progress}${probabilityFilter} · بررسی‌شده ${faMarket.format(state.checked)} · ردشده ${faMarket.format(state.rejected)}` : state.message;
-  document.querySelector('#startBatch').disabled = state.running;
+  document.querySelector('#startBatch').disabled = state.running || Boolean(state.stopping);
   document.querySelector('#stopBatch').disabled = !state.running;
 }
 async function pollBatch() {
@@ -109,19 +126,26 @@ async function pollBatch() {
     try {
       const response = await fetch('/api/analysis/signal-batch', {cache: 'no-store', signal: controller.signal});
       const data = await response.json();
-      if (response.ok && revision === batchRevision && !batchCommandPending) renderBatch(data);
+      if (response.status === 401) return location.replace('/login');
+      if (response.ok && revision === batchRevision && !batchCommandPending) {
+        renderBatch(data);
+        if (commandUnconfirmed && (unconfirmedCommand?.endsWith('/stop') ? !data.running : data.running)) {
+          commandUnconfirmed = false; unconfirmedCommand = null; showBatchError('');
+        }
+        return data;
+      }
     } catch (error) {
       if (revision === batchRevision && !batchCommandPending && error.name !== 'AbortError')
         showBatchError('دریافت وضعیت صف ناموفق بود؛ اتصال را بررسی کنید.');
     }
     finally { clearTimeout(timeout); batchPollController = null; }
   })();
-  try { await batchPollTask; }
+  try { return await batchPollTask; }
   finally { batchPollTask = null; }
 }
 async function watchBatch() {
   await pollBatch();
-  setTimeout(watchBatch, lastBatchState?.running ? 3000 : 10000);
+  setTimeout(watchBatch, lastBatchState?.stopping ? 1500 : lastBatchState?.running ? 3000 : 10000);
 }
 watchBatch();
 

@@ -93,5 +93,41 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   blocked.calls[0].resolve(state(false)); await flush();
   blocked.calls.at(-1).resolve(state(true)); await blockedStart;
   assert.equal(blocked.node('#stopBatch').disabled, false);
+  // A stop acknowledgement can be lost while GET status is still reachable.
+  // Verify it before the POST deadline, cancel the waiting POST, and unlock Start.
+  const verified = setup();
+  verified.calls[0].resolve({...state(true), runId:'queue-a'}); await flush();
+  const earlyStop = verified.node('#stopBatch').click();
+  const waitingPost = verified.calls.at(-1);
+  assert.equal(waitingPost.url, '/api/analysis/signal-batch/stop?runId=queue-a');
+  assert.equal(waitingPost.options.body, '{}');
+  waitingPost.options.signal.addEventListener('abort', () => waitingPost.reject(Object.assign(new Error('aborted'), {name:'AbortError'})));
+  [...verified.timers.values()].find(t => t.ms === 1500).callback(); await flush();
+  verified.calls.at(-1).resolve({...state(false), runId:'queue-a'}); await flush();
+  assert.equal(waitingPost.options.signal.aborted, true);
+  assert.equal(verified.node('#startBatch').disabled, false);
+  assert.equal(verified.node('#batchError').textContent, '');
+  verified.calls.at(-1).resolve({...state(false), runId:'queue-a'}); await earlyStop;
+  // Retry a transport failure once, always carrying the same queue identity.
+  const retried = setup();
+  retried.calls[0].resolve({...state(true), runId:'queue-b'}); await flush();
+  const retryStop = retried.node('#stopBatch').click();
+  retried.calls.at(-1).reject(Object.assign(new Error('lost response'), {name:'AbortError'})); await flush();
+  const retryPosts = retried.calls.filter(c=>c.options.method === 'POST');
+  assert.equal(retryPosts.length, 2);
+  assert.equal(retryPosts[0].url, retryPosts[1].url);
+  retryPosts[1].resolve({...state(false), runId:'queue-b'}); await flush();
+  retried.calls.at(-1).resolve({...state(false), runId:'queue-b'}); await retryStop;
+  // A status response for another queue is not evidence that this stop succeeded.
+  const stale = setup();
+  stale.calls[0].resolve({...state(true), runId:'queue-c'}); await flush();
+  const staleStop = stale.node('#stopBatch').click();
+  const actualPost = stale.calls.at(-1);
+  [...stale.timers.values()].find(t => t.ms === 1500).callback(); await flush();
+  stale.calls.at(-1).resolve({...state(false), runId:'another-queue'}); await flush();
+  assert.match(stale.node('#batchStatus').textContent, /در حال ارسال دستور توقف/);
+  assert.equal(stale.node('#startBatch').disabled, true);
+  actualPost.resolve({...state(false), runId:'queue-c'}); await flush();
+  stale.calls.at(-1).resolve({...state(false), runId:'queue-c'}); await staleStop;
   console.log('PASS batch controls: immediate pending feedback, duplicate prevention, stale poll rejection, stop, timeout reconciliation and single-flight polling.');
 })().catch(error => {console.error(error); process.exit(1);});

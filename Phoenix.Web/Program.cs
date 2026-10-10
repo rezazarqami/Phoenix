@@ -502,8 +502,8 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Http
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });
 });
-app.MapPost("/api/analysis/signal-batch/stop", (SignalBatchService batches) =>
-    batches.Stop(out var error)
+app.MapPost("/api/analysis/signal-batch/stop", (SignalBatchService batches, string? runId) =>
+    batches.Stop(out var error, runId)
         ? Results.Ok(batches.Status)
         : Results.Conflict(new { error }));
 

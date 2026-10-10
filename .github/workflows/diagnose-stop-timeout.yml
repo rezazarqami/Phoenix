@@ -1,0 +1,27 @@
+name: Diagnose Phoenix responsiveness
+on:
+  push:
+    branches: [codex/diagnose-stop-timeout]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read production resource and service diagnostics
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 91.216.104.210
+          username: phoenix-deploy
+          key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            uptime
+            free -m
+            ps -eo pid,ppid,pcpu,pmem,rss,nlwp,etime,comm --sort=-rss | head -20
+            systemctl list-units --type=service --all --no-pager | grep -i phoenix
+            systemctl show phoenix.service phoenix-web.service --property=ActiveState,MainPID,NRestarts,MemoryCurrent,CPUUsageNSec,TasksCurrent
+            ss -ltn
+            git -C /opt/Phoenix log -1 --format='%h %s'
+            journalctl -u phoenix -u phoenix-web --since '30 minutes ago' --no-pager 2>/dev/null | grep -Ei 'thread.?pool|out.of.memory|killed|timed?.?out|slow|failed|exception' | tail -35

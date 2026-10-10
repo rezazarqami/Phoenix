@@ -67,7 +67,25 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   const poll = h.context.pollBatch(); const count = h.calls.length;
   await h.context.pollBatch(); assert.equal(h.calls.length, count);
   h.calls.at(-1).resolve(state(true)); await poll;
-  assert.match(h.node('#batchError').textContent, /پاسخ سرور/);
+  assert.equal(h.node('#batchError').textContent, '', 'A verified successful command must clear its old timeout');
+  // A stop can take effect even if its POST response is lost. Keep the old
+  // Running snapshot off the screen and clear the warning after verification.
+  const lostStop = h.node('#stopBatch').click();
+  const lostPost = h.calls.at(-1);
+  lostPost.options.signal.addEventListener('abort', () => lostPost.reject(Object.assign(new Error('timeout'), {name: 'AbortError'})));
+  [...h.timers.values()].find(t => t.ms === 10000).callback(); await flush();
+  assert.match(h.node('#batchStatus').textContent, /توقف/, 'A timed-out stop must not restore old running text');
+  h.calls.at(-1).resolve(state(false)); await lostStop;
+  assert.equal(h.node('#batchError').textContent, '');
+  assert.equal(h.node('#stopBatch').disabled, true);
+  assert.equal(h.node('#startBatch').disabled, false);
+  // A stopped queue may still be releasing background work; do not offer an overlapping start.
+  const drainingPoll = h.context.pollBatch();
+  h.calls.at(-1).resolve({...state(false), stopping:true}); await drainingPoll;
+  assert.equal(h.node('#startBatch').disabled, true);
+  const idlePoll = h.context.pollBatch();
+  h.calls.at(-1).resolve({...state(false), stopping:false}); await idlePoll;
+  assert.equal(h.node('#startBatch').disabled, false);
   const blocked = setup(true);
   assert.equal(blocked.node('#batchSize').value, '10');
   const blockedStart = blocked.node('#startBatch').click();

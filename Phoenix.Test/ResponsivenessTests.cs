@@ -97,6 +97,45 @@ internal static class ResponsivenessTests
         Check(batch.Stop(out _), "Restarted batch must also stop");
     }
 
+    public static void StopDoesNotAwaitCancellationCallbacks()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var callbackEntered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var bybit = new BybitDemoClient(new(null, null), new HttpClient(new Handler(async (_, token) => {
+            token.Register(() => { callbackEntered.Set(); release.Wait(TimeSpan.FromSeconds(10)); });
+            entered.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            throw new InvalidOperationException();
+        })));
+        var markets = new MarketCapCatalog(new HttpClient(), new BybitInstrumentCatalog(bybit), null!);
+        var telegram = new TelegramNotifier(new("fake-token", "123"), new(null, null), null!, bybit, null!, NullLogger<TelegramNotifier>.Instance);
+        var dedicated = new DedicatedTelegramNotifier(new("arman", null, null), NullLogger<DedicatedTelegramNotifier>.Instance);
+        var batch = new SignalBatchService(markets, bybit, null!, null!, null!, telegram, dedicated,
+            null!, null!, null!, new Lifetime(), NullLogger<SignalBatchService>.Instance, null!);
+        try
+        {
+            Check(batch.Start(1, 10m, "All", "All", "All", 0, false, 30, null, out _), "Start must be accepted");
+            entered.Task.WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
+            // In the old code this request blocks until the callback is released.
+            var stop = Task.Run(() => batch.Stop(out _));
+            Check(stop.WaitAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult(), "Stop must acknowledge before cleanup finishes");
+            Check(callbackEntered.Wait(TimeSpan.FromSeconds(2)), "Test must exercise an active cancellation callback");
+            Check(!batch.Status.Running && batch.Status.Stopping && batch.Status.CurrentSymbol is null, "Stop status must remain authoritative while cleanup drains");
+            Check(batch.Stop(out _), "Repeated stop must be safe while cleanup is running");
+            Check(!batch.Start(1, 10m, "All", "All", "All", 0, false, 30, null, out _), "No overlapping restart during cleanup");
+        }
+        finally { release.Set(); }
+        var restarted = false;
+        for (var i = 0; i < 200 && !restarted; i++) {
+            restarted = batch.Start(1, 10m, "All", "All", "All", 0, false, 30, null, out _);
+            if (!restarted) Thread.Sleep(10);
+        }
+        Check(restarted, "Restart must be available once cancellation has drained");
+        Check(batch.Stop(out _), "Restarted batch must also stop");
+        Check(SpinWait.SpinUntil(() => !batch.Status.Stopping, TimeSpan.FromSeconds(3)), "Final cancellation must drain before test resources are disposed");
+    }
+
     public static void MarketProviderTimeoutAndCache()
     {
         var root = Path.Combine(Path.GetTempPath(), "phoenix-market-" + Guid.NewGuid().ToString("N"));

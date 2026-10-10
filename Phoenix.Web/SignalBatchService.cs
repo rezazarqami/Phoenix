@@ -17,9 +17,10 @@ public sealed class SignalBatchService(
     private TaskCompletionSource<BatchDecision>? _decision;
     private string? _decisionKey;
     private CancellationTokenSource? _runCancellation;
+    private Task? _cancellationCompletion;
     private readonly Dictionary<string, string> _pendingReasons = new(StringComparer.Ordinal);
 
-    public BatchState Status { get { lock (_sync) return _state; } }
+    public BatchState Status { get { lock (_sync) return _state with { Stopping = !_state.Running && _runCancellation is not null }; } }
 
     public bool Start(int target, decimal positionSizeUsdt, string directionFilter, string chartFilter,
         string timeframeFilter, decimal minimumTargetProbability, bool timedMode, int durationMinutes, string? requestedByUsername,
@@ -45,6 +46,7 @@ public sealed class SignalBatchService(
             error = null;
             var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.ApplicationStopping);
             _runCancellation = runCancellation;
+            _cancellationCompletion = null;
             _ = Task.Run(() => RunAsync(target, positionSizeUsdt, directionFilter, chartFilter,
                 timeframeFilter, minimumTargetProbability, endsAt, requestedByUsername, dedicatedRoute, runCancellation));
             return true;
@@ -58,8 +60,9 @@ public sealed class SignalBatchService(
         {
             if (!_state.Running || _runCancellation is null)
             {
-                error = "در حال حاضر صف فعالی برای توقف وجود ندارد.";
-                return false;
+                // Stop is idempotent, including while cancelled work is draining.
+                error = null;
+                return true;
             }
             cancellation = _runCancellation;
             _decision = null;
@@ -73,8 +76,10 @@ public sealed class SignalBatchService(
                 Error = null
             };
             error = null;
+            // CancelAsync marks the token now, but runs registered cleanup away
+            // from this HTTP request. Cancel() can synchronously block on IO callbacks.
+            _cancellationCompletion ??= cancellation.CancelAsync();
         }
-        cancellation.Cancel();
         return true;
     }
 
@@ -371,7 +376,9 @@ public sealed class SignalBatchService(
         }
         finally
         {
-            runCancellation.Cancel();
+            Task cancellationCompletion;
+            lock (_sync) cancellationCompletion = _cancellationCompletion ??= runCancellation.CancelAsync();
+            await ObserveCancellationAsync(cancellationCompletion);
             if (prepared is not null)
                 try { await prepared; }
                 catch (OperationCanceledException) { }
@@ -384,6 +391,7 @@ public sealed class SignalBatchService(
                     _decisionKey = null;
                     _pendingReasons.Clear();
                     _runCancellation = null;
+                    _cancellationCompletion = null;
                 }
             }
             runCancellation.Dispose();
@@ -471,7 +479,21 @@ public sealed class SignalBatchService(
 
     private sealed record PreparedProposal(ProfessionalSignalAnalysis Analysis, string Caption, byte[] Image);
 
-    private void Update(Func<BatchState, BatchState> update) { lock (_sync) _state = update(_state); }
+    private async Task ObserveCancellationAsync(Task cancellation)
+    {
+        try { await cancellation; }
+        catch (Exception exception) { logger.LogWarning(exception, "Signal batch cancellation cleanup failed"); }
+    }
+
+    private void Update(Func<BatchState, BatchState> update)
+    {
+        lock (_sync)
+        {
+            // Late scan/preparation results must not replace the stop acknowledgement.
+            if (_runCancellation?.IsCancellationRequested == true && !_state.Running) return;
+            _state = update(_state);
+        }
+    }
     private static string[] Intervals(string filter) => filter == "All" ? ["1", "5", "15", "60", "240"] : [filter];
     public static string ReviewChartInterval(string signalInterval) => signalInterval switch
     {
@@ -517,6 +539,7 @@ public sealed record BatchState(bool Running, int Target, int Approved, int Reje
     string? CurrentSymbol, string Message, string? Error, string DirectionFilter, string ChartFilter,
     string TimeframeFilter)
 {
+    public bool Stopping { get; init; }
     public int Proposed { get; init; }
     public int Observed { get; init; }
     public bool TimedMode { get; init; }

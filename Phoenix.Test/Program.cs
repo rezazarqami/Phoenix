@@ -11,6 +11,7 @@ var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
 Run("Responsiveness interrupts active Elliott CPU and preserves results", ResponsivenessTests.ActiveCancellation);
 Run("Responsiveness isolates symbols and reuses higher tiers without stale target bars", ResponsivenessTests.IndependentSymbolsAndCache);
+Run("Responsiveness stop acknowledges during blocked cancellation callbacks", ResponsivenessTests.StopDoesNotAwaitCancellationCallbacks);
 Run("Responsiveness market provider timeout retains symbols and refreshes signal counts", ResponsivenessTests.MarketProviderTimeoutAndCache);
 Run("Responsiveness batch stop cancels stalled network and permits restart", ResponsivenessTests.BatchStopAndRestart);
 
@@ -371,7 +372,7 @@ Run("Close positions uses paginated exchange quantities and reduce-only market o
     Equal(2, closes);
 });
 
-Run("Bulk close requires one-use confirmation, pauses entries and does not assume a fill", () =>
+Run("Bulk close requires one-use confirmation, leaves entries enabled and does not assume a fill", () =>
 {
     var root = Path.Combine(Path.GetTempPath(), "phoenix-close-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(root);
@@ -396,7 +397,7 @@ Run("Bulk close requires one-use confirmation, pauses entries and does not assum
         var result = service.CloseAsync(preview.Id, default).GetAwaiter().GetResult();
         True(result.Single().Submitted);
         Equal(1, orders);
-        True(store.EntriesPaused);
+        False(store.EntriesPaused);
         var closing = store.GetAllAsync().GetAwaiter().GetResult().Single();
         Equal("Closing", closing.Status);
         True(closing.CompletedAtUtc is null);

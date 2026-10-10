@@ -372,7 +372,7 @@ Run("Close positions uses paginated exchange quantities and reduce-only market o
     Equal(2, closes);
 });
 
-Run("Bulk close requires one-use confirmation, pauses entries and does not assume a fill", () =>
+Run("Bulk close requires one-use confirmation, leaves entries enabled and does not assume a fill", () =>
 {
     var root = Path.Combine(Path.GetTempPath(), "phoenix-close-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(root);
@@ -397,7 +397,7 @@ Run("Bulk close requires one-use confirmation, pauses entries and does not assum
         var result = service.CloseAsync(preview.Id, default).GetAwaiter().GetResult();
         True(result.Single().Submitted);
         Equal(1, orders);
-        True(store.EntriesPaused);
+        False(store.EntriesPaused);
         var closing = store.GetAllAsync().GetAwaiter().GetResult().Single();
         Equal("Closing", closing.Status);
         True(closing.CompletedAtUtc is null);

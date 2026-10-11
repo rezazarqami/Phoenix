@@ -68,7 +68,10 @@ public sealed class ProfessionalSignalAnalysisService(
             MarketRegimeScore = regimeScore,
             StructureScore = structure,
             LiquiditySweepScore = sweep,
-            MultiScaleLevels = scales
+            MultiScaleLevels = scales,
+            StructureBreakScore = snapshots.Sum(x => x.Features.StructureBreakScore!.Value * weights[x.Interval]) / weights.Values.Sum(),
+            StructureRetestScore = snapshots.Sum(x => x.Features.StructureRetestScore!.Value * weights[x.Interval]) / weights.Values.Sum(),
+            SimilarityContextVersion = 1
         };
         var serverSignal = new ServerSignal
         {

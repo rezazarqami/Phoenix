@@ -9,33 +9,45 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
-        return CalculateFromPatterns(candidate, snapshot.Patterns);
+        return CalculateFromPatterns(candidate, snapshot.Patterns, token);
     }
 
     internal static SignalSimilarityResult CalculateFromPatterns(ServerSignal candidate,
-        IReadOnlyList<LearnedSignalPattern> patterns)
+        IReadOnlyList<LearnedSignalPattern> patterns, CancellationToken token = default)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var targets = patterns.Where(x => x.Outcome == "Target").ToArray();
         var stops = patterns.Where(x => x.Outcome == "StopLoss").ToArray();
         if (targets.Length < 5 || stops.Length < 5)
             return new(null, null, patterns.Count, targets.Length, stops.Length);
-        // Score the nearest examples of each class independently. The larger
-        // historical class cannot force the other score to be its complement.
-        var targetScore = Score(targets);
-        var stopScore = Score(stops);
-        // Distinguish the classes by their margin while retaining separate
-        // absolute resemblance scores. Identical evidence has no margin.
-        var margin = targetScore - stopScore;
-        targetScore = Math.Clamp(targetScore + 1.4d * margin, 0d, 1d);
-        stopScore = Math.Clamp(stopScore - 1.4d * margin, 0d, 1d);
-        return new(Math.Round((decimal)(targetScore * 100d), 0),
-            Math.Round((decimal)(stopScore * 100d), 0), patterns.Count,
-            targets.Length, stops.Length, Math.Min(targets.Length, 12) + Math.Min(stops.Length, 12));
+        // Every valid entry-time example contributes. Exponential weights make
+        // distant examples less influential without a fixed nearest-N cutoff.
+        var targetEvidence = Score(targets);
+        var stopEvidence = Score(stops);
+        var compared = targets.Length + stops.Length;
+        if (targetEvidence.CloseCount < 5 || stopEvidence.CloseCount < 5)
+            return new(null, null, patterns.Count, targets.Length, stops.Length, compared);
+        return new(Math.Round((decimal)(targetEvidence.Score * 100d), 0),
+            Math.Round((decimal)(stopEvidence.Score * 100d), 0), patterns.Count,
+            targets.Length, stops.Length, compared);
 
-        double Score(LearnedSignalPattern[] group) => group
-            .Select(x => TechnicalSimilarity(candidate, x.Signal, candidate.TechnicalFeatures, x.Features))
-            .OrderByDescending(x => x).Take(12).Average();
+        (double Score, int CloseCount) Score(LearnedSignalPattern[] group)
+        {
+            double weighted = 0d, weights = 0d;
+            var closeCount = 0;
+            foreach (var example in group)
+            {
+                token.ThrowIfCancellationRequested();
+                var similarity = TechnicalSimilarity(candidate, example.Signal,
+                    candidate.TechnicalFeatures, example.Features);
+                // Initial transparent settings, not fitted or calibrated probabilities.
+                var weight = Math.Exp(-8d * (1d - similarity));
+                weighted += similarity * weight;
+                weights += weight;
+                if (similarity >= 0.65d) closeCount++;
+            }
+            return (weighted / weights, closeCount);
+        }
     }
 
     // Existing examples without level-specific fields still contribute through
@@ -83,6 +95,20 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
                     Near(pair.Left.FibonacciTarget, pair.Right.FibonacciTarget, 1m)) / 3d), 16d);
             }
         }
+        // Context matching is relative to historical examples, not a rule
+        // that automatically rewards a strong trend or a particular volatility.
+        AddOptional(TimeframeSimilarity(candidate.Timeframe, sample.Timeframe), 10d);
+        if (candidateFeatures.AtrPercent > 0m && sampleFeatures.AtrPercent > 0m)
+            Add(Math.Clamp(1d - Math.Abs(Math.Log((double)(candidateFeatures.AtrPercent /
+                sampleFeatures.AtrPercent))) / Math.Log(4d), 0d, 1d), 10d);
+        if (HasContext(candidateFeatures) && HasContext(sampleFeatures))
+        {
+            Add(Near(candidateFeatures.MarketRegimeScore, sampleFeatures.MarketRegimeScore, 1m), 10d);
+            Add(Near(candidateFeatures.StructureScore, sampleFeatures.StructureScore, 1m), 10d);
+            Add(Near(candidateFeatures.LiquiditySweepScore, sampleFeatures.LiquiditySweepScore, 1m), 8d);
+        }
+        AddNullable(candidateFeatures.StructureBreakScore, sampleFeatures.StructureBreakScore, 6d);
+        AddNullable(candidateFeatures.StructureRetestScore, sampleFeatures.StructureRetestScore, 6d);
         return totalWeight == 0d ? 0d : weighted / totalWeight;
 
 
@@ -91,10 +117,31 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             weighted += Math.Clamp(value, 0d, 1d) * weight;
             totalWeight += weight;
         }
+        void AddOptional(double? value, double weight)
+        {
+            if (value.HasValue) Add(value.Value, weight);
+        }
         void AddNullable(decimal? a, decimal? b, double weight, decimal scale = 1m)
         {
             if (a.HasValue && b.HasValue) Add(Near(a.Value, b.Value, scale), weight);
         }
+    }
+
+    private static bool HasContext(TechnicalFeatureSnapshot features) =>
+        features.SimilarityContextVersion >= 1 || features.MultiScaleLevels is { Count: > 0 };
+
+    private static double? TimeframeSimilarity(string? left, string? right)
+    {
+        static double Minutes(string? interval) => interval switch
+        {
+            "D" => 1440d, "W" => 10080d, "M" => 43200d,
+            _ when double.TryParse(interval, System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0d => value,
+            _ => 0d
+        };
+        var a = Minutes(left);
+        var b = Minutes(right);
+        return a <= 0d || b <= 0d ? null : Math.Clamp(1d - Math.Abs(Math.Log(a / b)) / Math.Log(16d), 0d, 1d);
     }
 
     private static DirectionalFeatures Directional(ServerSignal signal, TechnicalFeatureSnapshot f)

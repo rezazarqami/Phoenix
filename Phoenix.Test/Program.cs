@@ -29,6 +29,10 @@ Run("Cancellation bulk handles All Long Short and preserves active positions", C
 Run("Crypto statistics include lifetime trades and ignore unentered signals", CryptoStatisticsTests.Lifetime);
 Run("Crypto statistics migrate queues, retain removed trades and refresh outcomes", CryptoStatisticsTests.Migration);
 
+Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
+Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);
+Run("Similarity structural breaks and retests use only confirmed past pivots", SimilarityTests.BreakAndRetestUseConfirmedPastPivots);
+
 Run("Target and stop similarity are independent and ignore price action", () =>
 {
     var features = new TechnicalFeatureSnapshot(0.5m, 1m, 0m, 0.4m, 0.2m,

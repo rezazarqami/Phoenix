@@ -82,7 +82,7 @@ internal static class ResponsivenessTests
         var telegram = new TelegramNotifier(new("fake-token", "123"), new(null, null), null!, bybit, null!, NullLogger<TelegramNotifier>.Instance);
         var dedicated = new DedicatedTelegramNotifier(new("arman", null, null), NullLogger<DedicatedTelegramNotifier>.Instance);
         var batch = new SignalBatchService(markets, bybit, null!, null!, null!, telegram, dedicated,
-            null!, null!, null!, new Lifetime(), NullLogger<SignalBatchService>.Instance, null!);
+            null!, null!, new Lifetime(), NullLogger<SignalBatchService>.Instance, null!);
         Check(batch.Start(1, 10m, "All", "All", "All", 0, false, 30, null, out _), "Start must be accepted");
         var firstRunId = batch.Status.RunId;
         Check(firstRunId is not null, "An active queue must have an identity");
@@ -117,7 +117,7 @@ internal static class ResponsivenessTests
         var telegram = new TelegramNotifier(new("fake-token", "123"), new(null, null), null!, bybit, null!, NullLogger<TelegramNotifier>.Instance);
         var dedicated = new DedicatedTelegramNotifier(new("arman", null, null), NullLogger<DedicatedTelegramNotifier>.Instance);
         var batch = new SignalBatchService(markets, bybit, null!, null!, null!, telegram, dedicated,
-            null!, null!, null!, new Lifetime(), NullLogger<SignalBatchService>.Instance, null!);
+            null!, null!, new Lifetime(), NullLogger<SignalBatchService>.Instance, null!);
         try
         {
             Check(batch.Start(1, 10m, "All", "All", "All", 0, false, 30, null, out _), "Start must be accepted");

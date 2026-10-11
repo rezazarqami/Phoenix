@@ -61,8 +61,6 @@ public sealed class ProfessionalSignalAnalysisService(
                 histories[interval] = earlier;
         if (signalCandles.Count >= 80) histories[signalInterval] = signalCandles;
         var scales = MultiScaleLevelExtractor.Calculate(histories, candidate);
-        var otherFib = scales.Where(x => x.Interval != signalInterval)
-            .Select(x => x.FibonacciEntry).DefaultIfEmpty(0m).Max();
         var enriched = primary with
         {
             HigherTimeframeAlignment = alignment,
@@ -78,22 +76,9 @@ public sealed class ProfessionalSignalAnalysisService(
             ChartMode = "Professional", TechnicalFeatures = enriched
         };
         var prediction = await predictor.CalculateAsync(serverSignal, token);
-        var strengths = new List<string>();
-        var risks = new List<string>();
-        Explain(alignment, 0.25m, "هم‌جهتی تایم‌فریم‌های بالاتر", "تعارض با تایم‌فریم‌های بالاتر");
-        Explain(bitcoinAlignment, 0.20m, "هم‌جهتی مناسب با بیت‌کوین", "جهت بیت‌کوین مخالف سیگنال");
-        Explain(structure * 2m - 1m, 0.20m, "ساختار قیمت هم‌جهت است", "ساختار قیمت تأیید نمی‌کند");
-        Explain(sweep * 2m - 1m, 0.28m, "جمع‌آوری نقدینگی به نفع ورود", "جمع‌آوری نقدینگی علیه ورود");
-        if (otherFib >= 0.7m) strengths.Add("هم‌ترازی فیبوناچی در تایم‌فریم دیگر");
-        if (primary.VolumeRatio >= 1.15m) strengths.Add("حجم بالاتر از میانگین");
-        else if (primary.VolumeRatio < 0.75m) risks.Add("حجم تأییدکننده نیست");
-        return new(enriched, prediction, regime, strengths.Take(5).ToArray(), risks.Take(5).ToArray());
-
-        void Explain(decimal value, decimal threshold, string positive, string negative)
-        {
-            if (value >= threshold) strengths.Add(positive);
-            else if (value <= -threshold) risks.Add(negative);
-        }
+        // Keep the technical fingerprint for comparison and learning without
+        // generating generic positive/negative commentary for proposals.
+        return new(enriched, prediction, regime, [], []);
     }
 
     internal static IReadOnlyList<BybitKline> CandlesAvailableAt(

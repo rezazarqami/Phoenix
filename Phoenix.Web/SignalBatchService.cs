@@ -8,7 +8,6 @@ public sealed class SignalBatchService(
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ProfessionalSignalAnalysisService professional,
-    ElliottCountStore elliottCounts,
     ShadowSignalRuntime shadow,
     IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
 {
@@ -429,56 +428,23 @@ public sealed class SignalBatchService(
                 chartInterval = option.Interval;
                 chartCandles = option.Candles;
             }
-            // Prefer the broader degree only if its closes still cover
-            // the selected ceiling/floor and contain enough turns to count.
-            // The signal itself continues to use option.Interval.
-            if (!ChartHasReadableAnchors(chartCandles, selected))
+            // Keep both selected anchors visible without fetching extra tiers
+            // or inspecting Elliott turns just to prepare the review image.
+            var anchorStart = Math.Min(selected.FloorTime, selected.CeilingTime);
+            var anchorEnd = Math.Max(selected.FloorTime, selected.CeilingTime);
+            if (chartCandles.Count < 52 || chartCandles[0].OpenTime > anchorStart ||
+                chartCandles[^1].OpenTime + (chartCandles[^1].OpenTime - chartCandles[^2].OpenTime) < anchorEnd)
             {
-                var intermediate = ReviewChartFallbackInterval(option.Interval);
-                if (intermediate != option.Interval)
-                    try
-                    {
-                        var alternative = await bybit.GetKlinesAsync(selected.Symbol, intermediate, 1000, token);
-                        if (ChartHasReadableAnchors(alternative, selected))
-                        {
-                            chartInterval = intermediate;
-                            chartCandles = alternative;
-                        }
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                    catch (Exception exception)
-                    {
-                        logger.LogWarning(exception, "Intermediate chart unavailable for {Symbol}", selected.Symbol);
-                    }
-                if (!ChartHasReadableAnchors(chartCandles, selected))
-                {
-                    chartInterval = option.Interval;
-                    chartCandles = option.Candles;
-                }
-            }
-            ElliottScenario? elliottScenario;
-            try { elliottScenario = await elliottCounts.AnalyzeAsync(selected.Symbol, chartInterval, chartCandles, token); }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Elliott count unavailable for {Symbol}", selected.Symbol);
-                elliottScenario = ElliottCoverage.Unavailable(new(0, 0, 0, 0, [],
-                    chartCandles.Count < 2 ? [] : [new(chartCandles[0].OpenTime, chartCandles[^1].OpenTime, "DataUnavailable")]));
+                chartInterval = option.Interval;
+                chartCandles = option.Candles;
             }
             var similarityResult = analysis.Prediction;
-            var strengths = analysis.Strengths.Count == 0 ? "• مورد برجسته‌ای ثبت نشد"
-                : string.Join("\n", analysis.Strengths.Select(x => $"• {x}"));
-            var risks = analysis.Risks.Count == 0 ? "• ریسک برجسته‌ای ثبت نشد"
-                : string.Join("\n", analysis.Risks.Select(x => $"• {x}"));
-            var similarityLines = similarityResult.TargetPercent.HasValue
-                ? $"\n\n🟢 <b>شباهت در صورت ورود به تارگت‌خورده‌ها: {FormatWholePercent(similarityResult.TargetPercent.Value)}٪</b>\n🔴 <b>شباهت در صورت ورود به استاپ‌خورده‌ها: {FormatWholePercent(similarityResult.StopPercent!.Value)}٪</b>\nمبنای مقایسه: شرایط ثبت‌شده هنگام ورود نمونه‌های قبلی؛ وضعیت این سیگنال هنگام ورود دوباره بررسی می‌شود.\n\n✅ دلایل موافق:\n{strengths}\n\n⚠️ ریسک‌ها:\n{risks}\n\n🧠 نتایج آموخته‌شده: {similarityResult.SampleCount}\n📐 نمونه‌های مقایسه: {similarityResult.CalibrationSampleCount}"
-                : "\n📊 نمونهٔ کافی با دادهٔ ثبت‌شده در لحظهٔ ورود وجود ندارد؛ شباهت پس از جمع‌آوری نمونه‌ها نمایش داده می‌شود.";
+            var similarityLines = SignalReviewText.Similarity(similarityResult);
             var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
             token.ThrowIfCancellationRequested();
             // Chart style is presentation-only; analysis retains the requested mode.
             var image = SignalChartRenderer.Render(chartCandles, selected, false,
-                TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
-                elliottScenario);
+                TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent);
             token.ThrowIfCancellationRequested();
             return new PreparedProposal(analysis, caption, image);
         }, token);
@@ -505,26 +471,6 @@ public sealed class SignalBatchService(
     {
         "1" => "15", "5" => "60", "15" => "240", "60" => "D", "240" => "W", _ => signalInterval
     };
-    private static string ReviewChartFallbackInterval(string signalInterval) => signalInterval switch
-    {
-        "5" => "15", "15" => "60", "60" => "240", "240" => "D", _ => signalInterval
-    };
-
-    public static bool ChartHasReadableAnchors(IReadOnlyList<BybitKline> candles, SignalCandidate candidate)
-    {
-        if (candles.Count < 30) return false;
-        var first = Math.Min(candidate.FloorTime, candidate.CeilingTime);
-        var last = Math.Max(candidate.FloorTime, candidate.CeilingTime);
-        if (first < candles[0].OpenTime || last > candles[^1].OpenTime +
-            (candles[^1].OpenTime - candles[^2].OpenTime)) return false;
-        var start = 0;
-        while (start + 1 < candles.Count && candles[start + 1].OpenTime <= first) start++;
-        var end = start;
-        while (end + 1 < candles.Count && candles[end].OpenTime < last) end++;
-        var nearby = candles.Skip(Math.Max(0, start - 12)).Take(Math.Min(candles.Count - Math.Max(0, start - 12),
-            end - Math.Max(0, start - 12) + 13)).ToArray();
-        return nearby.Length >= 12 && ElliottWaveAnalyzer.CloseTurns(nearby).Count >= 4;
-    }
     private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "1" => "1M", "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value };
     public static decimal EntryToTargetPercent(SignalCandidate candidate) => candidate.EntryPrice <= 0m
@@ -532,8 +478,6 @@ public sealed class SignalBatchService(
             ? (candidate.TakeProfit - candidate.EntryPrice) / candidate.EntryPrice * 100m
             : (candidate.EntryPrice - candidate.TakeProfit) / candidate.EntryPrice * 100m;
     private static string FormatTwoDecimals(decimal value) => value.ToString("0.##", CultureInfo.InvariantCulture);
-    private static string FormatWholePercent(decimal value) => Math.Round(value, 0, MidpointRounding.AwayFromZero)
-        .ToString("0", CultureInfo.InvariantCulture);
     private static string Format(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
     private static string ProposalKey(SignalCandidate candidate, string interval, bool lineMode) =>
         $"{candidate.Symbol}|{candidate.Direction}|{interval}|{lineMode}|{candidate.CeilingTime}|{candidate.FloorTime}";

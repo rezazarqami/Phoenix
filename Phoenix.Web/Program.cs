@@ -307,7 +307,7 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
         }
         catch { /* A temporary Bybit failure must not make the signal panel unavailable. */ }
     }
-    foreach (var signal in signals.Where(x => x.CompletedAtUtc is null && x.TargetSimilarityPercent is null))
+    foreach (var signal in signals.Where(x => x.CompletedAtUtc is null && (x.TargetSimilarityPercent is null || x.TargetOutcomePercent is null)))
     {
         try
         {
@@ -315,6 +315,9 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
             signal.TargetSimilarityPercent = result.TargetPercent;
             signal.StopSimilarityPercent = result.StopPercent;
             signal.SimilaritySampleCount = result.SampleCount;
+            signal.TargetOutcomePercent = result.TargetOutcomePercent;
+            signal.StopOutcomePercent = result.StopOutcomePercent;
+            signal.OutcomeValidationCount = result.OutcomeValidationCount;
             await store.UpdateAsync(signal, token);
         }
         catch { /* Similarity must never make the live signal panel unavailable. */ }
@@ -453,8 +456,8 @@ app.MapGet("/api/analysis/shadow-signals", async (ShadowSignalRuntime shadow, Ca
         {
             x.Id, x.Symbol, x.Direction, x.Status, x.Outcome, x.CreatedAtUtc, x.CompletedAtUtc,
             x.EntryPrice, x.TakeProfit, x.StopLoss, x.LastPrice, x.Timeframe,
-            targetProbability = x.TargetSimilarityPercent,
-            stopProbability = x.StopSimilarityPercent,
+            targetProbability = x.TargetOutcomePercent,
+            stopProbability = x.StopOutcomePercent,
             imageUrl = $"/api/analysis/shadow-signals/{x.Id}/image"
         })
     });
@@ -494,7 +497,7 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Http
     if (timeframeFilter is not ("All" or "1" or "5" or "15" or "60" or "240"))
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
     if (request.MinimumTargetProbability is < 0m or > 100m)
-        return Results.BadRequest(new { error = "حداقل شباهت به تارگت‌ها باید بین صفر تا ۱۰۰ درصد باشد." });
+        return Results.BadRequest(new { error = "حداقل برآورد تارگت پس از ورود باید بین صفر تا ۱۰۰ درصد باشد." });
     PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
     return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
             timeframeFilter, request.MinimumTargetProbability, request.TimedMode, request.DurationMinutes,

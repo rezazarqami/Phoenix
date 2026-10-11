@@ -57,7 +57,7 @@ public static class SignalChartRenderer
 
     public static byte[] Render(IReadOnlyList<BybitKline> candles, SignalCandidate candidate, bool lineMode,
         string? timeframeBadge = null, decimal? targetSimilarity = null, decimal? stopSimilarity = null,
-        ElliottScenario? elliott = null)
+        ElliottScenario? elliott = null, decimal? targetOutcome = null, decimal? stopOutcome = null)
     {
         const int width = 1000, height = 730, left = 30, right = 25, top = 25, bottom = 165;
         var footerTop = height - bottom + 14;
@@ -208,9 +208,18 @@ public static class SignalChartRenderer
             if (note.Length > 0) DrawTinyText(pixels, width, height, 650, footerTop + 112, note, 2, 100, 100, 100);
         }
         if (targetSimilarity.HasValue)
-            DrawSimilarityBar(pixels, width, height, 18, footerTop, "TP", targetSimilarity.Value, 31, 170, 118);
+            DrawSimilarityBar(pixels, width, height, 18, footerTop, "SIM TP", targetSimilarity.Value, 31, 170, 118);
         if (stopSimilarity.HasValue)
-            DrawSimilarityBar(pixels, width, height, 18, footerTop + 52, "SL", stopSimilarity.Value, 220, 55, 82);
+            DrawSimilarityBar(pixels, width, height, 18, footerTop + 52, "SIM SL", stopSimilarity.Value, 220, 55, 82);
+        if (elliott is null)
+        {
+            if (targetOutcome.HasValue && stopOutcome.HasValue)
+            {
+                DrawSimilarityBar(pixels, width, height, 385, footerTop, "EST TP", targetOutcome.Value, 31, 170, 118);
+                DrawSimilarityBar(pixels, width, height, 385, footerTop + 52, "EST SL", stopOutcome.Value, 220, 55, 82);
+            }
+            else DrawTinyText(pixels, width, height, 385, footerTop, "ESTIMATE UNAVAILABLE", 2, 90, 90, 90);
+        }
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);

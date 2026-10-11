@@ -301,7 +301,11 @@ public sealed class SignalBatchService(
                     prepared = optionIndex + 1 < ranked.Length
                         ? PrepareProposalAsync(ranked[optionIndex + 1], positionSizeUsdt, minimumTargetProbability, token)
                         : null;
-                    if (proposal is null) continue;
+                    if (proposal is null)
+                    {
+                        Update(state => state with { Message = "پیشنهاد از فیلتر فاصله/برآورد نتیجه عبور نکرد؛ بررسی ادامه دارد. برای مشاهدهٔ پیشنهادهای بدون برآورد، حداقل را صفر بگذارید." });
+                        continue;
+                    }
                     var analysis = proposal.Analysis;
                     var technicalFeatures = analysis.Features;
                     var selected = option.Candidate;
@@ -411,7 +415,7 @@ public sealed class SignalBatchService(
             var selected = option.Candidate;
             var analysis = await professional.AnalyzeAsync(selected, option.Candles, option.Interval, token);
             if (EntryToTargetPercent(selected) < 0.5m ||
-                (analysis.Prediction.TargetPercent is { } probability && probability < minimumTargetProbability))
+                !PassesOutcomeFilter(analysis.Prediction, minimumTargetProbability))
                 return (PreparedProposal?)null;
             var chartInterval = ReviewChartInterval(option.Interval);
             IReadOnlyList<BybitKline> chartCandles;
@@ -444,7 +448,8 @@ public sealed class SignalBatchService(
             token.ThrowIfCancellationRequested();
             // Chart style is presentation-only; analysis retains the requested mode.
             var image = SignalChartRenderer.Render(chartCandles, selected, false,
-                TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent);
+                TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
+                targetOutcome: similarityResult.TargetOutcomePercent, stopOutcome: similarityResult.StopOutcomePercent);
             token.ThrowIfCancellationRequested();
             return new PreparedProposal(analysis, caption, image);
         }, token);
@@ -473,6 +478,9 @@ public sealed class SignalBatchService(
     };
     private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "1" => "1M", "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value };
+    internal static bool PassesOutcomeFilter(SignalSimilarityResult prediction, decimal minimum) =>
+        minimum <= 0m || prediction.TargetOutcomePercent is { } probability && probability >= minimum;
+
     public static decimal EntryToTargetPercent(SignalCandidate candidate) => candidate.EntryPrice <= 0m
         ? 0m : candidate.Direction == "Long"
             ? (candidate.TakeProfit - candidate.EntryPrice) / candidate.EntryPrice * 100m

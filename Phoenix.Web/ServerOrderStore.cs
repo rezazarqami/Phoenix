@@ -55,6 +55,9 @@ public sealed class ServerSignal
     public string? ChartMode { get; set; }
     public decimal? TargetSimilarityPercent { get; set; }
     public decimal? StopSimilarityPercent { get; set; }
+    public decimal? TargetOutcomePercent { get; set; }
+    public decimal? StopOutcomePercent { get; set; }
+    public int OutcomeValidationCount { get; set; }
     public int SimilaritySampleCount { get; set; }
     public TechnicalFeatureSnapshot? TechnicalFeatures { get; set; }
     public TechnicalFeatureSnapshot? EntryTechnicalFeatures { get; set; }
@@ -426,6 +429,9 @@ public sealed class ServerOrderStore
         Timeframe = signal.Timeframe, ChartMode = signal.ChartMode,
         TargetSimilarityPercent = signal.TargetSimilarityPercent,
         StopSimilarityPercent = signal.StopSimilarityPercent,
+        TargetOutcomePercent = signal.TargetOutcomePercent,
+        StopOutcomePercent = signal.StopOutcomePercent,
+        OutcomeValidationCount = signal.OutcomeValidationCount,
         SimilaritySampleCount = signal.SimilaritySampleCount,
         TechnicalFeatures = signal.TechnicalFeatures,
         EntryTechnicalFeatures = signal.EntryTechnicalFeatures,

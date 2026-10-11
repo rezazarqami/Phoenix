@@ -9,7 +9,11 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
-        return CalculateFromPatterns(candidate, snapshot.Patterns, token);
+        var similarity = CalculateFromPatterns(candidate, snapshot.Patterns, token);
+        var probability = snapshot.OutcomeModel?.Predict(candidate, candidate.TechnicalFeatures);
+        return similarity with { TargetOutcomePercent = probability,
+            StopOutcomePercent = probability.HasValue ? 100m - probability.Value : null,
+            OutcomeValidationCount = snapshot.OutcomeModel?.ValidationCount ?? 0 };
     }
 
     internal static SignalSimilarityResult CalculateFromPatterns(ServerSignal candidate,
@@ -166,4 +170,6 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
 }
 
 public sealed record SignalSimilarityResult(decimal? TargetPercent, decimal? StopPercent,
-    int SampleCount, int TargetSampleCount, int StopSampleCount, int CalibrationSampleCount = 0);
+    int SampleCount, int TargetSampleCount, int StopSampleCount, int CalibrationSampleCount = 0,
+    decimal? TargetOutcomePercent = null, decimal? StopOutcomePercent = null,
+    int OutcomeValidationCount = 0);

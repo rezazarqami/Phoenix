@@ -29,6 +29,9 @@ Run("Cancellation bulk handles All Long Short and preserves active positions", C
 Run("Crypto statistics include lifetime trades and ignore unentered signals", CryptoStatisticsTests.Lifetime);
 Run("Crypto statistics migrate queues, retain removed trades and refresh outcomes", CryptoStatisticsTests.Migration);
 
+Run("Outcome model learns approved evidence and validates chronologically", OutcomeModelTests.LearnsOutcomesAndValidates);
+Run("Outcome model rejects failed validation, duplication and future labels", OutcomeModelTests.RejectsUnvalidatedAndLeakedEvidence);
+
 Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
 Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);
 Run("Similarity structural breaks and retests use only confirmed past pivots", SimilarityTests.BreakAndRetestUseConfirmedPastPivots);

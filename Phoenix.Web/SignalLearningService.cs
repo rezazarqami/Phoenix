@@ -6,6 +6,7 @@ public sealed record LearnedSignalPattern(ServerSignal Signal, string Outcome,
 public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> Patterns,
     DateTime RefreshedAtUtc)
 {
+    internal SignalOutcomeModel? OutcomeModel { get; init; }
     public static readonly SignalLearningSnapshot Empty = new([], DateTime.MinValue);
 }
 
@@ -57,8 +58,11 @@ public sealed class SignalLearningService(
                 if (signal.EntryTriggeredAtUtc is not null && signal.EntryTechnicalFeatures is { } features)
                     patterns.Add(new(signal, signal.Outcome!, features));
             }
-            _snapshot = new(patterns, DateTime.UtcNow);
-            logger.LogInformation("Phoenix learned {Count} completed technical patterns.", patterns.Count);
+            _snapshot = new(patterns, DateTime.UtcNow)
+            { OutcomeModel = SignalOutcomeModel.Train(patterns, token) };
+            logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}.",
+                patterns.Count, _snapshot.OutcomeModel is not null, _snapshot.OutcomeModel?.ValidationCount ?? 0,
+                _snapshot.OutcomeModel?.ValidationBrier, _snapshot.OutcomeModel?.BaselineBrier);
         }
         finally { _refreshGate.Release(); }
     }

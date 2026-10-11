@@ -1,0 +1,61 @@
+using Phoenix.Web;
+
+internal static class OutcomeModelTests
+{
+    private static readonly TechnicalFeatureSnapshot Basic = new(0.5m, 1m, 0m, 0m, 0m,
+        1m, 1m, 0.5m, 0.5m, 1m, 0.5m);
+    private static LearnedSignalPattern[] History(bool invertHoldout = false) =>
+        Enumerable.Range(0, 100).Select(i =>
+        {
+            var entry = new DateTime(2026, 1, 1).AddDays(i);
+            var target = i % 2 == 0;
+            var f = Basic with { StopLevelStrength = target ? 0.9m : 0.1m };
+            return new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
+                EntryTriggeredAtUtc = entry, CompletedAtUtc = entry.AddHours(1) },
+                (invertHoldout && i >= 80 ? !target : target) ? "Target" : "StopLoss", f);
+        }).ToArray();
+    private static void Check(bool condition, string message)
+    { if (!condition) throw new Exception(message); }
+
+    public static void LearnsOutcomesAndValidates()
+    {
+        var history = History();
+        var model = SignalOutcomeModel.Train(history);
+        Check(model is not null, "Repeatable held-out distinction should validate");
+        Check(model!.ValidationCount == 20 && model.ValidationBrier < model.BaselineBrier,
+            "Only newer untouched outcomes validate the fitted model");
+        var signal = new ServerSignal { Direction = "Long" };
+        var target = model.Predict(signal, history[0].Features);
+        var stop = model.Predict(signal, history[1].Features);
+        Check(target > 65m && stop < 35m, "Outcome labels must teach an actual decision boundary");
+        Check(model.Predict(signal, history[0].Features with { Rsi14 = 0m, VolumeRatio = 9m,
+            BitcoinMarketAlignment = -1m, HigherTimeframeAlignment = -1m, PriceActionScore = 0m }) == target,
+            "Unapproved indicators cannot change the estimate");
+        Check(model.Predict(signal, Basic) is null, "Missing learned evidence must not masquerade as confidence");
+        Check(model.Predict(history[0].Signal, history[0].Features) is null,
+            "A current model must not predict an earlier trade using future training outcomes");
+    }
+
+    public static void RejectsUnvalidatedAndLeakedEvidence()
+    {
+        Check(SignalOutcomeModel.Train(History(true)) is null, "Failed later validation must withhold estimates");
+        var constant = History().Select(x => x with { Features = Basic }).ToArray();
+        Check(SignalOutcomeModel.Train(constant) is null, "Indistinguishable classes cannot produce a decisive score");
+        var future = History();
+        foreach (var row in future) row.Signal.CompletedAtUtc = new DateTime(2027, 1, 1);
+        Check(SignalOutcomeModel.Train(future) is null, "Outcomes unknown at validation start cannot train");
+        var duplicate = History().Take(10).ToArray();
+        Check(SignalOutcomeModel.Train(Enumerable.Range(0, 10).SelectMany(_ => duplicate).ToArray()) is null,
+            "Duplicating records cannot satisfy sample requirements");
+        var similarityOnly = new SignalSimilarityResult(90m, 89m, 100, 50, 50);
+        Check(!SignalBatchService.PassesOutcomeFilter(similarityOnly, 55m),
+            "High resemblance cannot satisfy an outcome probability filter");
+        Check(SignalBatchService.PassesOutcomeFilter(similarityOnly, 0m),
+            "A disabled filter still allows human review when the model abstains");
+        Check(SignalBatchService.PassesOutcomeFilter(similarityOnly with { TargetOutcomePercent = 60m }, 55m),
+            "Validated estimates must drive the configured threshold");
+        using var cts = new CancellationTokenSource(); cts.Cancel();
+        try { SignalOutcomeModel.Train(History(), cts.Token); throw new Exception("Cancellation ignored"); }
+        catch (OperationCanceledException) { }
+    }
+}

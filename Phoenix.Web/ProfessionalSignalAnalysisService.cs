@@ -76,6 +76,7 @@ public sealed class ProfessionalSignalAnalysisService(
         var serverSignal = new ServerSignal
         {
             Symbol = candidate.Symbol, Direction = candidate.Direction, Timeframe = signalInterval,
+            EntryTriggeredAtUtc = asOfUtc,
             ChartMode = "Professional", TechnicalFeatures = enriched
         };
         var prediction = await predictor.CalculateAsync(serverSignal, token);

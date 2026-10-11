@@ -25,7 +25,10 @@ public sealed record TechnicalFeatureSnapshot(
     decimal? IchimokuEntryPosition = null,
     decimal? IchimokuStopPosition = null,
     decimal? IchimokuTargetPosition = null,
-    IReadOnlyList<MultiScaleLevelSnapshot>? MultiScaleLevels = null);
+    IReadOnlyList<MultiScaleLevelSnapshot>? MultiScaleLevels = null,
+    decimal? StructureBreakScore = null,
+    decimal? StructureRetestScore = null,
+    int SimilarityContextVersion = 0);
 
 public static class TechnicalFeatureExtractor
 {
@@ -88,6 +91,7 @@ public static class TechnicalFeatureExtractor
 
         var structure = StructureScore(swingHighs, swingLows, direction);
         var liquiditySweep = LiquiditySweep(candles, direction);
+        var events = StructureEvents(candles, direction, atr);
 
         return new(
             Rsi(candles, 14) / 100m,
@@ -108,7 +112,9 @@ public static class TechnicalFeatureExtractor
             TargetLevelStrength: Strength(candidate.TakeProfit),
             IchimokuEntryPosition: CloudAt(candidate.EntryPrice),
             IchimokuStopPosition: CloudAt(candidate.StopLoss),
-            IchimokuTargetPosition: CloudAt(candidate.TakeProfit));
+            IchimokuTargetPosition: CloudAt(candidate.TakeProfit),
+            StructureBreakScore: events.Break,
+            StructureRetestScore: events.Retest);
     }
 
     private static decimal[] Swings(IReadOnlyList<BybitKline> candles, bool highs)
@@ -144,6 +150,37 @@ public static class TechnicalFeatureExtractor
         var sweptHigh = last.High > prior.Max(x => x.High) && last.Close < prior.Max(x => x.High);
         return direction > 0m ? (sweptLow ? 1m : sweptHigh ? 0m : 0.5m)
             : sweptHigh ? 1m : sweptLow ? 0m : 0.5m;
+    }
+
+    // Only pivots confirmed before each break may define its level. Later
+    // candles can confirm a retest, but never retrospectively create a break.
+    internal static (decimal Break, decimal Retest) StructureEvents(
+        IReadOnlyList<BybitKline> candles, decimal direction, decimal atr)
+    {
+        for (var i = candles.Count - 1; i >= Math.Max(6, candles.Count - 12); i--)
+        {
+            decimal? high = null, low = null;
+            for (var pivot = Math.Max(2, i - 50); pivot <= i - 3; pivot++)
+            {
+                var c = candles[pivot];
+                if (c.High > candles[pivot - 1].High && c.High > candles[pivot - 2].High &&
+                    c.High >= candles[pivot + 1].High && c.High >= candles[pivot + 2].High) high = c.High;
+                if (c.Low < candles[pivot - 1].Low && c.Low < candles[pivot - 2].Low &&
+                    c.Low <= candles[pivot + 1].Low && c.Low <= candles[pivot + 2].Low) low = c.Low;
+            }
+            var bullish = high.HasValue && candles[i - 1].Close <= high && candles[i].Close > high;
+            var bearish = low.HasValue && candles[i - 1].Close >= low && candles[i].Close < low;
+            if (!bullish && !bearish) continue;
+            var level = bullish ? high!.Value : low!.Value;
+            var aligned = bullish == (direction > 0m);
+            var score = aligned ? 1m : 0m;
+            var tolerance = Math.Max(0m, atr) * 0.25m;
+            var retest = candles.Skip(i + 1).Any(c => bullish
+                ? c.Low >= level - tolerance && c.Low <= level + tolerance && c.Close > level
+                : c.High >= level - tolerance && c.High <= level + tolerance && c.Close < level);
+            return (score, retest ? score : 0.5m);
+        }
+        return (0.5m, 0.5m);
     }
 
     private static decimal Midpoint(IReadOnlyList<BybitKline> candles, int period)

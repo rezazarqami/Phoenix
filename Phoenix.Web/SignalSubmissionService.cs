@@ -58,6 +58,9 @@ public sealed class SignalSubmissionService(
             queued.TargetSimilarityPercent = similarityResult.TargetPercent;
             queued.StopSimilarityPercent = similarityResult.StopPercent;
             queued.SimilaritySampleCount = similarityResult.SampleCount;
+            queued.TargetOutcomePercent = similarityResult.TargetOutcomePercent;
+            queued.StopOutcomePercent = similarityResult.StopOutcomePercent;
+            queued.OutcomeValidationCount = similarityResult.OutcomeValidationCount;
             await store.AddAsync(queued, token, evidence);
             await telegram.SignalQueuedAsync(queued, token);
 

@@ -34,6 +34,9 @@ public sealed class EntrySignalReviewService(
             signal.TargetSimilarityPercent = analysis.Prediction.TargetPercent;
             signal.StopSimilarityPercent = analysis.Prediction.StopPercent;
             signal.SimilaritySampleCount = analysis.Prediction.SampleCount;
+            signal.TargetOutcomePercent = analysis.Prediction.TargetOutcomePercent;
+            signal.StopOutcomePercent = analysis.Prediction.StopOutcomePercent;
+            signal.OutcomeValidationCount = analysis.Prediction.OutcomeValidationCount;
             signal.TechnicalFeatures = analysis.Features;
             if (signal.EntryTriggeredAtUtc is { } entryAt)
             {
@@ -49,7 +52,8 @@ public sealed class EntrySignalReviewService(
             logger.LogWarning(exception, "Current AI refresh failed for {Symbol}; rendering with stored probabilities", signal.Symbol);
         }
         var image = SignalChartRenderer.Render(chartCandles, candidate, false,
-            Badge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent);
+            Badge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent,
+            targetOutcome: signal.TargetOutcomePercent, stopOutcome: signal.StopOutcomePercent);
         return new(image, analysis is not null);
     }
 
@@ -58,7 +62,7 @@ public sealed class EntrySignalReviewService(
         try
         {
             var review = await BuildCurrentAsync(signal, token);
-            var caption = $"🎯 <b>قیمت به نقطه ورود رسید</b>\nنماد: {signal.Symbol}\nجهت: {signal.Direction}\n" +
+            var caption = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + $"\n\n🎯 <b>قیمت به نقطه ورود رسید</b>\nنماد: {signal.Symbol}\nجهت: {signal.Direction}\n" +
                 $"شباهت {(review.AiRefreshed ? "جدید" : "آخرین")} به تارگت‌ها: {F(signal.TargetSimilarityPercent)}٪\n" +
                 $"شباهت {(review.AiRefreshed ? "جدید" : "آخرین")} به استاپ‌ها: {F(signal.StopSimilarityPercent)}٪\n" +
                 $"رژیم بازار: {signal.MarketRegime ?? "در دسترس نیست"}\n\nاین تصویر مربوط به شرایط فعلی بازار در لحظه ورود است.";

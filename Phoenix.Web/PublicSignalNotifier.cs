@@ -115,9 +115,9 @@ public sealed class PublicSignalNotifier
 
             (‌1%- از کل سرمایه)
             """;
-        var scores = signal.TargetSimilarityPercent.HasValue
+        var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + (signal.TargetSimilarityPercent.HasValue
             ? $"\n\n🟢 شباهت به تارگت‌ها: {Format(signal.TargetSimilarityPercent.Value)}٪\n🔴 شباهت به استاپ‌ها: {Format(signal.StopSimilarityPercent ?? 0m)}٪"
-            : string.Empty;
+            : string.Empty);
         if (image is not null)
             return IsDedicatedSignal(signal)
                 ? await SendDedicatedSignalPhotoAsync(text + scores, image, signal.Id, token)
@@ -210,9 +210,9 @@ public sealed class PublicSignalNotifier
     private Task<int?> ReplyResultAsync(ServerSignal signal, string headline, byte[]? image,
         CancellationToken token)
     {
-        var scores = signal.TargetSimilarityPercent.HasValue
+        var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + (signal.TargetSimilarityPercent.HasValue
             ? $"\n\n🟢 <b>شباهت به تارگت‌ها در زمان صدور: {Format(signal.TargetSimilarityPercent.Value)}٪</b>\n🔴 <b>شباهت به استاپ‌ها در زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)}٪</b>"
-            : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود";
+            : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود");
         var failure = signal.Outcome == "StopLoss" && !string.IsNullOrWhiteSpace(signal.FailureReason)
             ? $"\nعلت فنی محتمل: {signal.FailureReason}" : string.Empty;
         var text = headline + scores + failure;

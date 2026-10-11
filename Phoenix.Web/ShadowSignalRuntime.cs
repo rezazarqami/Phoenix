@@ -33,6 +33,9 @@ public sealed class ShadowSignalRuntime
             MarketRegime = analysis.MarketRegime,
             TargetSimilarityPercent = analysis.Prediction.TargetPercent,
             StopSimilarityPercent = analysis.Prediction.StopPercent,
+            TargetOutcomePercent = analysis.Prediction.TargetOutcomePercent,
+            StopOutcomePercent = analysis.Prediction.StopOutcomePercent,
+            OutcomeValidationCount = analysis.Prediction.OutcomeValidationCount,
             SimilaritySampleCount = analysis.Prediction.SampleCount
         };
         await Store.AddAsync(signal, token,

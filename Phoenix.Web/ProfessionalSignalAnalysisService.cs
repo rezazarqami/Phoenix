@@ -40,39 +40,17 @@ public sealed class ProfessionalSignalAnalysisService(
         signalCandles = AtEntry(signalCandles, signalInterval);
         var symbolHistory = symbolTasks.ToDictionary(x => x.Key, x => AtEntry(x.Value.Result, x.Key));
 
-        var snapshots = ContextIntervals.Select(interval =>
-            (Interval: interval, Features: TechnicalFeatureExtractor.Calculate(symbolHistory[interval], candidate))).ToArray();
-        var direction = candidate.Direction == "Long" ? 1m : -1m;
-        var weights = new Dictionary<string, decimal> { ["15"] = 1m, ["60"] = 1.5m, ["240"] = 2m, ["D"] = 2.5m };
-        var alignment = snapshots.Sum(x => DirectionalTrend(x.Features, direction) * weights[x.Interval]) / weights.Values.Sum();
-
-        var btc = bitcoinTasks.Select(x => TechnicalFeatureExtractor.Calculate(AtEntry(x.Value.Result, x.Key), candidate)).ToArray();
-        var bitcoinAlignment = btc.Average(x => DirectionalTrend(x, direction));
-        var primaryMatch = snapshots.FirstOrDefault(x => x.Interval == signalInterval);
-        var primary = primaryMatch.Features
-            ?? TechnicalFeatureExtractor.Calculate(signalCandles, candidate);
-        var regimeScore = snapshots.Average(x => Math.Abs(x.Features.TrendStrength));
-        var regime = regimeScore >= 0.62m ? "روند قدرتمند" : regimeScore <= 0.22m ? "رنج/فشرده" : "روند متوسط";
-        var structure = snapshots.Sum(x => x.Features.StructureScore * weights[x.Interval]) / weights.Values.Sum();
-        var sweep = snapshots.Sum(x => x.Features.LiquiditySweepScore * weights[x.Interval]) / weights.Values.Sum();
         var histories = symbolHistory;
         foreach (var (interval, task) in extendedTasks)
             if (task.Result is { } candles && AtEntry(candles, interval) is { Count: >= 80 } earlier)
                 histories[interval] = earlier;
-        if (signalCandles.Count >= 80) histories[signalInterval] = signalCandles;
-        var scales = MultiScaleLevelExtractor.Calculate(histories, candidate);
-        var enriched = primary with
-        {
-            HigherTimeframeAlignment = alignment,
-            BitcoinMarketAlignment = bitcoinAlignment,
-            MarketRegimeScore = regimeScore,
-            StructureScore = structure,
-            LiquiditySweepScore = sweep,
-            MultiScaleLevels = scales,
-            StructureBreakScore = snapshots.Sum(x => x.Features.StructureBreakScore!.Value * weights[x.Interval]) / weights.Values.Sum(),
-            StructureRetestScore = snapshots.Sum(x => x.Features.StructureRetestScore!.Value * weights[x.Interval]) / weights.Values.Sum(),
-            SimilarityContextVersion = 1
-        };
+        histories[signalInterval] = signalCandles;
+        var enriched = BuildFeatures(candidate, signalInterval, histories);
+        var direction = candidate.Direction == "Long" ? 1m : -1m;
+        var btc = bitcoinTasks.Select(x => TechnicalFeatureExtractor.Calculate(AtEntry(x.Value.Result, x.Key), candidate)).ToArray();
+        enriched = enriched with { BitcoinMarketAlignment = btc.Average(x => DirectionalTrend(x, direction)) };
+        var regime = enriched.MarketRegimeScore >= 0.62m ? "روند قدرتمند"
+            : enriched.MarketRegimeScore <= 0.22m ? "رنج/فشرده" : "روند متوسط";
         var serverSignal = new ServerSignal
         {
             Symbol = candidate.Symbol, Direction = candidate.Direction, Timeframe = signalInterval,
@@ -83,6 +61,33 @@ public sealed class ProfessionalSignalAnalysisService(
         // Keep the technical fingerprint for comparison and learning without
         // generating generic positive/negative commentary for proposals.
         return new(enriched, prediction, regime, [], []);
+    }
+
+    // One versioned extraction path for live entry reviews and historical reconstruction.
+    internal static TechnicalFeatureSnapshot BuildFeatures(SignalCandidate candidate, string interval,
+        IReadOnlyDictionary<string, IReadOnlyList<BybitKline>> histories)
+    {
+        var weights = new Dictionary<string, decimal> { ["15"] = 1m, ["60"] = 1.5m, ["240"] = 2m, ["D"] = 2.5m };
+        if (ContextIntervals.Any(x => !histories.TryGetValue(x, out var candles) || candles.Count < 52))
+            throw new InvalidOperationException("Incomplete closed-candle market context.");
+        var snapshots = ContextIntervals.ToDictionary(x => x,
+            x => TechnicalFeatureExtractor.Calculate(histories[x], candidate));
+        var primary = snapshots.TryGetValue(interval, out var matched) ? matched
+            : TechnicalFeatureExtractor.Calculate(histories[interval], candidate);
+        var direction = candidate.Direction == "Long" ? 1m : -1m;
+        decimal Weighted(Func<TechnicalFeatureSnapshot, decimal> select) =>
+            snapshots.Sum(x => select(x.Value) * weights[x.Key]) / weights.Values.Sum();
+        return primary with
+        {
+            HigherTimeframeAlignment = Weighted(f => DirectionalTrend(f, direction)),
+            MarketRegimeScore = snapshots.Values.Average(f => Math.Abs(f.TrendStrength)),
+            StructureScore = Weighted(f => f.StructureScore),
+            LiquiditySweepScore = Weighted(f => f.LiquiditySweepScore),
+            StructureBreakScore = Weighted(f => f.StructureBreakScore!.Value),
+            StructureRetestScore = Weighted(f => f.StructureRetestScore!.Value),
+            MultiScaleLevels = MultiScaleLevelExtractor.Calculate(histories, candidate),
+            SimilarityContextVersion = 2
+        };
     }
 
     internal static IReadOnlyList<BybitKline> CandlesAvailableAt(

@@ -34,8 +34,8 @@ internal static class SimilarityTests
             new LearnedSignalPattern(signal, "StopLoss", features with
             { IchimokuPosition = 1m, IchimokuCloudBias = 1m, SupportDistanceAtr = 10m, ResistanceDistanceAtr = 10m }))).ToArray();
         var insufficient = SignalSimilarityService.CalculateFromPatterns(signal, unsupported);
-        Check(insufficient.TargetPercent is null && insufficient.StopPercent is null,
-            "Many unrelated examples must not masquerade as sufficient nearby evidence");
+        Check(insufficient.TargetPercent > insufficient.StopPercent,
+            "A distant opposing class must retain its low resemblance instead of suppressing the comparison");
         Check(insufficient.CalibrationSampleCount == unsupported.Length, "Unavailable scores must retain the number actually compared");
     }
 
@@ -58,6 +58,55 @@ internal static class SimilarityTests
         var legacy = features with { SimilarityContextVersion = 0, MarketRegimeScore = 0m,
             StructureScore = 0m, LiquiditySweepScore = 0m, StructureBreakScore = null, StructureRetestScore = null };
         Check(Similar(legacy) == 1d, "Missing legacy context must not be interpreted as contrary evidence");
+    }
+
+    public static void HistoricalDispersionAndEvidence()
+    {
+        var signal = new ServerSignal { Direction = "Long", Timeframe = "15" };
+        var target = Features with { StopLevelStrength = 0.9m };
+        var stop = Features with { StopLevelStrength = 0.1m };
+        var patterns = Enumerable.Range(0, 20).SelectMany(_ => new[]
+        { new LearnedSignalPattern(signal, "Target", target), new LearnedSignalPattern(signal, "StopLoss", stop) }).ToArray();
+        var candidate = new ServerSignal { Direction = "Long", Timeframe = "15", TechnicalFeatures = target };
+        var result = SignalSimilarityService.CalculateFromPatterns(candidate, patterns);
+        Check(result.TargetPercent == 100m && result.StopPercent < 20m,
+            "Constant shared readings must not bury the only distinguishing measurement");
+        var ambiguous = SignalSimilarityService.CalculateFromPatterns(withFeatures(target with { StopLevelStrength = 0.5m }), patterns);
+        Check(ambiguous.TargetPercent == ambiguous.StopPercent, "A midpoint must remain honestly ambiguous");
+        var missing = SignalSimilarityService.CalculateFromPatterns(withFeatures(Features), patterns);
+        Check(missing.TargetPercent is null && missing.StopPercent is null, "Missing distance evidence must abstain");
+        var legacy = target with { SimilarityContextVersion = 0, MultiScaleLevels = [], MarketRegimeScore = 0m };
+        Check(SignalOutcomeModel.Values(signal, legacy)[10] is null, "Unversioned historical context is missing, not zero");
+        Check(SignalReviewText.Comparison(81m, 80m).Contains("نزدیک"), "Close resemblance must be explained");
+        ServerSignal withFeatures(TechnicalFeatureSnapshot f) => new() { Direction = "Long", Timeframe = "15", TechnicalFeatures = f };
+    }
+
+    public static void TimeframeIdentityAndPastOnly()
+    {
+        var signal = new ServerSignal { Direction = "Long", Timeframe = "15" };
+        MultiScaleLevelSnapshot Level(string interval, decimal strength) =>
+            new(interval, 80, 0m, 0m, 0m, strength, 0m, 0m, 0m, 0m, 0m, 0m);
+        var target = Features with { MultiScaleLevels = [Level("15", .9m), Level("D", .1m)] };
+        var stop = Features with { MultiScaleLevels = [Level("15", .1m), Level("D", .9m)] };
+        var rows = Enumerable.Range(0, 10).SelectMany(i => new[] {
+            new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long", Timeframe = "15",
+                CompletedAtUtc = new DateTime(2026, 1, 1).AddDays(i) }, "Target", target),
+            new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long", Timeframe = "15",
+                CompletedAtUtc = new DateTime(2026, 1, 1).AddDays(i) }, "StopLoss", stop) }).ToArray();
+        var candidate = new ServerSignal { Direction = "Long", Timeframe = "15", TechnicalFeatures = target,
+            EntryTriggeredAtUtc = new DateTime(2026, 2, 1) };
+        var baseline = SignalSimilarityService.CalculateFromPatterns(candidate, rows);
+        Check(baseline.TargetPercent == 100m && baseline.StopPercent < 20m,
+            "Opposing timeframe readings cannot cancel through averaging");
+        Check(!SignalOutcomeModel.Values(signal, target).SequenceEqual(SignalOutcomeModel.Values(signal, stop)),
+            "Outcome learning must preserve timeframe identity too");
+        var future = rows.Select(x => new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(),
+            Direction = "Long", Timeframe = "15", CompletedAtUtc = new DateTime(2027, 1, 1) }, "StopLoss", target));
+        var review = SignalSimilarityService.CalculateFromPatterns(candidate, rows.Concat(future).Concat(rows).ToArray());
+        Check(review == baseline, "Future labels and duplicated IDs must not affect a past review");
+        var wrongInterval = new ServerSignal { Direction = "Long", Timeframe = "D", TechnicalFeatures = target };
+        Check(SignalSimilarityService.CalculateFromPatterns(wrongInterval, rows).TargetPercent is null,
+            "Unrelated signal timeframes cannot supply nearby evidence");
     }
 
     public static void BreakAndRetestUseConfirmedPastPivots()

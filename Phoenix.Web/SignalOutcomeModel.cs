@@ -69,6 +69,7 @@ internal sealed class SignalOutcomeModel
             scales[j] = Math.Sqrt(values.Average(x => Math.Pow(x - means[j], 2)));
             if (scales[j] < 0.0001d) scales[j] = 0;
         }
+        var activeIndices = Enumerable.Range(0, length).Where(j => scales[j] > 0d).ToArray();
         var x = raw.Select(v => Standardize(v, means, scales)).ToArray();
         var weights = new double[length + 1];
         var prior = rows.Count(r => r.Outcome == "Target") / (double)rows.Length;
@@ -80,7 +81,7 @@ internal sealed class SignalOutcomeModel
             for (var i = 0; i < rows.Length; i++)
             {
                 var error = Logistic(Dot(x[i], weights)) - (rows[i].Outcome == "Target" ? 1d : 0d);
-                for (var j = 0; j < length; j++) gradient[j] += error * x[i][j];
+                foreach (var j in activeIndices) gradient[j] += error * x[i][j];
                 gradient[length] += error;
             }
             for (var j = 0; j < weights.Length; j++)
@@ -104,19 +105,20 @@ internal sealed class SignalOutcomeModel
     private static double[] Standardize(double?[] values, double[] means, double[] scales) =>
         Enumerable.Range(0, values.Length).Select(j => scales[j] > 0d && values[j].HasValue
             ? Math.Clamp((values[j]!.Value - means[j]) / scales[j], -4d, 4d) : 0d).ToArray();
-    private static double Dot(double[] x, double[] w) =>
-        w[^1] + Enumerable.Range(0, x.Length).Sum(j => x[j] * w[j]);
+    private static double Dot(double[] x, double[] w)
+    {
+        var value = w[^1];
+        for (var j = 0; j < x.Length; j++) value += x[j] * w[j];
+        return value;
+    }
     private static double Logistic(double value) => 1d / (1d + Math.Exp(-Math.Clamp(value, -30d, 30d)));
 
     // Explicit allowlist: no RSI, volume, BTC alignment or reward/risk features.
-    internal static double?[] Values(ServerSignal s, TechnicalFeatureSnapshot f)
+    internal static double?[] PrimaryValues(ServerSignal s, TechnicalFeatureSnapshot f)
     {
         var sign = s.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
-        var context = f.SimilarityContextVersion >= 1 || f.MultiScaleLevels is { Count: > 0 };
-        var levels = f.MultiScaleLevels;
+        var context = f.SimilarityContextVersion >= 1;
         double? D(decimal? value) => value.HasValue ? (double)value.Value : null;
-        double? Level(Func<MultiScaleLevelSnapshot, decimal> select) => levels is { Count: > 0 }
-            ? (double)levels.Average(select) : null;
         return [D((f.IchimokuEntryPosition ?? f.IchimokuPosition) * sign), D(f.IchimokuCloudBias * sign),
             D(sign > 0 ? f.SupportDistanceAtr : f.ResistanceDistanceAtr),
             D(sign > 0 ? f.ResistanceDistanceAtr : f.SupportDistanceAtr),
@@ -124,8 +126,27 @@ internal sealed class SignalOutcomeModel
             D(f.IchimokuStopPosition * sign), D(f.IchimokuTargetPosition * sign),
             f.AtrPercent > 0 ? Math.Log((double)f.AtrPercent) : null,
             context ? D(f.MarketRegimeScore) : null, context ? D(f.StructureScore) : null,
-            context ? D(f.LiquiditySweepScore) : null, D(f.StructureBreakScore), D(f.StructureRetestScore),
-            Level(x => x.EntryStrength), Level(x => x.StopStrength), Level(x => x.TargetStrength),
-            Level(x => x.FibonacciEntry), Level(x => x.FibonacciStop), Level(x => x.FibonacciTarget)];
+            context ? D(f.LiquiditySweepScore) : null, D(f.StructureBreakScore), D(f.StructureRetestScore)];
+    }
+
+    internal static double?[] Values(ServerSignal s, TechnicalFeatureSnapshot f)
+    {
+        var primary = PrimaryValues(s, f);
+        var levels = f.MultiScaleLevels;
+        var sign = s.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
+        double? D(decimal? value) => value.HasValue ? (double)value.Value : null;
+        // Stable slots preserve opposing readings on individual timeframes and windows.
+        var multi = new List<double?>();
+        foreach (var interval in new[] { "1", "5", "15", "60", "240", "D", "W", "M" })
+        foreach (var window in new[] { 80, 240, 720 })
+        {
+            var level = levels?.FirstOrDefault(x => x.Interval == interval && x.Window == window);
+            if (level is null) { multi.AddRange(new double?[10]); continue; }
+            multi.AddRange([D(level.EntryStrength), D(level.StopStrength), D(level.TargetStrength),
+                D(level.FibonacciEntry), D(level.FibonacciStop), D(level.FibonacciTarget),
+                D(level.CloudEntry * sign), D(level.CloudStop * sign),
+                D(level.CloudTarget * sign), D(level.CloudBias * sign)]);
+        }
+        return primary.Concat(multi).ToArray();
     }
 }

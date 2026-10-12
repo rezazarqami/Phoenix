@@ -34,6 +34,8 @@ Run("Outcome model rejects failed validation, duplication and future labels", Ou
 
 Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
 Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);
+Run("Historical similarity preserves distinguishing evidence and abstains on missing data", SimilarityTests.HistoricalDispersionAndEvidence);
+Run("Historical similarity preserves timeframe identity and excludes future outcomes", SimilarityTests.TimeframeIdentityAndPastOnly);
 Run("Similarity structural breaks and retests use only confirmed past pivots", SimilarityTests.BreakAndRetestUseConfirmedPastPivots);
 
 Run("Target and stop similarity are independent and ignore price action", () =>
@@ -1125,6 +1127,7 @@ Run("Historical Bybit candles request the exact entry cutoff", () =>
     Equal(1, candles.Count);
     True(requestUri!.Query.Contains($"end={new DateTimeOffset(entry).ToUnixTimeMilliseconds()}"));
     Equal(entry, HistoricalEntryBackfillWorker.EntryTime(new ServerSignal { FilledAtUtc = entry })!.Value);
+    False(HistoricalEntryBackfillWorker.EntryTime(new ServerSignal { SubmittedAtUtc = entry }).HasValue);
 });
 
 Run("Completed historical entry fingerprints survive archive reload", () =>
@@ -1149,6 +1152,11 @@ Run("Completed historical entry fingerprints survive archive reload", () =>
         var saved = archive.GetAsync(30, 20).GetAwaiter().GetResult().Single().Signal;
         Equal(entry, saved.EntryTriggeredAtUtc!.Value);
         Equal(features.IchimokuPosition, saved.EntryTechnicalFeatures!.IchimokuPosition);
+        var upgraded = features with { SimilarityContextVersion = 2, MarketRegimeScore = .7m };
+        True(archive.SaveHistoricalEntryFeaturesAsync(signal.Id, entry, upgraded).GetAwaiter().GetResult());
+        False(archive.SaveHistoricalEntryFeaturesAsync(signal.Id, entry, upgraded).GetAwaiter().GetResult());
+        False(archive.SaveHistoricalEntryFeaturesAsync(signal.Id, entry, features).GetAwaiter().GetResult());
+        Equal(.7m, archive.GetAsync(30, 20).GetAwaiter().GetResult().Single().Signal.EntryTechnicalFeatures!.MarketRegimeScore);
     }
     finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
 });

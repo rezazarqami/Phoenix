@@ -232,7 +232,8 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
-            if (signal is not null && signal.EntryTechnicalFeatures is null)
+            if (signal is not null && (signal.EntryTechnicalFeatures is null ||
+                signal.EntryTechnicalFeatures.SimilarityContextVersion < features.SimilarityContextVersion))
             {
                 signal.EntryTriggeredAtUtc ??= entryAtUtc;
                 signal.EntryTechnicalFeatures = features;

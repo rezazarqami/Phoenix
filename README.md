@@ -181,11 +181,29 @@ PHOENIX_OPENAI_MODEL=gpt-5-mini
 `PHOENIX_OPENAI_MODEL` is optional. Never put the API key in browser JavaScript,
 source control, or a public environment variable.
 
-Each queued signal also shows its weighted historical similarity to signals that
-reached Target and StopLoss. The closest completed setups (direction, symbol,
-normalized range/target/stop distances, timeframe, and chart mode) receive more
-weight. Both outcome classes must exist; otherwise the panel reports insufficient
-history instead of inventing a percentage. This indicator is not a forecast.
+Each queued signal shows independent resemblance to completed Target and StopLoss
+entry snapshots, not two outcome probabilities. The comparison uses class-balanced
+historical dispersion of the approved technical readings; constant readings do not
+dilute changing evidence, and each timeframe/window retains its own identity.
+Distances use a 0.05 scale floor, a Gaussian RMS kernel, and exponential neighbor
+weighting. At least five usable examples per outcome, 70% observed varying fields,
+and five nearby examples in either outcome are required. A distant opposing class
+can therefore show low resemblance without suppressing the comparison. If history
+has no varying measurements, the legacy descriptive metric remains available.
+Percentages retain one decimal and messages show the gap; a gap below five points
+is described as close, not as a statistical confidence interval.
+
+Live and reconstructed entry snapshots share the version-2 extraction path using
+only candles closed by entry time. Existing earlier snapshots are upgraded in bounded
+background batches without changing trade outcomes; unknown entry times are skipped.
+Placing an order is not treated as an entry timestamp. Missing legacy market context
+is not a zero reading. Historical reviews exclude outcomes completed later and
+rebuild their distance scales using past-only samples; duplicated signal IDs and
+self-comparisons are excluded.
+
+A separate regularized outcome model preserves timeframe/window identity and must
+beat the historical-frequency baseline on a later chronological holdout before
+publishing any outcome estimate. Resemblance is never substituted for this estimate.
 
 Private Phoenix and Strategy 2 completion notifications query their own account's
 USDT `walletBalance` (not available USD balance or equity). The bounded five-second

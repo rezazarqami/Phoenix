@@ -8,7 +8,7 @@ public sealed class HistoricalEntryBackfillWorker(
     SignalLearningService learning, ILogger<HistoricalEntryBackfillWorker> logger) : BackgroundService
 {
     private readonly Dictionary<Guid, DateTime> _retryAfter = [];
-    private static readonly string[] ContextIntervals = ["15", "60", "240", "D", "W", "M"];
+    private static readonly string[] ContextIntervals = ["5", "15", "60", "240", "D", "W", "M"];
 
     protected override async Task ExecuteAsync(CancellationToken token)
     {
@@ -25,7 +25,7 @@ public sealed class HistoricalEntryBackfillWorker(
                     .Select(x => (Signal: x.Signal, Destination: shadow.Store));
                 var missing = real.Concat(observed)
                     .Where(x => x.Signal.Outcome is "Target" or "StopLoss" &&
-                        x.Signal.EntryTechnicalFeatures is null &&
+                        (x.Signal.EntryTechnicalFeatures is null || x.Signal.EntryTechnicalFeatures.SimilarityContextVersion < 2) &&
                         x.Signal.EntryPrice > 0m && x.Signal.Ceiling > x.Signal.Floor &&
                         x.Signal.Timeframe is not null && EntryTime(x.Signal) is not null)
                     .Where(x => !_retryAfter.TryGetValue(x.Signal.Id, out var until) || until <= DateTime.UtcNow)
@@ -62,7 +62,7 @@ public sealed class HistoricalEntryBackfillWorker(
     }
 
     internal static DateTime? EntryTime(ServerSignal signal) =>
-        signal.EntryTriggeredAtUtc ?? signal.FilledAtUtc ?? signal.SubmittedAtUtc;
+        signal.EntryTriggeredAtUtc ?? signal.FilledAtUtc;
 
     private async Task<TechnicalFeatureSnapshot> ReconstructAsync(ServerSignal signal,
         DateTime entryAt, CancellationToken token)
@@ -86,14 +86,11 @@ public sealed class HistoricalEntryBackfillWorker(
                 var candles = ProfessionalSignalAnalysisService.CandlesAvailableAt(
                     await bybit.GetKlinesBeforeAsync(signal.Symbol, context, entryAt, 1000, token),
                     context, entryAt);
-                if (candles.Count >= 80) histories[context] = candles;
+                if (candles.Count >= 52) histories[context] = candles;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
             catch (Exception ex) { logger.LogDebug(ex, "No {Interval} context at historical entry", context); }
         }
-        return TechnicalFeatureExtractor.Calculate(primary, candidate) with
-        {
-            MultiScaleLevels = MultiScaleLevelExtractor.Calculate(histories, candidate)
-        };
+        return ProfessionalSignalAnalysisService.BuildFeatures(candidate, interval, histories);
     }
 }

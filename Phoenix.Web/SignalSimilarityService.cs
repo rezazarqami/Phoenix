@@ -9,7 +9,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
-        var similarity = CalculateFromPatterns(candidate, snapshot.Patterns, token);
+        var similarity = CalculateFromPatterns(candidate, snapshot.Patterns, token, snapshot.SimilarityMetric);
         var probability = snapshot.OutcomeModel?.Predict(candidate, candidate.TechnicalFeatures);
         return similarity with { TargetOutcomePercent = probability,
             StopOutcomePercent = probability.HasValue ? 100m - probability.Value : null,
@@ -17,9 +17,16 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     }
 
     internal static SignalSimilarityResult CalculateFromPatterns(ServerSignal candidate,
-        IReadOnlyList<LearnedSignalPattern> patterns, CancellationToken token = default)
+        IReadOnlyList<LearnedSignalPattern> patterns, CancellationToken token = default,
+        SignalSimilarityMetric? metric = null)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
+        patterns = patterns.Where(x => x.Signal.Id != candidate.Id || candidate.Id == Guid.Empty)
+            .Where(x => candidate.EntryTriggeredAtUtc is not { } entry || x.Signal.CompletedAtUtc < entry)
+            .Select((x, i) => (Pattern: x, Key: x.Signal.Id == Guid.Empty ? $"legacy:{i}" : x.Signal.Id.ToString()))
+            .GroupBy(x => x.Key).Select(x => x.First().Pattern).ToArray();
+        if (candidate.EntryTriggeredAtUtc is not null) metric = null; // Historical reviews need a past-only ruler.
+        metric ??= SignalSimilarityMetric.Build(patterns);
         var targets = patterns.Where(x => x.Outcome == "Target").ToArray();
         var stops = patterns.Where(x => x.Outcome == "StopLoss").ToArray();
         if (targets.Length < 5 || stops.Length < 5)
@@ -29,28 +36,33 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         var targetEvidence = Score(targets);
         var stopEvidence = Score(stops);
         var compared = targets.Length + stops.Length;
-        if (targetEvidence.CloseCount < 5 || stopEvidence.CloseCount < 5)
+        if (targetEvidence.UsedCount < 5 || stopEvidence.UsedCount < 5 ||
+            Math.Max(targetEvidence.CloseCount, stopEvidence.CloseCount) < 5)
             return new(null, null, patterns.Count, targets.Length, stops.Length, compared);
-        return new(Math.Round((decimal)(targetEvidence.Score * 100d), 0),
-            Math.Round((decimal)(stopEvidence.Score * 100d), 0), patterns.Count,
+        return new(Math.Round((decimal)(targetEvidence.Score * 100d), 1),
+            Math.Round((decimal)(stopEvidence.Score * 100d), 1), patterns.Count,
             targets.Length, stops.Length, compared);
 
-        (double Score, int CloseCount) Score(LearnedSignalPattern[] group)
+        (double Score, int CloseCount, int UsedCount) Score(LearnedSignalPattern[] group)
         {
             double weighted = 0d, weights = 0d;
             var closeCount = 0;
+            var usedCount = 0;
             foreach (var example in group)
             {
                 token.ThrowIfCancellationRequested();
-                var similarity = TechnicalSimilarity(candidate, example.Signal,
-                    candidate.TechnicalFeatures, example.Features);
+                var measured = metric is null ? TechnicalSimilarity(candidate, example.Signal,
+                    candidate.TechnicalFeatures, example.Features)
+                    : metric.Compare(candidate, candidate.TechnicalFeatures, example);
+                if (measured is not { } similarity) continue;
+                usedCount++;
                 // Initial transparent settings, not fitted or calibrated probabilities.
                 var weight = Math.Exp(-8d * (1d - similarity));
                 weighted += similarity * weight;
                 weights += weight;
-                if (similarity >= 0.65d) closeCount++;
+                if (similarity >= (metric is null ? 0.65d : 0.5d)) closeCount++;
             }
-            return (weighted / weights, closeCount);
+            return (weights > 0d ? weighted / weights : 0d, closeCount, usedCount);
         }
     }
 
@@ -132,9 +144,9 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     }
 
     private static bool HasContext(TechnicalFeatureSnapshot features) =>
-        features.SimilarityContextVersion >= 1 || features.MultiScaleLevels is { Count: > 0 };
+        features.SimilarityContextVersion >= 1;
 
-    private static double? TimeframeSimilarity(string? left, string? right)
+    internal static double? TimeframeSimilarity(string? left, string? right)
     {
         static double Minutes(string? interval) => interval switch
         {

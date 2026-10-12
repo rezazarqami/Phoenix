@@ -1,6 +1,8 @@
 (() => {
 const faMarket = new Intl.NumberFormat('fa-IR');
 const batchError = document.querySelector('#batchError');
+const retryConnection = document.querySelector('#retryBatchConnection');
+let batchConnectionLost = false;
 function showBatchError(message) {
   if (batchError) batchError.textContent = message;
   document.querySelector('#marketMessage').textContent = message;
@@ -37,11 +39,12 @@ async function batchRequest(url, options, cancellation) {
   const abort = () => controller.abort();
   if (cancellation?.aborted) controller.abort();
   cancellation?.addEventListener('abort', abort, {once: true});
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, {...options, signal: controller.signal, cache: 'no-store'});
     if (response.status === 401) { location.replace('/login'); throw new Error('نشست ورود پایان یافته است؛ دوباره وارد شوید.'); }
-    const data = await response.json().catch(() => { throw new Error('پاسخ سرور معتبر نیست؛ دوباره تلاش کنید.'); });
+    if (response.status >= 500) throw new Error('سرور موقتاً پاسخ نمی‌دهد؛ در حال بررسی دوباره ارتباط…');
+    const data = await response.json().catch(() => { throw new Error('پاسخ سرور کامل دریافت نشد؛ در حال بررسی دوباره ارتباط…'); });
     if (!response.ok) {
       const error = new Error(data.error || 'دستور انجام نشد؛ وضعیت صف را بررسی کنید.');
       error.commandRejected = true;
@@ -50,6 +53,7 @@ async function batchRequest(url, options, cancellation) {
     return data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('پاسخ سرور طول کشید؛ وضعیت صف در حال بررسی است.');
+    if (error.name === 'TypeError') throw new Error('ارتباط با سرور قطع شد؛ در حال بررسی دوباره ارتباط…');
     throw error;
   } finally { clearTimeout(timeout); cancellation?.removeEventListener('abort', abort); }
 }
@@ -101,6 +105,8 @@ async function batchCommand(url, options, message) {
     return true;
   } catch (error) {
     commandUnconfirmed = !error.commandRejected;
+    batchConnectionLost = commandUnconfirmed;
+    if (retryConnection) retryConnection.hidden = !batchConnectionLost;
     unconfirmedCommand = commandUnconfirmed ? url : null;
     showBatchError(error.message);
     if (url.endsWith('/stop')) document.querySelector('#stopBatch').disabled = false;
@@ -156,32 +162,52 @@ async function pollBatch() {
   const revision = batchRevision;
   const controller = new AbortController();
   batchPollController = controller;
-  const timeout = setTimeout(() => controller.abort(), 8000);
   batchPollTask = (async () => {
     try {
-      const response = await fetch('/api/analysis/signal-batch', {cache: 'no-store', signal: controller.signal});
-      const data = await response.json();
-      if (response.status === 401) return location.replace('/login');
-      if (response.ok && revision === batchRevision && !batchCommandPending) {
+      // Check authentication and HTTP errors before parsing JSON. A 401 has
+      // no JSON body and previously appeared as an endless connection error.
+      const data = await batchRequest('/api/analysis/signal-batch', {}, controller.signal);
+      if (revision === batchRevision && !batchCommandPending) {
         renderBatch(data);
+        if (batchConnectionLost) {
+          batchConnectionLost = false;
+          if (retryConnection) retryConnection.hidden = true;
+          showBatchError('');
+        }
         if (commandUnconfirmed && (unconfirmedCommand?.endsWith('/stop') ? !data.running : data.running)) {
           commandUnconfirmed = false; unconfirmedCommand = null; showBatchError('');
         }
         return data;
       }
     } catch (error) {
-      if (revision === batchRevision && !batchCommandPending && error.name !== 'AbortError')
-        showBatchError('دریافت وضعیت صف ناموفق بود؛ اتصال را بررسی کنید.');
+      if (revision === batchRevision && !batchCommandPending && !controller.signal.aborted) {
+        batchConnectionLost = true;
+        if (retryConnection) retryConnection.hidden = false;
+        showBatchError(error.message);
+      }
     }
-    finally { clearTimeout(timeout); batchPollController = null; }
+    finally { batchPollController = null; }
   })();
   try { return await batchPollTask; }
   finally { batchPollTask = null; }
 }
 async function watchBatch() {
   await pollBatch();
-  setTimeout(watchBatch, lastBatchState?.stopping ? 1500 : lastBatchState?.running ? 3000 : 10000);
+  setTimeout(watchBatch, batchConnectionLost || lastBatchState?.stopping ? 1500 : lastBatchState?.running ? 3000 : 10000);
 }
+async function reconnectBatch() {
+  if (batchCommandPending) return;
+  if (retryConnection) retryConnection.disabled = true;
+  try {
+    if (batchPollTask) await batchPollTask;
+    await pollBatch();
+  } finally { if (retryConnection) retryConnection.disabled = false; }
+}
+retryConnection?.addEventListener('click', reconnectBatch);
+if (typeof window !== 'undefined') window.addEventListener('online', reconnectBatch);
+document.addEventListener?.('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && batchConnectionLost) reconnectBatch();
+});
 watchBatch();
 
 })();

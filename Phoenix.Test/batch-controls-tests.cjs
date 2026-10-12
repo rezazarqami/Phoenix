@@ -5,25 +5,27 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../Phoenix.Web/wwwroot/signal-batch-controls.js'), 'utf8');
 function setup(storageBlocked = false) {
   const nodes = new Map();
-  const calls = [], timers = new Map(); let nextTimer = 0;
+  const calls = [], timers = new Map(), redirects = [], events = {}; let nextTimer = 0;
   function node(id) {
     if (!nodes.has(id)) nodes.set(id, {value: 'All', textContent: '', disabled: false, checked: false,
       classList: {toggle() {}}, closest() {return this;},
       addEventListener(type, callback) {this[type] = callback;}});
     return nodes.get(id);
   }
-  const context = {document: {querySelector: node}, localStorage: {getItem() {if (storageBlocked) throw new Error('Storage denied'); return null;}, setItem() {if (storageBlocked) throw new Error('Storage denied');}},
+  const context = {document: {querySelector: node}, location: {replace(url) { redirects.push(url); }},
+    window: {addEventListener(name, callback) { events[name] = callback; }},
+    localStorage: {getItem() {if (storageBlocked) throw new Error('Storage denied'); return null;}, setItem() {if (storageBlocked) throw new Error('Storage denied');}},
     faMarket: new Intl.NumberFormat('fa-IR'), AbortController,
     setTimeout(callback, ms) {timers.set(++nextTimer, {callback, ms}); return nextTimer;},
     clearTimeout(id) {timers.delete(id);},
     fetch(url, options) {
       let resolve, reject;
       const task = new Promise((yes, no) => {resolve = yes; reject = no;});
-      calls.push({url, options, resolve(data) {resolve({ok: true, json: async () => data});}, reject});
+      calls.push({url, options, resolve(data) {resolve({ok: true, json: async () => data});}, resolveResponse: resolve, reject});
       return task;
     }};
   vm.createContext(context); vm.runInContext(source.replace('watchBatch();', 'globalThis.pollBatch = pollBatch; watchBatch();'), context);
-  return {nodes, node, calls, timers, context};
+  return {nodes, node, calls, timers, context, redirects, events};
 }
 const state = running => ({running, message: running ? 'بررسی بازار' : 'متوقف شد', approved: 0, target: 1, checked: 1, rejected: 0});
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -57,7 +59,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   const retry = h.node('#startBatch').click();
   const post = h.calls.at(-1);
   post.options.signal.addEventListener('abort', () => post.reject(Object.assign(new Error('timeout'), {name: 'AbortError'})));
-  [...h.timers.values()].find(t => t.ms === 10000).callback();
+  [...h.timers.values()].find(t => t.ms === 15000).callback();
   await flush();
   assert.match(h.node('#marketMessage').textContent, /پاسخ سرور/);
   assert.equal(h.calls.filter(c => c.options.method === 'POST').length, 3);
@@ -73,7 +75,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   const lostStop = h.node('#stopBatch').click();
   const lostPost = h.calls.at(-1);
   lostPost.options.signal.addEventListener('abort', () => lostPost.reject(Object.assign(new Error('timeout'), {name: 'AbortError'})));
-  [...h.timers.values()].find(t => t.ms === 10000).callback(); await flush();
+  [...h.timers.values()].find(t => t.ms === 15000).callback(); await flush();
   assert.match(h.node('#batchStatus').textContent, /توقف/, 'A timed-out stop must not restore old running text');
   h.calls.at(-1).resolve(state(false)); await lostStop;
   assert.equal(h.node('#batchError').textContent, '');
@@ -129,5 +131,41 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(stale.node('#startBatch').disabled, true);
   actualPost.resolve({...state(false), runId:'queue-c'}); await flush();
   stale.calls.at(-1).resolve({...state(false), runId:'queue-c'}); await staleStop;
+  // The server sends an empty body on session expiry. Detect 401 before
+  // attempting JSON, rather than trapping the user in a connection warning.
+  const expired = setup(); let parsed = false;
+  expired.calls[0].resolveResponse({ok:false, status:401, json:async () => {parsed = true; throw new SyntaxError();}});
+  await flush();
+  assert.deepEqual(expired.redirects, ['/login']);
+  assert.equal(parsed, false);
+  // A gateway HTML response must be identified as server unavailability and
+  // recover on a fresh authoritative GET, without creating a new queue.
+  const gateway = setup();
+  gateway.calls[0].resolveResponse({ok:false, status:502, json:async () => {throw new SyntaxError();}});
+  await flush();
+  assert.match(gateway.node('#batchError').textContent, /سرور موقتاً/);
+  assert.equal(gateway.node('#retryBatchConnection').hidden, false);
+  assert.ok([...gateway.timers.values()].some(t=>t.ms===1500));
+  const recoverGateway = gateway.node('#retryBatchConnection').click();
+  gateway.calls.at(-1).resolve(state(false)); await recoverGateway;
+  assert.equal(gateway.node('#batchError').textContent, '');
+  assert.equal(gateway.node('#retryBatchConnection').hidden, true);
+  assert.equal(gateway.node('#startBatch').disabled, false);
+  assert.equal(gateway.calls.filter(c=>c.options.method==='POST').length, 0);
+  // Reproduce the screenshot: Start lost its response and the next status
+  // request also failed. Restore connectivity to an idle server and unlock
+  // the controls, clearing the stale error without replaying the POST.
+  const disconnected = setup(); disconnected.calls[0].resolve(state(false)); await flush();
+  const lostStart = disconnected.node('#startBatch').click();
+  disconnected.calls.at(-1).reject(Object.assign(new Error('Failed to fetch'), {name:'TypeError'})); await flush();
+  disconnected.calls.at(-1).reject(Object.assign(new Error('Failed to fetch'), {name:'TypeError'})); await lostStart;
+  assert.equal(disconnected.node('#startBatch').disabled, true);
+  assert.match(disconnected.node('#batchStatus').textContent, /هنوز تأیید نشده/);
+  const reconnect = disconnected.events.online();
+  disconnected.calls.at(-1).resolve({...state(false), stopping:false}); await reconnect;
+  assert.equal(disconnected.node('#startBatch').disabled, false);
+  assert.equal(disconnected.node('#stopBatch').disabled, true);
+  assert.equal(disconnected.node('#batchError').textContent, '');
+  assert.equal(disconnected.calls.filter(c=>c.options.method==='POST').length, 1);
   console.log('PASS batch controls: immediate pending feedback, duplicate prevention, stale poll rejection, stop, timeout reconciliation and single-flight polling.');
 })().catch(error => {console.error(error); process.exit(1);});

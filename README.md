@@ -211,3 +211,20 @@ lookup cannot prevent a result notification on API failure. The amount is labell
 as a snapshot at notification time: current target/stop events are price-based,
 so exchange settlement is not guaranteed to have completed. Wallet balances are
 not added to public signal broadcasts or Risk Free activation messages.
+
+## Evaluation data download
+
+In Crypto Markets, open «داده‌های ارزیابی احتمال تارگت و استاپ» and download
+the ZIP (administrator only). Defaults to the preceding year; dates filter signal
+creation in the browser's local timezone, with an exclusive next-day upper bound.
+The authenticated `/api/analysis/evaluation/export` endpoint exports separate
+`main.jsonl`, `observation.jsonl`, and `strategy2.jsonl` populations plus a manifest.
+Exports refuse more than 2,000 rows per population or 64 MiB of uncompressed row
+data instead of silently truncating. Only one archive is built at a time.
+
+The schema includes outcomes, timestamps, trade levels, entry features and latest
+features; latest snapshots and scores are NOT frozen proposal-time observations.
+It excludes account identifiers, balances, quantities, order IDs, free-text logs,
+credentials and images. Missing historical evidence stays null. Population reads
+are sequential, not an atomic cross-database snapshot. This export does not alter
+trading, learn a new model, or publish private trade data to GitHub.

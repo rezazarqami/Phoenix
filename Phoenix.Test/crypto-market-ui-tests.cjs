@@ -19,14 +19,16 @@ add('.results-report'); add('.shadow-signals');
 for(const id of ['#batchDirection','#batchChart','#batchTimeframe']) nodes.get(id).value='All';
 nodes.get('#marketFilter').value='all';nodes.get('#batchCount').value='20';nodes.get('#batchDuration').value='30';
 const calls=[], timers=new Map();let serial=0;
-const context={console,Intl,Date,URL,URLSearchParams,AbortController,
-  document:{querySelector:selector=>nodes.get(selector) || null, querySelectorAll:()=>[]},
+let downloads=0;
+const fakeURL={createObjectURL(){return 'blob:test';},revokeObjectURL(){}};
+const context={console,Intl,Date,URL:fakeURL,URLSearchParams,AbortController,
+  document:{body:{appendChild(){}},createElement(){return {click(){downloads++;},remove(){}};},querySelector:selector=>nodes.get(selector) || null, querySelectorAll:()=>[]},
   localStorage:{getItem(){throw new Error('Storage denied');},setItem(){throw new Error('Storage denied');}},
   setTimeout(fn,delay){timers.set(++serial,{fn,delay});return serial;},clearTimeout(id){timers.delete(id);},
   location:{origin:'https://phoenix.test',replace(){}},
   fetch(url,options){let resolve,reject;const result=new Promise((yes,no)=>{resolve=yes;reject=no;});
     options.signal.addEventListener('abort',()=>reject(Object.assign(new Error('aborted'),{name:'AbortError'})));
-    calls.push({url,options,resolve(data,ok=true){resolve({status:ok?200:409,ok,json:async()=>data});}});return result;}};
+    calls.push({url,options,resolve(data,ok=true){resolve({status:ok?200:409,ok,headers:{get:()=> 'application/zip'},blob:async()=>({}),json:async()=>data});}});return result;}};
 vm.createContext(context);
 // Execute the actual two HTML script files, with no shared test-only formatter.
 for(const file of ['crypto-market.js','signal-batch-controls.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);
@@ -55,5 +57,18 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
   calls.at(-1).resolve({running:false,message:'صفی فعال نیست.'});await start;
   assert.equal(nodes.get('#startBatch').disabled,false);
   assert.match(nodes.get('#batchError').textContent,/ربات تلگرام/,'Polling must not hide the command failure');
+  const exportButton=nodes.get('#exportEvaluation');
+  const exportTask=exportButton.fire('click');
+  assert.equal(exportButton.disabled,true);
+  assert.match(calls.at(-1).url,/^\/api\/analysis\/evaluation\/export\?/);
+  const count=calls.length;await exportButton.fire('click');assert.equal(calls.length,count);
+  calls.at(-1).resolve({});await exportTask;
+  assert.equal(downloads,1);assert.equal(exportButton.disabled,false);
+  assert.match(nodes.get('#evaluationMessage').textContent,/دانلود آغاز/);
+  const failedExport=exportButton.fire('click');calls.at(-1).resolve({error:'بازه را کوتاه کنید'},false);
+  await failedExport;assert.equal(downloads,1);assert.match(nodes.get('#evaluationMessage').textContent,/بازه را کوتاه/);
+  const timeoutExport=exportButton.fire('click');
+  [...timers.values()].find(t=>t.delay===120000).fn();await timeoutExport;
+  assert.equal(exportButton.disabled,false);assert.match(nodes.get('#evaluationMessage').textContent,/طول کشید/);
   console.log('PASS full Crypto Markets initialization: denied storage, all three counters, bounded rows, full-list search and inline start failure.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

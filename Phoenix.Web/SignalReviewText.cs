@@ -31,6 +31,7 @@ internal static class SignalReviewText
     internal static string Outcome(decimal? target, decimal? stop, int validationCount) => target.HasValue
         ? $"\n\n🎯 <b>برآورد تارگت پس از ورود: {target:0}٪</b>" +
           $"\n🛑 <b>برآورد استاپ پس از ورود: {stop:0}٪</b>" +
-          $"\nاعتبارسنجی زمانی: {validationCount} نتیجه؛ برآورد آماری، نه احتمال قطعی"
+          $"\nآزمون زمانی مستقل: {validationCount} نتیجه؛ با تنظیم آماری درصدها" +
+          "\nمشروط به ورود و پایان با تارگت یا استاپ؛ ریسک‌فری و انقضا در این دو درصد نیستند."
         : "\n\nبرآورد نتیجه: داده یا اعتبارسنجی کافی برای مدل وجود ندارد.";
 }

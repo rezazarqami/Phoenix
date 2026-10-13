@@ -63,9 +63,10 @@ public sealed class SignalLearningService(
             _snapshot = new(patterns, DateTime.UtcNow)
             { OutcomeModel = SignalOutcomeModel.Train(patterns, token),
                 SimilarityMetric = SignalSimilarityMetric.Build(patterns) };
-            logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}.",
+            logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}, calibration: {CalibrationCount}, log loss: {LogLoss}.",
                 patterns.Count, _snapshot.OutcomeModel is not null, _snapshot.OutcomeModel?.ValidationCount ?? 0,
-                _snapshot.OutcomeModel?.ValidationBrier, _snapshot.OutcomeModel?.BaselineBrier);
+                _snapshot.OutcomeModel?.ValidationBrier, _snapshot.OutcomeModel?.BaselineBrier,
+                _snapshot.OutcomeModel?.CalibrationCount ?? 0, _snapshot.OutcomeModel?.ValidationLogLoss);
         }
         finally { _refreshGate.Release(); }
     }

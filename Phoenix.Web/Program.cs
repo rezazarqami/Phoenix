@@ -21,6 +21,7 @@ builder.Services.AddSingleton(provider => new MarketCapCatalog(
     provider.GetRequiredService<BybitInstrumentCatalog>(), provider.GetRequiredService<ServerOrderStore>()));
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<PhoenixUserStore>();
+builder.Services.AddSingleton<PersonalStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<ElliottCountStore>();
@@ -145,6 +146,16 @@ app.Use(async (context, next) =>
             context.Response.Redirect("/login");
         return;
     }
+    var personalPath = path is "/" or "/index.html" ||
+        context.Request.Path.StartsWithSegments("/api/personal");
+    if (personalPath && !phoenixIdentity.IsAdmin)
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        else context.Response.Redirect("/phoenix");
+        return;
+    }
+    context.Response.Headers.CacheControl = "no-store";
     PhoenixSessionAuth.RenewSessionCookie(context, phoenixIdentity);
     if (phoenixIdentity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
         path is not "/api/auth/logout")
@@ -157,6 +168,9 @@ app.Use(async (context, next) =>
 });
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.MapGet("/phoenix", () => Results.File(Path.Combine(app.Environment.WebRootPath, "phoenix.html"), "text/html; charset=utf-8"));
+app.MapPersonalEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
@@ -180,7 +194,7 @@ app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse respons
     var viewerOnly = !admin && user!.ViewerOnly;
     var token = PhoenixSessionAuth.CreateToken(request.Username, viewerOnly, admin);
     PhoenixSessionAuth.WriteSessionCookie(response, token);
-    return Results.Ok(new { loggedIn = true, viewerOnly });
+    return Results.Ok(new { loggedIn = true, viewerOnly, isAdmin = admin });
 });
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
 {

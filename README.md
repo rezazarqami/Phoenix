@@ -240,3 +240,27 @@ Read every page: a partial page explicitly reports `completeForRequestedRange=fa
 The limit is 1–100 rows per page, with an 8 MiB page-size guard; dataset range
 limits and privacy allowlist still apply. No public token or additional access
 is created. The existing login is required to read data directly.
+
+## Personal workspace
+
+The root `/` now opens the owner's private workspace with finance entries (toman),
+vehicle service records and journal entries. `/phoenix` opens the existing trading
+panel using the same `phoenix_session`; existing analysis and trading API paths
+are unchanged. The configured `PHOENIX_AUTH_USERNAME` / `PHOENIX_AUTH_PASSWORD`
+account is the owner. Other Phoenix accounts land on `/phoenix` and receive 403
+for every `/api/personal` operation. Personal records are never available to those
+accounts, including editor accounts.
+
+Records live in `personal.db` beside `PHOENIX_QUEUE_PATH`, or the explicit absolute
+`PERSONAL_DATABASE_PATH`. Use the existing persistent data volume and include this
+file in server backups; never commit personal data to this repository. JSON export
+is available inside the overview. Vehicle costs are summarized separately from
+finance expenses to avoid counting the same service twice. Month summaries use
+the current Gregorian month; displayed dates use the Persian calendar.
+
+Private HTML and API responses are not cached. The updated service worker clears
+old Phoenix offline caches and no longer stores authenticated pages. Existing
+installed Android/PWA clients open the new workspace at their unchanged root URL.
+Deployment remains the existing `Deploy Phoenix` workflow on `master`, targeting
+server `91.216.104.210` through `/usr/local/sbin/deploy-phoenix`; no domain or
+separate application deployment is required.

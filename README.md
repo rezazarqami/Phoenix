@@ -228,3 +228,15 @@ It excludes account identifiers, balances, quantities, order IDs, free-text logs
 credentials and images. Missing historical evidence stays null. Population reads
 are sequential, not an atomic cross-database snapshot. This export does not alter
 trading, learn a new model, or publish private trade data to GitHub.
+
+### Mobile evaluation output
+
+ZIP download uses the server attachment URL directly instead of a temporary blob
+URL that some embedded mobile browsers cannot save. The panel does not claim the
+file was saved. «نمایش داده‌ها بدون دانلود» displays JSON in the panel with copy
+and next-page controls. Authenticated administrators can also read the same
+endpoint with `format=json&offset=0&limit=100`; `nextOffset` is null at the end.
+Read every page: a partial page explicitly reports `completeForRequestedRange=false`.
+The limit is 1–100 rows per page, with an 8 MiB page-size guard; dataset range
+limits and privacy allowlist still apply. No public token or additional access
+is created. The existing login is required to read data directly.

@@ -31,6 +31,23 @@ internal static class EvaluationExportTests
             SignalEvaluationExport.Build(from, from.AddDays(1), [("main", Enumerable.Repeat(row,2001).ToArray())]);
             throw new Exception("Oversized export silently accepted.");
         } catch (ArgumentException) { }
+        var pageRows = Enumerable.Range(0, 3).Select(i => new SignalHistoryItem(new ServerSignal {
+            Id = Guid.NewGuid(), CreatedAtUtc = from.AddMinutes(i), Symbol = "BTCUSDT",
+            RequestedByUsername = "PRIVATE_USER", Error = "PRIVATE_ERROR" }, from, null, false)).ToArray();
+        var page = JsonSerializer.Serialize(SignalEvaluationExport.Page(from, from.AddDays(1), [("main", pageRows)], 0, 2));
+        using var pageJson = JsonDocument.Parse(page);
+        if (page.Contains("PRIVATE_") || pageJson.RootElement.GetProperty("total").GetInt32() != 3 ||
+            pageJson.RootElement.GetProperty("rows").GetArrayLength() != 2 ||
+            pageJson.RootElement.GetProperty("nextOffset").GetInt32() != 2 ||
+            pageJson.RootElement.GetProperty("completeForRequestedRange").GetBoolean())
+            throw new Exception("Pagination or privacy metadata invalid.");
+        var last = JsonSerializer.Serialize(SignalEvaluationExport.Page(from, from.AddDays(1), [("main", pageRows)], 2, 2));
+        using var lastJson = JsonDocument.Parse(last);
+        if (lastJson.RootElement.GetProperty("nextOffset").ValueKind != JsonValueKind.Null ||
+            lastJson.RootElement.GetProperty("rows").GetArrayLength() != 1)
+            throw new Exception("Last page must have no continuation.");
+        try { SignalEvaluationExport.Page(from, from.AddDays(1), [("main", pageRows)], -1, 2); throw new Exception("Negative offset accepted"); }
+        catch (ArgumentException) { }
         using var cts = new CancellationTokenSource(); cts.Cancel();
         try {
             SignalEvaluationExport.Build(from, from.AddDays(1), [("main", new[]{row})], cts.Token);

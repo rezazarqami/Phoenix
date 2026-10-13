@@ -19,10 +19,10 @@ add('.results-report'); add('.shadow-signals');
 for(const id of ['#batchDirection','#batchChart','#batchTimeframe']) nodes.get(id).value='All';
 nodes.get('#marketFilter').value='all';nodes.get('#batchCount').value='20';nodes.get('#batchDuration').value='30';
 const calls=[], timers=new Map();let serial=0;
-let downloads=0;
+let downloads=0, lastDownload;
 const fakeURL={createObjectURL(){return 'blob:test';},revokeObjectURL(){}};
-const context={console,Intl,Date,URL:fakeURL,URLSearchParams,AbortController,
-  document:{body:{appendChild(){}},createElement(){return {click(){downloads++;},remove(){}};},querySelector:selector=>nodes.get(selector) || null, querySelectorAll:()=>[]},
+const context={navigator:{clipboard:{async writeText(text){context.copied=text;}}},console,Intl,Date,URL:fakeURL,URLSearchParams,AbortController,
+  document:{body:{appendChild(){}},createElement(){return {click(){downloads++;lastDownload=this.href;},remove(){}};},querySelector:selector=>nodes.get(selector) || null, querySelectorAll:()=>[]},
   localStorage:{getItem(){throw new Error('Storage denied');},setItem(){throw new Error('Storage denied');}},
   setTimeout(fn,delay){timers.set(++serial,{fn,delay});return serial;},clearTimeout(id){timers.delete(id);},
   location:{origin:'https://phoenix.test',replace(){}},
@@ -58,17 +58,25 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
   assert.equal(nodes.get('#startBatch').disabled,false);
   assert.match(nodes.get('#batchError').textContent,/ربات تلگرام/,'Polling must not hide the command failure');
   const exportButton=nodes.get('#exportEvaluation');
-  const exportTask=exportButton.fire('click');
-  assert.equal(exportButton.disabled,true);
-  assert.match(calls.at(-1).url,/^\/api\/analysis\/evaluation\/export\?/);
-  const count=calls.length;await exportButton.fire('click');assert.equal(calls.length,count);
-  calls.at(-1).resolve({});await exportTask;
-  assert.equal(downloads,1);assert.equal(exportButton.disabled,false);
-  assert.match(nodes.get('#evaluationMessage').textContent,/دانلود آغاز/);
-  const failedExport=exportButton.fire('click');calls.at(-1).resolve({error:'بازه را کوتاه کنید'},false);
-  await failedExport;assert.equal(downloads,1);assert.match(nodes.get('#evaluationMessage').textContent,/بازه را کوتاه/);
-  const timeoutExport=exportButton.fire('click');
-  [...timers.values()].find(t=>t.delay===120000).fn();await timeoutExport;
-  assert.equal(exportButton.disabled,false);assert.match(nodes.get('#evaluationMessage').textContent,/طول کشید/);
+  await exportButton.fire('click');
+  assert.equal(downloads,1);assert.match(lastDownload,/^\/api\/analysis\/evaluation\/export\?/);
+  assert.doesNotMatch(lastDownload,/blob:/);
+  assert.doesNotMatch(nodes.get('#evaluationMessage').textContent,/دانلود آغاز شد/);
+  const show=nodes.get('#showEvaluation');
+  const task=show.fire('click');assert.equal(show.disabled,true);
+  assert.match(calls.at(-1).url,/format=json/);
+  const count=calls.length;await show.fire('click');assert.equal(calls.length,count);
+  calls.at(-1).resolve({rows:[{id:'one'}],total:101,offset:0,count:100,nextOffset:100});await task;
+  assert.equal(show.disabled,false);assert.equal(nodes.get('#evaluationOutput').hidden,false);
+  assert.equal(nodes.get('#nextEvaluation').hidden,false);
+  const next=nodes.get('#nextEvaluation').fire('click');assert.match(calls.at(-1).url,/offset=100/);
+  calls.at(-1).resolve({rows:[{id:'last'}],total:101,offset:100,count:1,nextOffset:null});await next;
+  assert.equal(nodes.get('#nextEvaluation').hidden,true);
+  await nodes.get('#copyEvaluation').fire('click');assert.match(context.copied,/last/);
+  const failed=show.fire('click');calls.at(-1).resolve({error:'بازه را کوتاه کنید'},false);
+  await failed;assert.match(nodes.get('#evaluationMessage').textContent,/بازه را کوتاه/);
+  assert.match(nodes.get('#evaluationText').value,/last/,'Failed page fetch preserves prior evidence');
+  const timed=show.fire('click');[...timers.values()].find(t=>t.delay===120000).fn();await timed;
+  assert.equal(show.disabled,false);assert.match(nodes.get('#evaluationMessage').textContent,/طول کشید/);
   console.log('PASS full Crypto Markets initialization: denied storage, all three counters, bounded rows, full-list search and inline start failure.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -40,33 +40,67 @@ document.querySelector('#exportReviews').addEventListener('click', async () => {
 
 document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
 <details class="results-report" open><summary>داده‌های ارزیابی احتمال تارگت و استاپ</summary>
-<div class="results-body"><p class="results-note">تاریخچه و ویژگی‌های فنی استراتژی اصلی، «فقط تأیید» و استراتژی دوم در فایل‌های جدا؛ بدون رمزها و اطلاعات حساب. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
-<div class="results-filters"><label>از تاریخ<input id="evaluationFrom" type="date"></label><label>تا تاریخ<input id="evaluationTo" type="date"></label><button id="exportEvaluation" type="button">دریافت داده‌های ارزیابی ZIP</button></div>
-<p id="evaluationMessage" role="status" class="results-message"></p></div></details>`);
+<div class="results-body"><p class="results-note">می‌توانید داده‌ها را همین‌جا مشاهده و کپی کنید یا فایل ZIP بگیرید. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
+<div class="results-filters"><label>از تاریخ<input id="evaluationFrom" type="date"></label><label>تا تاریخ<input id="evaluationTo" type="date"></label><button id="showEvaluation" type="button">نمایش داده‌ها بدون دانلود</button><button id="exportEvaluation" type="button">دانلود مستقیم ZIP</button></div>
+<p id="evaluationMessage" role="status" class="results-message"></p>
+<div id="evaluationOutput" hidden><p id="evaluationPageStatus"></p><textarea id="evaluationText" aria-label="داده‌های ارزیابی" readonly dir="ltr" style="width:100%;min-height:280px;box-sizing:border-box"></textarea>
+<div class="results-filters"><button id="copyEvaluation" type="button">کپی این صفحه</button><button id="nextEvaluation" type="button" hidden>صفحه بعد</button></div></div>
+</div></details>`);
 const evaluationStart = new Date(); evaluationStart.setDate(evaluationStart.getDate()-365);
 document.querySelector('#evaluationFrom').value = reviewDate(evaluationStart);
 document.querySelector('#evaluationTo').value = reviewDate(new Date());
-document.querySelector('#exportEvaluation').addEventListener('click', async () => {
-  const button = document.querySelector('#exportEvaluation'), message = document.querySelector('#evaluationMessage');
-  if (button.disabled) return;
+let evaluationQuery = null, evaluationNext = null, evaluationBusy = false;
+function evaluationRange() {
   const fromValue = document.querySelector('#evaluationFrom').value, toValue = document.querySelector('#evaluationTo').value;
-  if (!fromValue || !toValue || fromValue > toValue) { message.textContent = 'بازه تاریخ معتبر نیست.'; return; }
+  if (!fromValue || !toValue || fromValue > toValue) throw new Error('بازه تاریخ معتبر نیست.');
   const from = new Date(`${fromValue}T00:00:00`), to = new Date(`${toValue}T00:00:00`); to.setDate(to.getDate()+1);
-  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 120000);
-  button.disabled = true; message.textContent = 'در حال آماده‌سازی داده‌های ارزیابی…';
+  return new URLSearchParams({from:from.toISOString(), to:to.toISOString()});
+}
+document.querySelector('#exportEvaluation').addEventListener('click', () => {
+  const message = document.querySelector('#evaluationMessage');
   try {
-    const query = new URLSearchParams({from:from.toISOString(), to:to.toISOString()});
-    const response = await fetch(`/api/analysis/evaluation/export?${query}`, {cache:'no-store', signal:controller.signal});
+    const link = document.createElement('a');
+    link.href = `/api/analysis/evaluation/export?${evaluationRange()}`;
+    link.target = '_blank'; link.rel = 'noopener';
+    document.body.appendChild(link); link.click(); link.remove();
+    message.textContent = 'لینک مستقیم فایل باز شد. اگر مرورگر گوشی فایل را ذخیره نکرد، «نمایش داده‌ها بدون دانلود» را بزنید.';
+  } catch (error) { message.textContent = error.message; }
+});
+async function showEvaluation(offset = 0) {
+  if (evaluationBusy) return;
+  const message = document.querySelector('#evaluationMessage'), next = document.querySelector('#nextEvaluation');
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 120000);
+  evaluationBusy = true; document.querySelector('#showEvaluation').disabled = true; next.disabled = true;
+  message.textContent = 'در حال دریافت داده‌های ارزیابی…';
+  try {
+    const query = offset === 0 ? evaluationRange() : new URLSearchParams(evaluationQuery);
+    query.set('format','json'); query.set('offset', String(offset)); query.set('limit','100');
+    const response = await fetch(`/api/analysis/evaluation/export?${query}`, {cache:'no-store',signal:controller.signal});
     if (response.status === 401 || response.redirected) throw new Error('نشست ورود تمام شده است؛ دوباره وارد پنل شوید.');
     if (response.status === 403) throw new Error('دریافت این خروجی فقط برای مدیر مجاز است.');
     if (!response.ok) { const data = await response.json(); throw new Error(data.error || 'دریافت خروجی ناموفق بود.'); }
-    if (!(response.headers.get('content-type') || '').includes('application/zip')) throw new Error('پاسخ دانلود معتبر نیست؛ ورود به پنل را بررسی کنید.');
-    const url = URL.createObjectURL(await response.blob()), link = document.createElement('a');
-    link.href = url; link.download = `phoenix-evaluation-${fromValue}-${toValue}.zip`;
-    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
-    message.textContent = 'فایل آماده و دانلود آغاز شد. پس از پایان، فایل phoenix-evaluation را از پوشه دانلودها در همین گفتگو ارسال کنید.';
-  } catch (error) { message.textContent = error.name === 'AbortError' ? 'آماده‌سازی طول کشید؛ بازه کوتاه‌تری انتخاب و دوباره تلاش کنید.' : error.message; }
-  finally { clearTimeout(timeout); button.disabled = false; }
+    const data = await response.json();
+    if (!Array.isArray(data.rows) || !Number.isInteger(data.total)) throw new Error('پاسخ داده معتبر نیست.');
+    evaluationQuery = query.toString(); evaluationNext = data.nextOffset;
+    document.querySelector('#evaluationText').value = JSON.stringify(data,null,2);
+    document.querySelector('#evaluationOutput').hidden = false;
+    document.querySelector('#evaluationPageStatus').textContent = data.total === 0 ? 'سیگنالی در این بازه نیست.' :
+      `نمایش ${faMarket.format(data.offset+1)} تا ${faMarket.format(data.offset+data.count)} از ${faMarket.format(data.total)} سیگنال`;
+    next.hidden = evaluationNext == null;
+    message.textContent = 'داده‌ها نمایش داده شدند؛ برای بررسی از همین پنل قابل خواندن هستند. هر صفحه حداکثر ۱۰۰ سیگنال دارد.';
+  } catch (error) { message.textContent = error.name === 'AbortError' ? 'دریافت طول کشید؛ بازه کوتاه‌تری انتخاب کنید.' : error.message; }
+  finally { clearTimeout(timeout); evaluationBusy = false; document.querySelector('#showEvaluation').disabled = false; next.disabled = false; }
+}
+document.querySelector('#showEvaluation').addEventListener('click', () => showEvaluation(0));
+document.querySelector('#nextEvaluation').addEventListener('click', () => evaluationNext == null ? undefined : showEvaluation(evaluationNext));
+document.querySelector('#copyEvaluation').addEventListener('click', async () => {
+  const text = document.querySelector('#evaluationText'), message = document.querySelector('#evaluationMessage');
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(text.value); message.textContent = 'داده‌های این صفحه کپی شد.';
+  } catch {
+    text.focus(); text.select(); message.textContent = 'کپی خودکار در این مرورگر ممکن نیست؛ متن انتخاب شد. از گزینهٔ کپی گوشی استفاده کنید.';
+  }
 });
 
 function renderMarket() {

@@ -469,11 +469,14 @@ app.MapGet("/api/analysis/shadow-signals/{id:guid}/image", async (Guid id,
     return image is null ? Results.NotFound() : Results.File(image, "image/png");
 });
 app.MapGet("/api/analysis/evaluation/export", async (DateTimeOffset? from, DateTimeOffset? to,
+    string? format, int? offset, int? limit,
     HttpContext context, ServerOrderStore store, ShadowSignalRuntime shadow,
     Strategy2Runtime strategy2, CancellationToken token) =>
 {
     if (!AnalysisSessionAuth.TryGetIdentity(context.Request, out var identity) || !identity.IsAdmin)
         return Results.StatusCode(403);
+    if (format is not (null or "zip" or "json"))
+        return Results.BadRequest(new { error = "نوع خروجی معتبر نیست." });
     var end = to?.UtcDateTime ?? DateTime.UtcNow;
     var start = from?.UtcDateTime ?? end.AddDays(-365);
     if (end <= start || end - start > TimeSpan.FromDays(3650))
@@ -490,8 +493,10 @@ app.MapGet("/api/analysis/evaluation/export", async (DateTimeOffset? from, DateT
                 return Results.BadRequest(new { error = "بیش از ۲۰۰۰ سیگنال در یکی از بخش‌ها وجود دارد؛ بازه تاریخ را کوتاه‌تر کنید." });
             sources.Add((name, rows));
         }
-        var zip = SignalEvaluationExport.Build(start, end, sources, token);
         context.Response.Headers.CacheControl = "no-store";
+        if (format == "json")
+            return Results.Json(SignalEvaluationExport.Page(start, end, sources, offset ?? 0, limit ?? 100, token));
+        var zip = SignalEvaluationExport.Build(start, end, sources, token);
         return Results.File(zip, "application/zip", $"phoenix-evaluation-{start:yyyyMMdd}-{end:yyyyMMdd}.zip");
     }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }

@@ -12,6 +12,59 @@ internal static class SignalEvaluationExport
     internal static readonly SemaphoreSlim Gate = new(1, 1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    private static object ResearchRow(string source, SignalHistoryItem row)
+    {
+        var s = row.Signal;
+        var eligible = s.Id != Guid.Empty && (s.Outcome is "Target" or "StopLoss") &&
+            s.EntryTriggeredAtUtc.HasValue && s.CompletedAtUtc > s.EntryTriggeredAtUtc &&
+            s.EntryTechnicalFeatures is not null;
+        return new
+        {
+            source, s.Id, s.Symbol, s.Direction, s.Timeframe, s.ChartMode,
+            s.CreatedAtUtc, s.EntryTriggeredAtUtc, s.FilledAtUtc, s.CompletedAtUtc,
+            s.TargetReachedAtUtc, s.StopLossReachedAtUtc, s.RiskFreeReachedAtUtc,
+            s.RiskFreeClosedAtUtc, s.ExpiredAtUtc, s.Status, s.Outcome, s.ExpireReason,
+            s.EntryPrice, s.TakeProfit, s.StopLoss, s.StopLoss2, s.RiskFreePrice,
+            s.Ceiling, s.Floor, s.AverageFillPrice,
+            s.TargetSimilarityPercent, s.StopSimilarityPercent, s.SimilaritySampleCount,
+            s.TargetOutcomePercent, s.StopOutcomePercent, s.OutcomeValidationCount,
+            entryFeatures = s.EntryTechnicalFeatures,
+            latestFeatures = s.TechnicalFeatures,
+            latestFeaturesAreFrozenProposal = false,
+            predictionTimestampKnown = false,
+            eligibleForEntryBinaryEvaluation = eligible,
+            row.UpdatedAtUtc, row.RemovedAtUtc, row.HasImage
+        };
+    }
+
+    internal static object Page(DateTime from, DateTime to,
+        IReadOnlyList<(string Source, IReadOnlyList<SignalHistoryItem> Rows)> sources,
+        int offset, int limit, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+        if (offset < 0 || limit is < 1 or > 100) throw new ArgumentException("صفحه خروجی معتبر نیست.");
+        var all = sources.SelectMany(x => x.Rows.GroupBy(r => r.Signal.Id).Select(g => (x.Source, Row: g.First()))
+            .OrderBy(r => r.Row.Signal.CreatedAtUtc).ThenBy(r => r.Row.Signal.Id)).ToArray();
+        if (offset > all.Length) throw new ArgumentException("شماره صفحه از تعداد داده‌ها بیشتر است.");
+        var rows = new List<object>();
+        long bytes = 0;
+        foreach (var item in all.Skip(offset).Take(limit))
+        {
+            token.ThrowIfCancellationRequested();
+            var row = ResearchRow(item.Source, item.Row);
+            bytes += JsonSerializer.SerializeToUtf8Bytes(row, Json).Length;
+            if (bytes > 8 * 1024 * 1024) throw new ArgumentException("حجم صفحه زیاد است؛ تعداد هر صفحه را کمتر کنید.");
+            rows.Add(row);
+        }
+        return new { schemaVersion = "phoenix-evaluation-page-v1", exportedAtUtc = DateTime.UtcNow,
+            createdFromUtcInclusive = from, createdToUtcExclusive = to, total = all.Length,
+            offset, count = rows.Count, nextOffset = offset + rows.Count < all.Length ? (int?)(offset + rows.Count) : null,
+            completeForRequestedRange = offset == 0 && rows.Count == all.Length,
+            notes = new[] { "Pages are sequential live reads, not an atomic snapshot.",
+                "latestFeatures and percentages are not frozen proposal-time evidence; prediction timestamps are unknown.",
+                "Source populations must be evaluated separately; expiry/RiskFree are not StopLoss labels." }, rows };
+    }
+
     internal static byte[] Build(DateTime from, DateTime to,
         IReadOnlyList<(string Source, IReadOnlyList<SignalHistoryItem> Rows)> sources,
         CancellationToken token = default)
@@ -35,27 +88,7 @@ internal static class SignalEvaluationExport
                 foreach (var row in unique)
                 {
                     token.ThrowIfCancellationRequested();
-                    var s = row.Signal;
-                    var eligible = s.Id != Guid.Empty && s.Outcome is "Target" or "StopLoss" &&
-                        s.EntryTriggeredAtUtc.HasValue && s.CompletedAtUtc > s.EntryTriggeredAtUtc &&
-                        s.EntryTechnicalFeatures is not null;
-                    var data = JsonSerializer.SerializeToUtf8Bytes(new
-                    {
-                        source, s.Id, s.Symbol, s.Direction, s.Timeframe, s.ChartMode,
-                        s.CreatedAtUtc, s.EntryTriggeredAtUtc, s.FilledAtUtc, s.CompletedAtUtc,
-                        s.TargetReachedAtUtc, s.StopLossReachedAtUtc, s.RiskFreeReachedAtUtc,
-                        s.RiskFreeClosedAtUtc, s.ExpiredAtUtc, s.Status, s.Outcome, s.ExpireReason,
-                        s.EntryPrice, s.TakeProfit, s.StopLoss, s.StopLoss2, s.RiskFreePrice,
-                        s.Ceiling, s.Floor, s.AverageFillPrice,
-                        s.TargetSimilarityPercent, s.StopSimilarityPercent, s.SimilaritySampleCount,
-                        s.TargetOutcomePercent, s.StopOutcomePercent, s.OutcomeValidationCount,
-                        entryFeatures = s.EntryTechnicalFeatures,
-                        latestFeatures = s.TechnicalFeatures,
-                        latestFeaturesAreFrozenProposal = false,
-                        predictionTimestampKnown = false,
-                        eligibleForEntryBinaryEvaluation = eligible,
-                        row.UpdatedAtUtc, row.RemovedAtUtc, row.HasImage
-                    }, Json);
+                    var data = JsonSerializer.SerializeToUtf8Bytes(ResearchRow(source, row), Json);
                     bytes += data.Length + 1;
                     if (bytes > MaxBytes) throw new ArgumentException("حجم داده زیاد است؛ بازه تاریخ را کوتاه‌تر کنید.");
                     stream.Write(data); stream.WriteByte((byte)'\n');

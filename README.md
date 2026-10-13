@@ -211,3 +211,20 @@ lookup cannot prevent a result notification on API failure. The amount is labell
 as a snapshot at notification time: current target/stop events are price-based,
 so exchange settlement is not guaranteed to have completed. Wallet balances are
 not added to public signal broadcasts or Risk Free activation messages.
+
+## Calibrated outcome estimates
+
+Outcome learning now uses chronological 60/20/20 fit/calibration/audit blocks,
+purging results unavailable at each following boundary. A monotone regularized
+sigmoid calibrator is fitted only on the middle block. At least 100 unique
+completed outcomes, 20 calibration examples and 20 audit examples are required,
+with both classes represented. Unrounded Brier and log loss must beat a past-rate
+baseline; the newer audit half must also improve Brier. These are engineering
+gates, not a guarantee of future accuracy. Independent resemblance scores remain
+descriptive and never substitute for probabilities.
+
+Authenticated `GET /api/analysis/outcome-model` exposes model availability, counts,
+proper scores and reliability bins. Estimates are conditional on entry and a
+Target/StopLoss terminal outcome, excluding expiry and RiskFree. Proposal-time
+transfer of entry-trained features is not independently validated. See
+[the research and validation plan](docs/outcome-probability-research-fa.md).

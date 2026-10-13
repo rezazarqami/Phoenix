@@ -439,6 +439,29 @@ app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderS
 });
 
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
+app.MapGet("/api/analysis/outcome-model", async (SignalLearningService learning, CancellationToken token) =>
+{
+    var snapshot = await learning.GetSnapshotAsync(token);
+    var model = snapshot.OutcomeModel;
+    return Results.Ok(new
+    {
+        version = "chronological-sigmoid-v1",
+        status = model is null ? "insufficient-data-or-failed-validation" : "validated",
+        scope = "Target versus StopLoss conditional on entry and a terminal binary outcome; proposal-time transfer is not separately validated",
+        snapshot.RefreshedAtUtc,
+        sampleCount = snapshot.Patterns.Count,
+        targetCount = snapshot.Patterns.Count(x => x.Outcome == "Target"),
+        stopCount = snapshot.Patterns.Count(x => x.Outcome == "StopLoss"),
+        calibrationCount = model?.CalibrationCount ?? 0,
+        validationCount = model?.ValidationCount ?? 0,
+        availableAfterUtc = model?.AvailableAfterUtc,
+        brier = model?.ValidationBrier,
+        baselineBrier = model?.BaselineBrier,
+        logLoss = model?.ValidationLogLoss,
+        baselineLogLoss = model?.BaselineLogLoss,
+        reliability = model?.Reliability
+    });
+});
 app.MapGet("/api/analysis/shadow-signals", async (ShadowSignalRuntime shadow, CancellationToken token) =>
 {
     var signals = (await shadow.Store.GetAllAsync(token)).OrderByDescending(x => x.CreatedAtUtc).ToArray();

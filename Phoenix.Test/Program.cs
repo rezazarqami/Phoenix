@@ -31,6 +31,7 @@ Run("Crypto statistics migrate queues, retain removed trades and refresh outcome
 
 Run("Outcome model learns approved evidence and validates chronologically", OutcomeModelTests.LearnsOutcomesAndValidates);
 Run("Outcome model rejects failed validation, duplication and future labels", OutcomeModelTests.RejectsUnvalidatedAndLeakedEvidence);
+Run("Outcome calibration corrects confidence and isolates the final audit", OutcomeModelTests.CalibrationAndAuditIsolation);
 
 Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
 Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);

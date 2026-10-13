@@ -468,6 +468,35 @@ app.MapGet("/api/analysis/shadow-signals/{id:guid}/image", async (Guid id,
     var image = await shadow.Store.GetHistoryImageAsync(id, token);
     return image is null ? Results.NotFound() : Results.File(image, "image/png");
 });
+app.MapGet("/api/analysis/evaluation/export", async (DateTimeOffset? from, DateTimeOffset? to,
+    HttpContext context, ServerOrderStore store, ShadowSignalRuntime shadow,
+    Strategy2Runtime strategy2, CancellationToken token) =>
+{
+    if (!AnalysisSessionAuth.TryGetIdentity(context.Request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    var end = to?.UtcDateTime ?? DateTime.UtcNow;
+    var start = from?.UtcDateTime ?? end.AddDays(-365);
+    if (end <= start || end - start > TimeSpan.FromDays(3650))
+        return Results.BadRequest(new { error = "بازه باید معتبر و حداکثر ده سال باشد." });
+    if (!await SignalEvaluationExport.Gate.WaitAsync(0, token))
+        return Results.Json(new { error = "یک خروجی در حال آماده‌سازی است؛ کمی بعد دوباره تلاش کنید." }, statusCode: 429);
+    try
+    {
+        var sources = new List<(string Source, IReadOnlyList<SignalHistoryItem> Rows)>();
+        foreach (var (name, source) in new[] { ("main", store), ("observation", shadow.Store), ("strategy2", strategy2.Store) })
+        {
+            var rows = await source.GetHistoryRangeAsync(start, end, SignalEvaluationExport.MaxRowsPerSource + 1, token);
+            if (rows.Count > SignalEvaluationExport.MaxRowsPerSource)
+                return Results.BadRequest(new { error = "بیش از ۲۰۰۰ سیگنال در یکی از بخش‌ها وجود دارد؛ بازه تاریخ را کوتاه‌تر کنید." });
+            sources.Add((name, rows));
+        }
+        var zip = SignalEvaluationExport.Build(start, end, sources, token);
+        context.Response.Headers.CacheControl = "no-store";
+        return Results.File(zip, "application/zip", $"phoenix-evaluation-{start:yyyyMMdd}-{end:yyyyMMdd}.zip");
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    finally { SignalEvaluationExport.Gate.Release(); }
+});
 app.MapGet("/api/analysis/reviews/export", async (DateTimeOffset? from, DateTimeOffset? to,
     HttpRequest request, ReviewArchiveStore reviews, CancellationToken token) =>
 {

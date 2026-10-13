@@ -38,6 +38,37 @@ document.querySelector('#exportReviews').addEventListener('click', async () => {
   finally { button.disabled = false; }
 });
 
+document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
+<details class="results-report" open><summary>داده‌های ارزیابی احتمال تارگت و استاپ</summary>
+<div class="results-body"><p class="results-note">تاریخچه و ویژگی‌های فنی استراتژی اصلی، «فقط تأیید» و استراتژی دوم در فایل‌های جدا؛ بدون رمزها و اطلاعات حساب. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
+<div class="results-filters"><label>از تاریخ<input id="evaluationFrom" type="date"></label><label>تا تاریخ<input id="evaluationTo" type="date"></label><button id="exportEvaluation" type="button">دریافت داده‌های ارزیابی ZIP</button></div>
+<p id="evaluationMessage" role="status" class="results-message"></p></div></details>`);
+const evaluationStart = new Date(); evaluationStart.setDate(evaluationStart.getDate()-365);
+document.querySelector('#evaluationFrom').value = reviewDate(evaluationStart);
+document.querySelector('#evaluationTo').value = reviewDate(new Date());
+document.querySelector('#exportEvaluation').addEventListener('click', async () => {
+  const button = document.querySelector('#exportEvaluation'), message = document.querySelector('#evaluationMessage');
+  if (button.disabled) return;
+  const fromValue = document.querySelector('#evaluationFrom').value, toValue = document.querySelector('#evaluationTo').value;
+  if (!fromValue || !toValue || fromValue > toValue) { message.textContent = 'بازه تاریخ معتبر نیست.'; return; }
+  const from = new Date(`${fromValue}T00:00:00`), to = new Date(`${toValue}T00:00:00`); to.setDate(to.getDate()+1);
+  const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 120000);
+  button.disabled = true; message.textContent = 'در حال آماده‌سازی داده‌های ارزیابی…';
+  try {
+    const query = new URLSearchParams({from:from.toISOString(), to:to.toISOString()});
+    const response = await fetch(`/api/analysis/evaluation/export?${query}`, {cache:'no-store', signal:controller.signal});
+    if (response.status === 401 || response.redirected) throw new Error('نشست ورود تمام شده است؛ دوباره وارد پنل شوید.');
+    if (response.status === 403) throw new Error('دریافت این خروجی فقط برای مدیر مجاز است.');
+    if (!response.ok) { const data = await response.json(); throw new Error(data.error || 'دریافت خروجی ناموفق بود.'); }
+    if (!(response.headers.get('content-type') || '').includes('application/zip')) throw new Error('پاسخ دانلود معتبر نیست؛ ورود به پنل را بررسی کنید.');
+    const url = URL.createObjectURL(await response.blob()), link = document.createElement('a');
+    link.href = url; link.download = `phoenix-evaluation-${fromValue}-${toValue}.zip`;
+    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+    message.textContent = 'فایل آماده و دانلود آغاز شد. پس از پایان، فایل phoenix-evaluation را از پوشه دانلودها در همین گفتگو ارسال کنید.';
+  } catch (error) { message.textContent = error.name === 'AbortError' ? 'آماده‌سازی طول کشید؛ بازه کوتاه‌تری انتخاب و دوباره تلاش کنید.' : error.message; }
+  finally { clearTimeout(timeout); button.disabled = false; }
+});
+
 function renderMarket() {
   const query = document.querySelector('#marketSearch').value.trim().toUpperCase();
   const filter = document.querySelector('#marketFilter').value;

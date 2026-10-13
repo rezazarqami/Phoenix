@@ -1,0 +1,42 @@
+name: Diagnose Phoenix Connectivity
+on:
+  push:
+    branches: [codex/diagnose-phoenix-connectivity]
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check DNS, SSH and web connectivity without changing the server
+        shell: python
+        run: |
+          import socket, concurrent.futures, urllib.request, urllib.error, json, datetime
+          print("UTC", datetime.datetime.now(datetime.timezone.utc).isoformat())
+          for host in ["marketsignalist.ir", "my.parspack.com"]:
+              try:
+                  print("DNS", host, sorted({x[4][0] for x in socket.getaddrinfo(host, None)}))
+              except Exception as e:
+                  print("DNS_ERROR", host, type(e).__name__, str(e))
+          def probe(port):
+              try:
+                  with socket.create_connection(("91.216.104.210", port), timeout=10) as connection:
+                      connection.settimeout(3)
+                      banner = ""
+                      if port == 22:
+                          try: banner = connection.recv(100).decode(errors="replace").strip()
+                          except Exception: banner = "No SSH banner"
+                      return {"port": port, "tcp": "connected", "banner": banner}
+              except Exception as e:
+                  return {"port": port, "tcp": type(e).__name__, "detail": str(e)}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+              for result in pool.map(probe, [22, 80, 443]):
+                  print("PORT", json.dumps(result))
+          for url in ["https://marketsignalist.ir/health", "http://91.216.104.210/health"]:
+              request = urllib.request.Request(url, headers={"Host": "marketsignalist.ir"})
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      print("HTTP", url, response.status, response.read(200).decode(errors="replace"))
+              except urllib.error.HTTPError as e:
+                  print("HTTP", url, e.code, e.read(200).decode(errors="replace"))
+              except Exception as e:
+                  print("HTTP_ERROR", url, type(e).__name__, str(e))

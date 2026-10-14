@@ -8,7 +8,10 @@ public sealed record ProfessionalSignalAnalysis(
     SignalSimilarityResult Prediction,
     string MarketRegime,
     IReadOnlyList<string> Strengths,
-    IReadOnlyList<string> Risks);
+    IReadOnlyList<string> Risks)
+{
+    public DateTime? ObservedAtUtc { get; init; }
+}
 
 /// <summary>Cached multi-timeframe and BTC context analysis used before human approval.</summary>
 public sealed class ProfessionalSignalAnalysisService(
@@ -60,7 +63,7 @@ public sealed class ProfessionalSignalAnalysisService(
         var prediction = await predictor.CalculateAsync(serverSignal, token);
         // Keep the technical fingerprint for comparison and learning without
         // generating generic positive/negative commentary for proposals.
-        return new(enriched, prediction, regime, [], []);
+        return new(enriched, prediction, regime, [], []) { ObservedAtUtc = asOfUtc ?? DateTime.UtcNow };
     }
 
     // One versioned extraction path for live entry reviews and historical reconstruction.

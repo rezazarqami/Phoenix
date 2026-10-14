@@ -28,6 +28,8 @@ Run("Cancellation public callback cancels persisted pending signal and prevents 
 Run("Cancellation exchange failures, filled orders and in-flight submissions never report success", CancellationTests.ExchangeStates);
 Run("Cancellation bulk handles All Long Short and preserves active positions", CancellationTests.Bulk);
 
+Run("Proposal evidence survives current reviews, restart and research export", ProposalEvidenceTests.PreservesObservedProposal);
+
 Run("Evaluation export preserves provenance, excludes private data and refuses truncation", EvaluationExportTests.SchemaAndLimits);
 
 Run("Crypto statistics include lifetime trades and ignore unentered signals", CryptoStatisticsTests.Lifetime);

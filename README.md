@@ -264,3 +264,14 @@ installed Android/PWA clients open the new workspace at their unchanged root URL
 Deployment remains the existing `Deploy Phoenix` workflow on `master`, targeting
 server `91.216.104.210` through `/usr/local/sbin/deploy-phoenix`; no domain or
 separate application deployment is required.
+
+### Frozen proposal evidence
+
+New analyzed approvals retain `proposalEvidence`: observed time, candidate levels,
+timeframe, technical features and the original review prediction. Main and
+observation queues keep this snapshot across entry reviews and outcome updates.
+Research JSON/ZIP exports expose it separately from entry/latest snapshots.
+Legacy records keep it null; current or entry features are never relabeled as
+original proposal evidence. Capture time describes when analysis was observed;
+it does not claim all source candles were finalized. This is data provenance for
+future proposal-time validation, not a new probability model or trading rule.

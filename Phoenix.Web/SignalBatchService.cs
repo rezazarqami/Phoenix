@@ -354,7 +354,8 @@ public sealed class SignalBatchService(
                     var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
                         selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
                         new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image,
-                            technicalFeatures, string.Join(" | ", analysis.Strengths.Concat(analysis.Risks)), analysis.MarketRegime),
+                            technicalFeatures, string.Join(" | ", analysis.Strengths.Concat(analysis.Risks)), analysis.MarketRegime,
+                            SignalProposalEvidence.Capture(selected, option.Interval, analysis)),
                         requestedByUsername);
                     await reviews.LinkSignalAsync(key, outcome.Signal?.Id, token);
                     if (outcome.Signal is null)

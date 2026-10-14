@@ -29,6 +29,7 @@ public sealed class ShadowSignalRuntime
             Status = "Pending", OrderLinkId = $"observe-{id:N}"[..36], CreatedAtUtc = DateTime.UtcNow,
             RequestedByUsername = requestedByUsername, Timeframe = timeframe,
             ChartMode = lineMode ? "Line" : "Candles", TechnicalFeatures = analysis.Features,
+            ProposalEvidence = SignalProposalEvidence.Capture(candidate, timeframe, analysis),
             AnalysisSummary = string.Join(" | ", analysis.Strengths.Concat(analysis.Risks)),
             MarketRegime = analysis.MarketRegime,
             TargetSimilarityPercent = analysis.Prediction.TargetPercent,

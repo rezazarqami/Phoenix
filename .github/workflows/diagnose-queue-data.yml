@@ -1,0 +1,46 @@
+name: Diagnose Phoenix Queue Data
+on:
+  push:
+    branches: [codex/diagnose-queue-data]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect queue JSON validity without exposing records or changing files
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 91.216.104.210
+          username: phoenix-deploy
+          key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
+          command_timeout: 1m
+          script: |
+            python3 - <<'PY'
+            import pathlib,json,time
+            roots=[pathlib.Path('/var/lib/phoenix'),pathlib.Path('/opt/phoenix/data'),pathlib.Path('/srv/phoenix/data')]
+            names=['server-signals.json','shadow-signals.json','strategy2-signals.json']
+            found=False
+            for root in roots:
+                for name in names:
+                    path=root/name
+                    try:
+                        if not path.exists(): continue
+                        found=True
+                        size=path.stat().st_size
+                        if size>32*1024*1024:
+                            print('QUEUE',str(path),'SKIPPED_LARGE');continue
+                        for sample in range(3):
+                            raw=path.read_bytes()
+                            try:
+                                json.loads(raw)
+                                status='VALID_JSON'
+                            except (ValueError,UnicodeError):
+                                status='INVALID_JSON'
+                            print('QUEUE',str(path),'SAMPLE',sample+1,'BYTES',len(raw),'NUL_BYTES',raw.count(bytes([0])),'STATUS',status)
+                            if sample<2: time.sleep(.5)
+                    except PermissionError:
+                        print('QUEUE',str(path),'READ_PERMISSION_DENIED')
+            if not found: print('QUEUE_PATH_NOT_FOUND_IN_KNOWN_DATA_DIRECTORIES')
+            PY

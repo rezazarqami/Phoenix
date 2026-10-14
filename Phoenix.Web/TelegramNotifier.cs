@@ -308,7 +308,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         $"نماد: {signal.Symbol}\nجهت: {signal.Direction}\nورود: {Format(signal.EntryPrice)}\nتارگت: {Format(signal.TakeProfit)}\nاستاپ: {Format(signal.StopLoss)}\nمقدار ورودی: {Format(signal.PositionSizeUsdt)} USDT";
 
     private static string SimilarityText(ServerSignal signal) =>
-        SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) +
+        SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + SignalReviewText.Support(signal.SimilarityEvidence) +
         (signal.TargetSimilarityPercent.HasValue
         ? $"\n\n🟢 <b>شباهت به تارگت‌ها در زمان صدور: {Format(signal.TargetSimilarityPercent)}٪</b>\n🔴 <b>شباهت به استاپ‌ها در زمان صدور: {Format(signal.StopSimilarityPercent)}٪</b>"
         : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود");

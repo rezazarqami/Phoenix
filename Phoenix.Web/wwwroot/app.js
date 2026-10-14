@@ -1,4 +1,12 @@
 const fa = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 4 });
+
+function similaritySupport(e) {
+  if (!e) return '';
+  const stage = e.referenceStage === 'proposal' ? 'زمان پیشنهاد' : 'لحظه ورود';
+  const mismatch = e.queryStage !== e.referenceStage ? '<br>سابقهٔ کافی از زمان پیشنهاد نداریم؛ مقایسه با شرایط ورود است.' : '';
+  const frequency = e.historicalTargetRate == null ? 'نمونه‌های نزدیک برای اعلام نرخ تاریخی کافی نیستند.' : `سهم تارگت در این نمونه‌های گذشته: ${fa.format(e.historicalTargetRate)}٪؛ احتمال این سیگنال نیست.`;
+  return `<small>مرجع: ${stage} · نزدیک و هم‌تایم‌فریم: ${fa.format(e.sameTimeframeNearbyTargets)} تارگت / ${fa.format(e.sameTimeframeNearbyStops)} استاپ${mismatch}<br>${frequency}</small>`;
+}
 const connection = document.querySelector('#connection');
 const price = document.querySelector('#price');
 const updated = document.querySelector('#updated');
@@ -304,8 +312,8 @@ async function refreshSignals() {
       <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
       <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
       <div class="similarity">${s.targetOutcomePercent == null ? 'برآورد نتیجه: داده یا اعتبارسنجی کافی برای مدل وجود ندارد.' : `🎯 برآورد تارگت پس از ورود <b>${fa.format(s.targetOutcomePercent)}٪</b> · 🛑 استاپ <b>${fa.format(s.stopOutcomePercent)}٪</b><small>اعتبارسنجی زمانی: ${fa.format(s.outcomeValidationCount)} نتیجه</small>`}</div>
-      <div class="similarity ${s.targetSimilarityPercent == null ? 'insufficient' : ''}">${s.targetSimilarityPercent == null ? `برای پیش‌بینی، دادهٔ فنی کافی نیست (${fa.format(s.similaritySampleCount || 0)} نتیجه)` : `<div class="similarity-meter target-similarity"><span>شباهت به تارگت‌ها <b>${fa.format(s.targetSimilarityPercent ?? 0)}٪</b></span><i><em style="width:${Math.max(0,Math.min(100,s.targetSimilarityPercent ?? 0))}%"></em></i></div><div class="similarity-meter stop-similarity"><span>شباهت به استاپ‌ها <b>${fa.format(s.stopSimilarityPercent ?? 0)}٪</b></span><i><em style="width:${Math.max(0,Math.min(100,s.stopSimilarityPercent ?? 0))}%"></em></i></div><small>${fa.format(s.similaritySampleCount)} نتیجهٔ فنی آموخته‌شده</small>`}</div>
-      <button class="remove" onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'لغو سیگنال'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
+      <div class="similarity ${s.targetSimilarityPercent == null ? 'insufficient' : ''}">${s.targetSimilarityPercent == null ? `برای مقایسه، دادهٔ فنی کافی نیست (${fa.format(s.similaritySampleCount || 0)} نتیجه)` : `<div class="similarity-meter target-similarity"><span>شباهت به تارگت‌ها <b>${fa.format(s.targetSimilarityPercent ?? 0)}٪</b></span><i><em style="width:${Math.max(0,Math.min(100,s.targetSimilarityPercent ?? 0))}%"></em></i></div><div class="similarity-meter stop-similarity"><span>شباهت به استاپ‌ها <b>${fa.format(s.stopSimilarityPercent ?? 0)}٪</b></span><i><em style="width:${Math.max(0,Math.min(100,s.stopSimilarityPercent ?? 0))}%"></em></i></div><small>${fa.format(s.similaritySampleCount)} نتیجهٔ فنی آموخته‌شده</small>`}${similaritySupport(s.similarityEvidence)}</div>
+      <button class="remove" ${s.status === 'RecoveryRequired' ? 'disabled title="تا تطبیق وضعیت صرافی قابل حذف یا اجرا نیست"' : ''} onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'لغو سیگنال'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
   } catch { /* status indicator already reports connectivity */ }
 }
 
@@ -347,7 +355,7 @@ async function refreshHistory() {
 
 function statusLabel(status) {
   if (status === 'Closing') return 'درخواست بستن؛ منتظر تأیید صرافی';
-  return ({ Pending:'در انتظار ورود', Submitting:'در حال ارسال', Submitted:'سفارش باز', Filled:'پوزیشن فعال', Expired:'اکسپایر شده', Cancelled:'لغوشده', Rejected:'ردشده', Error:'خطا' })[status] || status;
+  return ({ RecoveryRequired:'بازیابی‌شده؛ نیازمند تطبیق با صرافی', Pending:'در انتظار ورود', Submitting:'در حال ارسال', Submitted:'سفارش باز', Filled:'پوزیشن فعال', Expired:'اکسپایر شده', Cancelled:'لغوشده', Rejected:'ردشده', Error:'خطا' })[status] || status;
 }
 
 function escapeHtml(value) {

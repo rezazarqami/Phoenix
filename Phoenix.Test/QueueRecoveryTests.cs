@@ -26,9 +26,9 @@ internal static class QueueRecoveryTests
         });
     }
 
-    public static void RefusesActiveOrEmptyHistory()
+    public static void RefusesUnknownOrEmptyHistory()
     {
-        foreach (var status in new[] { "Pending", "Submitting", "Submitted", "Filled", "Closing", "unknown", "empty" })
+        foreach (var status in new[] { "unknown", "empty" })
             WithStore((directory, path, history, store) =>
             {
                 if (status != "empty") store.AddAsync(Signal(status)).GetAwaiter().GetResult();
@@ -36,6 +36,28 @@ internal static class QueueRecoveryTests
                 try { new ServerOrderStore(path,history).GetAllAsync().GetAwaiter().GetResult(); throw new Exception("Unsafe recovery succeeded."); }
                 catch (InvalidDataException) { }
                 if (!File.ReadAllBytes(path).SequenceEqual(damaged)) throw new Exception("Rejected recovery modified original bytes.");
+            });
+    }
+
+    public static void QuarantinesActiveHistory()
+    {
+        foreach (var status in new[] { "Pending", "Submitting", "Submitted", "Filled", "Closing" })
+            WithStore((directory,path,history,store) =>
+            {
+                var original=Signal(status); store.AddAsync(original).GetAwaiter().GetResult();
+                File.WriteAllBytes(path,new byte[128]);
+                var recoveredStore=new ServerOrderStore(path,history);
+                var recovered=recoveredStore.GetAllAsync().GetAwaiter().GetResult().Single();
+                if (recovered.Status!="RecoveryRequired" || recovered.RecoveryOriginalStatus!=status || recovered.Outcome is not null)
+                    throw new Exception("Recovery must preserve active evidence without inventing an outcome.");
+                if (recoveredStore.GetHistoryAsync().GetAwaiter().GetResult().Single().Signal.Status!=status)
+                    throw new Exception("Recovery modified archived execution evidence.");
+                var next=Signal("Pending"); recoveredStore.AddAsync(next).GetAwaiter().GetResult();
+                if (recoveredStore.TryClaimSubmissionAsync(next.Id,100).GetAwaiter().GetResult() ||
+                    recoveredStore.TryClaimExclusiveSubmissionAsync(next.Id,100).GetAwaiter().GetResult()!=ExclusiveClaimResult.Unavailable)
+                    throw new Exception("New submissions must wait until recovered active orders are reconciled.");
+                if (new ServerOrderStore(path,history).GetAllAsync().GetAwaiter().GetResult().Single(x=>x.Id==original.Id).Status!="RecoveryRequired")
+                    throw new Exception("Quarantine did not survive restart.");
             });
     }
 

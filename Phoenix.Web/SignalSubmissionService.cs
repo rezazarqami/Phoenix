@@ -59,6 +59,7 @@ public sealed class SignalSubmissionService(
             queued.TargetSimilarityPercent = similarityResult.TargetPercent;
             queued.StopSimilarityPercent = similarityResult.StopPercent;
             queued.SimilaritySampleCount = similarityResult.SampleCount;
+            queued.SimilarityEvidence = similarityResult.Evidence;
             queued.TargetOutcomePercent = similarityResult.TargetOutcomePercent;
             queued.StopOutcomePercent = similarityResult.StopOutcomePercent;
             queued.OutcomeValidationCount = similarityResult.OutcomeValidationCount;

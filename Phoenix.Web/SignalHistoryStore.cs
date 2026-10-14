@@ -147,6 +147,39 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
+    // Recovery is deliberately narrower than a history import. Replaying Pending,
+    // Submitting or Filled snapshots could submit an order twice or manage a stale position.
+    internal async Task<List<ServerSignal>> ReadInactiveQueueForRecoveryAsync(CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var check = connection.CreateCommand();
+            check.CommandText = "PRAGMA quick_check";
+            if (!string.Equals(await check.ExecuteScalarAsync(token) as string, "ok", StringComparison.Ordinal))
+                throw new InvalidDataException("Signal history failed its integrity check; queue recovery stopped.");
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT id,status,payload FROM signals WHERE removed_at_utc IS NULL ORDER BY created_at_utc,id";
+            var result = new List<ServerSignal>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(2), JsonOptions)
+                    ?? throw new InvalidDataException("An archived queue snapshot is empty.");
+                if (signal.Id == Guid.Empty || signal.Id.ToString() != reader.GetString(0) || signal.Status != reader.GetString(1))
+                    throw new InvalidDataException("An archived queue snapshot has inconsistent identity or status.");
+                if (signal.Status is not ("Completed" or "Cancelled" or "Expired" or "Error" or "Rejected" or "Deactivated"))
+                    throw new InvalidDataException("Queue recovery requires exchange reconciliation: history contains active orders. The original file was preserved.");
+                result.Add(signal);
+            }
+            if (result.Count == 0)
+                throw new InvalidDataException("No recoverable queue snapshots exist; the original file was preserved.");
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<IReadOnlyList<SignalHistoryItem>> GetCreatedRangeAsync(
         DateTime fromUtc, DateTime toUtc, int limit = 20000, CancellationToken token = default)
     {

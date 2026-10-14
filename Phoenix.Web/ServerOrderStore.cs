@@ -389,17 +389,41 @@ public sealed class ServerOrderStore
     {
         if (_signals is not null) return _signals;
         if (!File.Exists(_filePath)) return _signals = [];
-        await using var stream = File.OpenRead(_filePath);
-        return _signals = await JsonSerializer.DeserializeAsync<List<ServerSignal>>(stream, JsonOptions, token) ?? [];
+        try
+        {
+            await using var stream = File.OpenRead(_filePath);
+            return _signals = await JsonSerializer.DeserializeAsync<List<ServerSignal>>(stream, JsonOptions, token)
+                ?? throw new JsonException("Queue must contain a JSON array, not null.");
+        }
+        catch (JsonException)
+        {
+            // Never clear a damaged queue or restore an old executable order blindly.
+            // Only intact, non-removed, inactive history snapshots may be recovered.
+            var recovered = await _history.ReadInactiveQueueForRecoveryAsync(token);
+            File.Copy(_filePath, _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffff") + "-" + Guid.NewGuid().ToString("N"));
+            await SaveUnsafeAsync(recovered, token);
+            _historyMigrated = true; // Do not rewrite archive timestamps or removal metadata.
+            return _signals = recovered;
+        }
     }
 
     private async Task SaveUnsafeAsync(List<ServerSignal> signals, CancellationToken token)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
-        var temporary = _filePath + ".tmp";
-        await using (var stream = File.Create(temporary))
-            await JsonSerializer.SerializeAsync(stream, signals, JsonOptions, token);
-        File.Move(temporary, _filePath, true);
+        var temporary = _filePath + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write,
+                FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, signals, JsonOptions, token);
+                await stream.FlushAsync(token);
+                stream.Flush(flushToDisk: true);
+            }
+            if (File.Exists(_filePath)) File.Copy(_filePath, _filePath + ".previous", true);
+            File.Move(temporary, _filePath, true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     private static ServerSignal Clone(ServerSignal signal) => new()

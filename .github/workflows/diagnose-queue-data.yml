@@ -18,26 +18,14 @@ jobs:
           command_timeout: 1m
           script: |
             python3 - <<'PY'
-            import pathlib,json,sqlite3,collections,datetime
+            import pathlib,json
             root=pathlib.Path('/opt/Phoenix/Phoenix.Web/bin/Debug/net10.0')
-            for directory in [root/'data-real',root/'data-strategy2']:
-                print('DIRECTORY',str(directory))
-                for path in sorted(directory.iterdir()):
-                    if 'server-signals' not in path.name and 'history' not in path.name:continue
-                    s=path.stat()
-                    print('CANDIDATE',path.name,'BYTES',s.st_size,'MODIFIED',datetime.datetime.fromtimestamp(s.st_mtime,datetime.timezone.utc).isoformat())
-                    if path.name.startswith('server-signals') and s.st_size<32*1024*1024:
-                        raw=path.read_bytes()
-                        try:obj=json.loads(raw);print('JSON_VALID',isinstance(obj,list),'COUNT',len(obj))
-                        except (ValueError,UnicodeError):
-                            nz=[i for i,b in enumerate(raw) if b]
-                            print('JSON_INVALID','FIRST_NONZERO',nz[0] if nz else None,'LAST_NONZERO',nz[-1] if nz else None)
-                db=directory/'phoenix-history.db'
-                if not db.exists():continue
-                conn=sqlite3.connect(db.as_uri()+'?mode=ro',uri=True)
-                print('DB_CHECK',conn.execute('PRAGMA quick_check').fetchone()[0])
-                print('DB_COUNTS',conn.execute('SELECT count(*),sum(removed_at_utc IS NULL),min(updated_at_utc),max(updated_at_utc) FROM signals').fetchone())
-                print('DB_ACTIVE_STATUSES',conn.execute('SELECT status,count(*) FROM signals WHERE removed_at_utc IS NULL GROUP BY status').fetchall())
-                print('DB_PENDING_WITH_ORDER_EVIDENCE',conn.execute("SELECT count(*) FROM signals WHERE removed_at_utc IS NULL AND status='Pending' AND (json_extract(payload,'$.submittedAtUtc') IS NOT NULL OR json_extract(payload,'$.bybitOrderId') IS NOT NULL)").fetchone()[0])
-                conn.close()
+            for name in ['data-real','data-strategy2']:
+                directory=root/name
+                path=directory/'server-signals.json'
+                raw=path.read_bytes()
+                try:
+                    rows=json.loads(raw)
+                    print(name,'VALID_JSON','ROWS',len(rows),'ACTIVE',sum(r.get('status') in ['Pending','Submitting','Submitted','Filled','Closing'] for r in rows),'CORRUPT_BACKUPS',len(list(directory.glob('server-signals.json.corrupt-*'))))
+                except (ValueError,UnicodeError): print(name,'INVALID_JSON','NUL_BYTES',raw.count(bytes([0])))
             PY

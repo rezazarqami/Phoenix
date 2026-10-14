@@ -1,9 +1,446 @@
-<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101d2c"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icons/phoenix-192.png"><link rel="stylesheet" href="/personal.css?v=1"><title>فضای شخصی رضا</title></head><body>
-<header><a class="wordmark" href="/">R<span>•</span> / PERSONAL</a><div><a class="quiet" href="/phoenix">فونیکس ↗</a><button id="logout" class="quiet">خروج</button></div></header>
-<main><section class="welcome"><div><span class="eyebrow">MY LIFE, IN FOCUS</span><h1>فضای شخصی من</h1><p>روزها را ثبت کن، مسیرت را بهتر بشناس.</p></div><time id="today"></time></section>
-<a href="/phoenix" class="phoenix-card"><div><span class="eyebrow">TRADING WORKSPACE</span><h2>فونیکس</h2><p>سیگنال‌ها، معاملات و تحلیل بازار</p></div><span class="arrow">↗</span></a>
-<nav aria-label="بخش‌های فضای شخصی"><button data-tab="overview" aria-pressed="true">نمای کلی</button><button data-tab="finance" aria-pressed="false">حساب‌وکتاب</button><button data-tab="vehicle" aria-pressed="false">خودرو</button><button data-tab="journal" aria-pressed="false">روزمره</button></nav>
-<p id="status" role="status" aria-live="polite"></p>
-<section id="overview"><div class="section-heading"><h2>مرور داده‌ها</h2><label>بازه <select id="range"><option value="month">ماه جاری</option><option value="all">همهٔ زمان‌ها</option></select></label></div><div id="metrics" class="metrics"></div><section class="card"><h3>هزینه‌ها به تفکیک دسته</h3><div id="categories"></div></section><div class="section-heading"><h2>آخرین ثبت‌ها</h2><button id="export" class="quiet">دریافت داده‌ها (JSON)</button></div><div id="recent"></div></section>
-<section id="records" hidden><div class="section-heading"><h2 id="sectionTitle"></h2><span>ذخیره در فضای شخصی شما</span></div><form id="entryForm" class="card"><div class="form-grid"><label>عنوان<input name="title" required maxlength="200" placeholder="مثلاً خرید روزانه یا تعویض روغن"></label><label>تاریخ<input name="date" type="date" required></label><label>دسته‌بندی<input name="category" maxlength="100" placeholder="مثلاً خوراک، سرویس، رشد فردی"></label><label class="money-field">مبلغ (تومان)<input name="amount" type="number" min="0" max="1000000000000000" step="1" inputmode="numeric"></label><label class="finance-field">نوع تراکنش<select name="flow"><option value="expense">هزینه</option><option value="income">درآمد</option></select></label><label class="vehicle-field" hidden>خودرو<input name="vehicle" maxlength="100" placeholder="مدل یا نام خودرو"></label><label class="vehicle-field" hidden>کیلومتر خودرو<input name="odometer" type="number" min="0" max="2147483647" step="1" inputmode="numeric"></label><label class="wide">شرح و جزئیات<textarea name="notes" rows="4" maxlength="10000" placeholder="چه اتفاقی افتاد؟ چه چیزی یاد گرفتی؟"></textarea></label></div><button class="primary" type="submit">ثبت اطلاعات ＋</button></form><div class="section-heading"><h3>سوابق ثبت‌شده</h3><input id="search" type="search" placeholder="جست‌وجو در سوابق" aria-label="جست‌وجو در سوابق"></div><div id="list"></div></section>
-<footer>فضای شخصی • یک ورود برای زندگی روزمره و فونیکس</footer></main><script src="/personal.js?v=1"></script><script src="/install-phoenix.js?v=2"></script></body></html>
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0d1928" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/phoenix-192.png" />
+    <link rel="stylesheet" href="/personal.css?v=2" />
+    <title>فضای شخصی رضا</title>
+  </head>
+  <body data-personal-workspace="2">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="wordmark" href="/"
+          >R<span>•</span><small>PERSONAL WORKSPACE</small></a
+        >
+        <nav id="mainNav" aria-label="بخش‌های برنامه">
+          <button data-page="today" aria-current="page">
+            <span>◷</span> امروز من</button
+          ><button data-page="records"><span>▤</span> ثبت‌ها</button
+          ><button data-page="path"><span>◎</span> مسیر من</button
+          ><button data-page="experience"><span>◇</span> تجربه و تصمیم</button
+          ><button data-page="review"><span>↗</span> مرور و گزارش</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <a class="phoenix-link" href="/phoenix"
+            ><span>PHOENIX</span> ورود به فونیکس ↗</a
+          ><button id="settingsButton" class="quiet">تنظیمات و پشتیبان</button>
+        </div>
+      </aside>
+      <div class="app-content">
+        <header class="topbar">
+          <div>
+            <span class="eyebrow">LIFE IN FOCUS</span
+            ><span id="todayDate"></span>
+          </div>
+          <div class="top-actions">
+            <button id="syncButton" class="sync-button" aria-label="همگام‌سازی">
+              <i id="syncDot"></i
+              ><span id="syncLabel">در حال اتصال</span></button
+            ><button id="quickButton" class="primary">＋ ثبت سریع</button>
+          </div>
+        </header>
+        <div
+          id="message"
+          class="message"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
+        <div id="offlineBanner" class="offline-banner" hidden>
+          ارتباط برقرار نیست؛ ثبت‌ها روی این گوشی نگه داشته می‌شوند و پس از
+          اتصال همگام می‌شوند.
+        </div>
+        <main id="mainContent">
+          <section id="page-today" class="page">
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">A LITTLE BETTER, EVERY DAY</span>
+                <h1>فضای شخصی من</h1>
+                <p>روزت را روشن شروع کن؛ تجربه‌ات را نگه دار.</p>
+              </div>
+              <a class="phoenix-mini" href="/phoenix">فونیکس ↗</a>
+            </div>
+            <div id="todayMetrics" class="metrics"></div>
+            <div class="two-columns">
+              <section class="panel">
+                <div class="section-heading">
+                  <div>
+                    <h2>سه کار مهم امروز</h2>
+                    <small>تمرکز روی کارهایی که خودت انتخاب می‌کنی</small>
+                  </div>
+                  <button class="quiet" data-new="task">＋ کار</button>
+                </div>
+                <div id="importantTasks"></div>
+                <div class="section-heading minor">
+                  <h3>قرارها و کارهای امروز</h3>
+                </div>
+                <div id="todayTasks"></div>
+                <details class="disclosure">
+                  <summary>
+                    کارهای ناتمام روزهای قبل <span id="overdueCount"></span>
+                  </summary>
+                  <div id="overdueTasks"></div>
+                </details>
+              </section>
+              <section class="panel">
+                <div class="section-heading">
+                  <h2>یک دقیقه برای خودت</h2>
+                  <button id="checkinButton" class="quiet">ثبت وضعیت</button>
+                </div>
+                <div id="todayCheckin"></div>
+                <div class="section-heading minor">
+                  <h3>عادت‌های این دوره</h3>
+                  <button class="quiet" data-new="habit">＋ عادت</button>
+                </div>
+                <div id="todayHabits"></div>
+              </section>
+            </div>
+            <section class="panel">
+              <div class="section-heading">
+                <div>
+                  <h2>وقتت را کجا گذاشتی؟</h2>
+                  <small>زمان‌سنج یا ثبت دستی، متصل به هدف و پروژه</small>
+                </div>
+                <button class="quiet" data-new="time">ثبت دستی</button>
+              </div>
+              <div id="timerHost"></div>
+            </section>
+            <section class="panel">
+              <div class="section-heading"><h2>تصمیم‌های آمادهٔ مرور</h2></div>
+              <div id="dueDecisions"></div>
+            </section>
+          </section>
+          <section id="page-records" class="page" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">YOUR PERSONAL TIMELINE</span>
+                <h1>ثبت‌ها و خاطره‌ها</h1>
+                <p>اتفاق، هزینه و تجربه؛ با جزئیات و پیوست.</p>
+              </div>
+              <button class="primary" data-new="journal">＋ یادداشت</button>
+            </div>
+            <div class="filters">
+              <label
+                >جست‌وجو<input
+                  id="recordSearch"
+                  type="search"
+                  placeholder="عنوان، توضیح یا دسته‌بندی" /></label
+              ><label
+                >نوع ثبت<select id="recordKind">
+                  <option value="all">همهٔ ثبت‌ها</option>
+                  <option value="finance">حساب‌وکتاب</option>
+                  <option value="vehicle">سوابق خودرو</option>
+                  <option value="journal">یادداشت‌ها</option>
+                  <option value="checkin">وضعیت روزانه</option>
+                  <option value="task">کارها</option>
+                  <option value="time">زمان فعالیت</option>
+                </select></label
+              ><label>از تاریخ<input id="recordFrom" type="date" /></label
+              ><label>تا تاریخ<input id="recordTo" type="date" /></label>
+            </div>
+            <div class="section-heading">
+              <span id="recordCount"></span>
+              <div class="button-row">
+                <button data-new="finance" class="quiet">＋ تراکنش</button
+                ><button data-new="vehicle" class="quiet">＋ خودرو</button
+                ><button data-new="checkin" class="quiet">＋ وضعیت روز</button>
+              </div>
+            </div>
+            <div id="recordList"></div>
+            <button id="moreRecords" class="quiet" hidden>نمایش بیشتر</button>
+          </section>
+          <section id="page-path" class="page" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">INTENTION INTO ACTION</span>
+                <h1>مسیر من</h1>
+                <p>هدف‌ها را به پروژه، کار و عادت وصل کن.</p>
+              </div>
+              <div class="button-row">
+                <button class="primary" data-new="goal">＋ هدف</button
+                ><button class="quiet" data-new="project">＋ پروژه</button>
+              </div>
+            </div>
+            <div class="section-heading">
+              <h2>هدف‌ها</h2>
+              <label class="inline-check"
+                ><input id="showArchived" type="checkbox" /> نمایش
+                بایگانی</label
+              >
+            </div>
+            <div id="goalList" class="cards-grid"></div>
+            <div class="section-heading"><h2>پروژه‌ها</h2></div>
+            <div id="projectList" class="cards-grid"></div>
+            <div class="section-heading">
+              <h2>عادت‌ها</h2>
+              <button class="quiet" data-new="habit">＋ عادت</button>
+            </div>
+            <div id="habitList" class="cards-grid"></div>
+          </section>
+          <section id="page-experience" class="page" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">TURN EXPERIENCE INTO KNOWLEDGE</span>
+                <h1>تجربه و تصمیم</h1>
+                <p>دلیل تصمیم‌ها، آزمایش‌های ساز و تغییرهای زندگی.</p>
+              </div>
+            </div>
+            <div id="experienceTabs" class="subnav" aria-label="انواع تجربه">
+              <button data-kind="decision" aria-pressed="true">
+                دفتر تصمیم‌ها</button
+              ><button data-kind="craft" aria-pressed="false">
+                تجربه‌های ساخت ساز</button
+              ><button data-kind="experiment" aria-pressed="false">
+                آزمایش تغییرها
+              </button>
+            </div>
+            <div class="filters compact">
+              <label
+                >جست‌وجو<input
+                  id="experienceSearch"
+                  type="search"
+                  placeholder="تجربه یا روش قبلی را پیدا کن" /></label
+              ><button id="newExperience" class="primary">＋ تصمیم</button>
+            </div>
+            <div id="experienceHint" class="note"></div>
+            <div id="experienceList"></div>
+          </section>
+          <section id="page-review" class="page" hidden>
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">LOOK BACK. MOVE FORWARD.</span>
+                <h1>مرور و گزارش</h1>
+                <p>اعداد از ثبت‌های خودت محاسبه می‌شوند.</p>
+              </div>
+              <button id="weeklyReview" class="primary">نوشتن مرور</button>
+            </div>
+            <div class="filters">
+              <label
+                >بازه<select id="reportRange">
+                  <option value="week">هفتهٔ جاری</option>
+                  <option value="lastweek">هفتهٔ قبل</option>
+                  <option value="month">ماه شمسی جاری</option>
+                  <option value="custom">بازهٔ دلخواه</option>
+                </select></label
+              ><label>از<input id="reportFrom" type="date" /></label
+              ><label>تا<input id="reportTo" type="date" /></label
+              ><button id="applyReport" class="quiet">مشاهده</button>
+            </div>
+            <div id="reportMetrics" class="metrics"></div>
+            <div class="two-columns">
+              <section class="panel">
+                <div class="section-heading">
+                  <h2>وقت و تمرکز در طول روزها</h2>
+                  <select id="chartMetric" aria-label="شاخص نمودار">
+                    <option value="minutes">زمان فعالیت (دقیقه)</option>
+                    <option value="focus">تمرکز (۱ تا ۵)</option>
+                    <option value="energy">انرژی (۱ تا ۵)</option>
+                    <option value="sleepHours">خواب (ساعت)</option>
+                  </select>
+                </div>
+                <div id="trendChart"></div>
+                <small>فاصله‌های خالی، روزهای بدون ثبت‌اند.</small>
+              </section>
+              <section class="panel">
+                <h2>هزینه‌ها به تفکیک دسته</h2>
+                <div id="categoryChart"></div>
+                <small
+                  >هزینهٔ خودرو یک‌بار در جمع هزینه‌ها محاسبه می‌شود.</small
+                >
+              </section>
+            </div>
+            <section class="panel">
+              <h2>مشاهده‌های این دوره</h2>
+              <div id="reportObservations"></div>
+            </section>
+            <section class="panel">
+              <h2>فعالیت‌ها و تمرکز</h2>
+              <div id="activityReport"></div>
+              <small
+                >مقایسهٔ توصیفی است؛ علت و معلول را اثبات نمی‌کند. روز بدون ثبت،
+                صفر محسوب نمی‌شود.</small
+              >
+            </section>
+            <section class="panel">
+              <h2>پیشرفت هدف‌ها و پروژه‌ها</h2>
+              <div id="projectReport"></div>
+            </section>
+            <section class="panel">
+              <div class="section-heading">
+                <h2>مرورهای نوشته‌شده</h2>
+                <button id="printReport" class="quiet">چاپ / PDF</button>
+              </div>
+              <div id="reviewList"></div>
+            </section>
+          </section>
+        </main>
+        <footer>خصوصی، برای خودت • ثبت کوتاه، مرور دقیق</footer>
+      </div>
+    </div>
+    <dialog id="editorDialog" class="editor-dialog">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">PERSONAL RECORD</span>
+          <h2 id="editorTitle"></h2>
+        </div>
+        <button
+          type="button"
+          data-close="editorDialog"
+          class="icon-button"
+          aria-label="بستن"
+        >
+          ×
+        </button>
+      </div>
+      <form id="editorForm">
+        <div id="editorFields" class="form-grid"></div>
+        <section class="attachments-section">
+          <div class="section-heading">
+            <h3>عکس و صدا</h3>
+            <label class="file-button"
+              >＋ پیوست<input
+                id="attachmentInput"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/wav"
+                multiple
+                hidden
+            /></label>
+          </div>
+          <div id="editorAttachments" class="media-grid"></div>
+          <small
+            >برای تجربهٔ ساز، عکس یا صدای قبل و بعد را ضمیمه کن. هر فایل حداکثر
+            ۱۶ مگابایت.</small
+          >
+        </section>
+        <p id="editorError" class="error" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" data-close="editorDialog" class="quiet">
+            انصراف</button
+          ><button id="saveEntry" type="submit" class="primary">
+            ثبت اطلاعات
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="captureDialog">
+      <div class="dialog-heading">
+        <div>
+          <span class="eyebrow">CAPTURE THE MOMENT</span>
+          <h2>ثبت سریع</h2>
+        </div>
+        <button
+          data-close="captureDialog"
+          class="icon-button"
+          aria-label="بستن"
+        >
+          ×
+        </button>
+      </div>
+      <label
+        >چه اتفاقی افتاد؟<textarea
+          id="captureText"
+          rows="5"
+          maxlength="10000"
+          placeholder="مثلاً: امروز روغن ماشین را عوض کردم، کیلومتر ۸۴۵۰۰ بود و یک میلیون و هشتصد هزار تومان پرداخت کردم."
+        ></textarea>
+      </label>
+      <div class="button-row capture-tools">
+        <button id="dictateButton" class="quiet">◉ گفتار به متن</button
+        ><button id="recordVoice" class="quiet">● ضبط صدا</button
+        ><label class="file-button"
+          >＋ عکس<input
+            id="capturePhoto"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            multiple
+            hidden
+        /></label>
+      </div>
+      <label class="inline-check"
+        ><input id="speechConsent" type="checkbox" /> استفاده از تبدیل گفتار
+        مرورگر را می‌پذیرم؛ ممکن است از سرویس بیرونی و اینترنت استفاده
+        کند.</label
+      >
+      <div id="captureFiles" class="media-grid"></div>
+      <p id="captureStatus" role="status" aria-live="polite"></p>
+      <button id="parseCapture" class="primary full-button">
+        ساخت پیش‌نویس برای بررسی ←
+      </button>
+    </dialog>
+    <dialog id="detailDialog">
+      <div class="dialog-heading">
+        <h2 id="detailTitle"></h2>
+        <button data-close="detailDialog" class="icon-button" aria-label="بستن">
+          ×
+        </button>
+      </div>
+      <div id="detailBody"></div>
+      <div id="detailActions" class="dialog-actions"></div>
+    </dialog>
+    <dialog id="settingsDialog">
+      <div class="dialog-heading">
+        <h2>تنظیمات و داده‌ها</h2>
+        <button
+          data-close="settingsDialog"
+          class="icon-button"
+          aria-label="بستن"
+        >
+          ×
+        </button>
+      </div>
+      <section class="settings-section">
+        <h3>پشتیبان و انتقال اطلاعات</h3>
+        <p>پشتیبان کامل شامل ثبت‌های همگام‌شده، عکس‌ها و صداهای مرتبط است.</p>
+        <div class="button-row">
+          <button id="downloadBackup" class="primary">
+            دریافت پشتیبان کامل</button
+          ><button id="downloadJson" class="quiet">خروجی JSON</button
+          ><button id="downloadLocal" class="quiet">
+            خروجی ثبت‌های این گوشی
+          </button>
+        </div>
+        <label class="file-button import-button"
+          >بازیابی از پشتیبان<input
+            id="importBackup"
+            type="file"
+            accept=".zip,application/zip"
+            hidden /></label
+        ><small
+          >بازیابی ثبت‌های جدید را اضافه می‌کند؛ اطلاعات موجود را بازنویسی
+          نمی‌کند.</small
+        >
+      </section>
+      <section class="settings-section">
+        <h3>ثبت‌های در انتظار همگام‌سازی</h3>
+        <div id="pendingList"></div>
+      </section>
+      <section class="settings-section">
+        <div class="section-heading">
+          <h3>حذف‌شده‌ها</h3>
+          <button id="loadTrash" class="quiet">مشاهده و بازیابی</button>
+        </div>
+        <div id="trashList"></div>
+      </section>
+      <section class="settings-section">
+        <h3>حریم خصوصی</h3>
+        <p>
+          تحلیل و دسته‌بندی این نسخه بدون ارسال یادداشت‌ها به سرویس هوش مصنوعی
+          انجام می‌شود. تبدیل گفتار مرورگر فقط با انتخاب خودت فعال می‌شود.
+        </p>
+        <button id="logoutButton" class="danger">
+          خروج و پاک‌کردن دادهٔ این گوشی
+        </button>
+      </section>
+    </dialog>
+    <script src="/personal-core.js?v=2"></script>
+    <script src="/personal-storage.js?v=2"></script>
+    <script src="/personal.js?v=2"></script>
+  </body>
+</html>

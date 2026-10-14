@@ -254,12 +254,13 @@ accounts, including editor accounts.
 Records live in `personal.db` beside `PHOENIX_QUEUE_PATH`, or the explicit absolute
 `PERSONAL_DATABASE_PATH`. Use the existing persistent data volume and include this
 file in server backups; never commit personal data to this repository. JSON export
-is available inside the overview. Vehicle costs are summarized separately from
-finance expenses to avoid counting the same service twice. Month summaries use
-the current Gregorian month; displayed dates use the Persian calendar.
+is available inside the overview. Vehicle service costs are included once in total expenses and also shown as a
+separate subtotal. Month summaries use the Persian month; displayed dates use
+the Persian calendar.
 
-Private HTML and API responses are not cached. The updated service worker clears
-old Phoenix offline caches and no longer stores authenticated pages. Existing
+Personal API responses are not HTTP-cached. After verified owner access, the
+service worker stores the generic personal app shell for offline use and clears
+it on logout. Device records and pending operations use owner-scoped IndexedDB. Existing
 installed Android/PWA clients open the new workspace at their unchanged root URL.
 Deployment remains the existing `Deploy Phoenix` workflow on `master`, targeting
 server `91.216.104.210` through `/usr/local/sbin/deploy-phoenix`; no domain or
@@ -275,3 +276,8 @@ Legacy records keep it null; current or entry features are never relabeled as
 original proposal evidence. Capture time describes when analysis was observed;
 it does not claim all source candles were finalized. This is data provenance for
 future proposal-time validation, not a new probability model or trading rule.
+
+
+See [Personal life workspace](docs/personal-workspace.md) for the new capture,
+goals, decisions, craft, time, experiments, reports, offline sync and backup flows.
+This development is isolated in `personal/life-workspace` for a later release.

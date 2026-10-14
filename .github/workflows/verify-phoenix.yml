@@ -1,6 +1,8 @@
 name: Verify Phoenix
 
 on:
+  push:
+    branches: ["personal/**"]
   pull_request:
     branches: [master]
 
@@ -18,7 +20,13 @@ jobs:
         run: python3 Phoenix.Test/personal-access-tests.py
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
+      - name: Verify personal domain and offline UI behavior
+        run: |
+          node Phoenix.Test/personal-core-tests.cjs
+          node Phoenix.Test/personal-worker-tests.cjs
+          npm ci --prefix Phoenix.Test/ui --ignore-scripts --no-audit --no-fund
+          npm test --prefix Phoenix.Test/ui
       - name: Verify Android-compatible cancellation controls
         run: node Phoenix.Test/cancellation-ui-tests.cjs
       - name: Verify batch controls under delayed responses

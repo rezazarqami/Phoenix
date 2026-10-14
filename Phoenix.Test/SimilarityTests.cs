@@ -123,4 +123,30 @@ internal static class SimilarityTests
         Check(TechnicalFeatureExtractor.StructureEvents(candles, -1m, 1m) == (0m, 0m),
             "Structural evidence must be normalized to the signal direction");
     }
+
+    public static void SupportAndEconomicDuplicates()
+    {
+        var at = new DateTime(2026,1,1,0,0,0,DateTimeKind.Utc);
+        var rows = Enumerable.Range(0,12).Select(i => new LearnedSignalPattern(new ServerSignal
+        {
+            Id=Guid.NewGuid(), Symbol="BTCUSDT", Direction="Long", Timeframe="15",
+            EntryPrice=100,TakeProfit=110,StopLoss=90, EntryTriggeredAtUtc=at.AddDays(i),
+            CompletedAtUtc=at.AddDays(i).AddHours(1)
+        }, i%2==0 ? "Target":"StopLoss", Features)).ToArray();
+        var candidate = new ServerSignal { Direction="Long",Timeframe="15",TechnicalFeatures=Features,
+            CreatedAtUtc=at.AddDays(20) };
+        var result=SignalSimilarityService.CalculateFromPatterns(candidate,rows);
+        Check(result.Evidence is { SameTimeframeNearbyCount:12,HistoricalTargetRate:50m,ReferenceStage:"entry",QueryStage:"proposal" },
+            "Historical support must report exact counts and mismatched evidence stages.");
+        var first=rows[0];
+        var duplicate=new LearnedSignalPattern(new ServerSignal { Id=Guid.NewGuid(),Symbol="BTCUSDT",Direction="Long",Timeframe="15",
+            EntryPrice=100,TakeProfit=110,StopLoss=90,EntryTriggeredAtUtc=at.AddSeconds(15),CompletedAtUtc=at.AddHours(1) },"Target",Features);
+        Check(SignalSimilarityService.CalculateFromPatterns(candidate,rows.Append(duplicate).ToArray()) == result,
+            "Duplicated trade episodes with different IDs must not inflate evidence.");
+        var conflict=duplicate with { Outcome="StopLoss" };
+        Check(SignalPatternIdentity.Unique(rows.Append(conflict)).Length==11,
+            "Conflicting outcomes for the same episode must be excluded rather than arbitrarily chosen.");
+        Check(SignalReviewText.Support(result.Evidence).Contains("احتمال این سیگنال نیست"),
+            "Historical outcome frequencies must not be presented as new-signal probabilities.");
+    }
 }

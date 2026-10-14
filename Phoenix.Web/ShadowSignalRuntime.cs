@@ -37,7 +37,8 @@ public sealed class ShadowSignalRuntime
             TargetOutcomePercent = analysis.Prediction.TargetOutcomePercent,
             StopOutcomePercent = analysis.Prediction.StopOutcomePercent,
             OutcomeValidationCount = analysis.Prediction.OutcomeValidationCount,
-            SimilaritySampleCount = analysis.Prediction.SampleCount
+            SimilaritySampleCount = analysis.Prediction.SampleCount,
+            SimilarityEvidence = analysis.Prediction.Evidence
         };
         await Store.AddAsync(signal, token,
             new SignalEvidence(timeframe, signal.ChartMode, image, analysis.Features,

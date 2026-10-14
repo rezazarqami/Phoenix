@@ -1,0 +1,31 @@
+namespace Phoenix.Web;
+
+/// <summary>Descriptive historical support, never a calibrated probability.</summary>
+public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage,
+    int ComparableTargets, int ComparableStops, int NearbyTargets, int NearbyStops,
+    decimal EffectiveTargets, decimal EffectiveStops, int SameTimeframeNearbyTargets,
+    int SameTimeframeNearbyStops)
+{
+    public int SameTimeframeNearbyCount => SameTimeframeNearbyTargets + SameTimeframeNearbyStops;
+    public decimal? HistoricalTargetRate => SameTimeframeNearbyCount < 10 ? null
+        : Math.Round(100m * SameTimeframeNearbyTargets / SameTimeframeNearbyCount, 1);
+}
+
+internal static class SignalPatternIdentity
+{
+    internal static LearnedSignalPattern[] Unique(IEnumerable<LearnedSignalPattern> patterns) => patterns
+        .Select((p,i) => (Pattern:p, Key:p.Signal.Id == Guid.Empty ? $"legacy:{i}" : p.Signal.Id.ToString()))
+        .GroupBy(x => x.Key).Where(g => g.Select(x => x.Pattern.Outcome).Distinct().Count() == 1)
+        .Select(g => g.First().Pattern)
+        .Select((p,i) => (Pattern:p, Key:Episode(p,i)))
+        .GroupBy(x => x.Key).Where(g => g.Select(x => x.Pattern.Outcome).Distinct().Count() == 1)
+        .Select(g => g.First().Pattern).ToArray();
+
+    private static string Episode(LearnedSignalPattern p, int index)
+    {
+        var s=p.Signal;
+        if (string.IsNullOrWhiteSpace(s.Symbol) || p.ObservedAtUtc is null || s.EntryPrice <= 0 ||
+            s.TakeProfit <= 0 || s.StopLoss <= 0) return $"row:{index}";
+        return FormattableString.Invariant($"{p.EvidenceStage}|{s.Symbol.ToUpperInvariant()}|{s.Direction}|{s.Timeframe}|{s.EntryPrice}|{s.TakeProfit}|{s.StopLoss}|{p.ObservedAtUtc.Value.Ticks / TimeSpan.TicksPerMinute}");
+    }
+}

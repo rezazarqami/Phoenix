@@ -28,6 +28,7 @@ public sealed class ServerSignal
     public decimal ExpireActivationPrice { get; set; }
     public string ExpireStage { get; set; } = "Initial";
     public string Status { get; set; } = "Pending";
+    public string? RecoveryOriginalStatus { get; set; }
     public string OrderLinkId { get; set; } = string.Empty;
     public string? BybitOrderId { get; set; }
     public string? Error { get; set; }
@@ -59,6 +60,7 @@ public sealed class ServerSignal
     public decimal? StopOutcomePercent { get; set; }
     public int OutcomeValidationCount { get; set; }
     public int SimilaritySampleCount { get; set; }
+    public SimilarityEvidence? SimilarityEvidence { get; set; }
     public SignalProposalEvidence? ProposalEvidence { get; set; }
     public TechnicalFeatureSnapshot? TechnicalFeatures { get; set; }
     public TechnicalFeatureSnapshot? EntryTechnicalFeatures { get; set; }
@@ -120,7 +122,7 @@ public sealed class ServerOrderStore
     private bool _historyMigrated;
     public string NotificationLedgerPath => _filePath + ".public-notifications.json";
     public SemaphoreSlim ExecutionGate { get; } = new(1, 1);
-    public bool EntriesPaused => false;
+    public bool EntriesPaused => _signals?.Any(x => x.Status == "RecoveryRequired") == true;
     public Task SetEntriesPausedAsync(bool paused, CancellationToken token = default)
     {
         // Bulk close already owns ExecutionGate for its entire operation. A persistent
@@ -254,6 +256,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal?.Status == "RecoveryRequired") return false;
             var removed = signal is not null && signals.Remove(signal);
             if (removed)
             {
@@ -291,6 +294,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signals.Any(x => x.Status == "RecoveryRequired")) return false;
             if (signal is null || signal.Status != "Pending") return false;
             signal.Status = "Submitting";
             signal.EntryTriggeredAtUtc = DateTime.UtcNow;
@@ -310,6 +314,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signals.Any(x => x.Status == "RecoveryRequired")) return ExclusiveClaimResult.Unavailable;
             if (signal is null || signal.Status != "Pending") return ExclusiveClaimResult.Unavailable;
             if (signals.Any(x => x.Id != id && x.Status is "Submitting" or "Submitted" or "Filled"))
                 return ExclusiveClaimResult.PositionBusy;
@@ -398,8 +403,8 @@ public sealed class ServerOrderStore
         catch (JsonException)
         {
             // Never clear a damaged queue or restore an old executable order blindly.
-            // Only intact, non-removed, inactive history snapshots may be recovered.
-            var recovered = await _history.ReadInactiveQueueForRecoveryAsync(token);
+            // Non-removed history is restored; active snapshots are quarantined.
+            var recovered = await _history.ReadQueueForRecoveryAsync(token);
             File.Copy(_filePath, _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfffffff") + "-" + Guid.NewGuid().ToString("N"));
             await SaveUnsafeAsync(recovered, token);
             _historyMigrated = true; // Do not rewrite archive timestamps or removal metadata.
@@ -428,6 +433,7 @@ public sealed class ServerOrderStore
 
     private static ServerSignal Clone(ServerSignal signal) => new()
     {
+        RecoveryOriginalStatus = signal.RecoveryOriginalStatus,
         Id = signal.Id, Symbol = signal.Symbol, Direction = signal.Direction,
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,
         Leverage = signal.Leverage,
@@ -461,6 +467,7 @@ public sealed class ServerOrderStore
         StopOutcomePercent = signal.StopOutcomePercent,
         OutcomeValidationCount = signal.OutcomeValidationCount,
         SimilaritySampleCount = signal.SimilaritySampleCount,
+        SimilarityEvidence = signal.SimilarityEvidence,
         ProposalEvidence = signal.ProposalEvidence,
         TechnicalFeatures = signal.TechnicalFeatures,
         EntryTechnicalFeatures = signal.EntryTechnicalFeatures,

@@ -14,7 +14,20 @@ internal static class SignalReviewText
             $"\n🔴 <b>شباهت به استاپ‌ها: {Percent(result.StopPercent)}</b>" +
             Comparison(result.TargetPercent, result.StopPercent) +
             $"\n\n🧠 نمونه‌های تارگت: {result.TargetSampleCount} | استاپ: {result.StopSampleCount}" +
-            $"\n📐 نمونه‌های مقایسه: {result.CalibrationSampleCount}";
+            $"\n📐 نمونه‌های مقایسه: {result.CalibrationSampleCount}" + Support(result.Evidence);
+    }
+    internal static string Support(SimilarityEvidence? evidence)
+    {
+        if (evidence is null) return "";
+        var stage = evidence.ReferenceStage == "proposal" ? "زمان پیشنهاد" : "لحظه ورود";
+        var text = $"\nمرجع شباهت: شرایط {stage} در گذشته." +
+            $"\nنمونه‌های نزدیکِ هم‌تایم‌فریم: {evidence.SameTimeframeNearbyTargets} تارگت / {evidence.SameTimeframeNearbyStops} استاپ.";
+        if (evidence.QueryStage != evidence.ReferenceStage)
+            text += "\nهنوز سابقهٔ کافی از زمان پیشنهاد نداریم؛ این مقایسه با شرایط ورود است.";
+        if (evidence.HistoricalTargetRate is { } rate)
+            text += $"\nسهم تارگت در همین نمونه‌های گذشته: {rate:0.0}٪؛ احتمال این سیگنال نیست.";
+        else text += "\nنمونه‌های نزدیک برای اعلام نرخ تاریخی کافی نیستند.";
+        return text;
     }
     internal static string Comparison(decimal? target, decimal? stop)
     {

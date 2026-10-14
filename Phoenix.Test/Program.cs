@@ -30,7 +30,8 @@ Run("Cancellation bulk handles All Long Short and preserves active positions", C
 
 Run("Proposal evidence survives current reviews, restart and research export", ProposalEvidenceTests.PreservesObservedProposal);
 Run("Queue recovery preserves inactive snapshots, removed records and corrupt original", QueueRecoveryTests.InactiveRecovery);
-Run("Queue recovery refuses active orders and empty history without changing original", QueueRecoveryTests.RefusesActiveOrEmptyHistory);
+Run("Queue recovery refuses unknown status and empty history without changing original", QueueRecoveryTests.RefusesUnknownOrEmptyHistory);
+Run("Queue recovery quarantines active snapshots and blocks duplicate submissions", QueueRecoveryTests.QuarantinesActiveHistory);
 
 Run("Evaluation export preserves provenance, excludes private data and refuses truncation", EvaluationExportTests.SchemaAndLimits);
 
@@ -39,6 +40,9 @@ Run("Crypto statistics migrate queues, retain removed trades and refresh outcome
 
 Run("Outcome model learns approved evidence and validates chronologically", OutcomeModelTests.LearnsOutcomesAndValidates);
 Run("Outcome model rejects failed validation, duplication and future labels", OutcomeModelTests.RejectsUnvalidatedAndLeakedEvidence);
+Run("Outcome calibration isolates audit labels and rejects recent drift", OutcomeModelTests.CalibrationAndAuditIsolation);
+Run("Outcome models keep proposal and entry evidence separate", OutcomeModelTests.SeparatesEvidenceStages);
+Run("Similarity support excludes economic duplicates and labels historical frequencies", SimilarityTests.SupportAndEconomicDuplicates);
 
 Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
 Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);

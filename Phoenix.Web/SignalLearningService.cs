@@ -1,13 +1,19 @@
 namespace Phoenix.Web;
 
 public sealed record LearnedSignalPattern(ServerSignal Signal, string Outcome,
-    TechnicalFeatureSnapshot Features);
+    TechnicalFeatureSnapshot Features)
+{
+    public DateTime? ObservedAtUtc { get; init; } = Signal.EntryTriggeredAtUtc;
+    public string EvidenceStage { get; init; } = "entry";
+}
 
 public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> Patterns,
     DateTime RefreshedAtUtc)
 {
     internal SignalSimilarityMetric? SimilarityMetric { get; init; }
     internal SignalOutcomeModel? OutcomeModel { get; init; }
+    internal SignalOutcomeModel? ProposalOutcomeModel { get; init; }
+    public IReadOnlyList<LearnedSignalPattern> ProposalPatterns { get; init; } = [];
     public static readonly SignalLearningSnapshot Empty = new([], DateTime.MinValue);
 }
 
@@ -60,8 +66,21 @@ public sealed class SignalLearningService(
                     signal.EntryTechnicalFeatures is { } features)
                     patterns.Add(new(signal, signal.Outcome!, features));
             }
+            var proposals = completed.Where(x => x.EntryTriggeredAtUtc is not null &&
+                    x.CompletedAtUtc > x.EntryTriggeredAtUtc && x.ProposalEvidence is { } p &&
+                    p.Features.SimilarityContextVersion >= 3 && p.ObservedAtUtc <= x.EntryTriggeredAtUtc)
+                .Select(x => new LearnedSignalPattern(new ServerSignal
+                    {
+                        Id=x.Id, Symbol=x.ProposalEvidence!.Symbol, Direction=x.ProposalEvidence.Direction,
+                        Timeframe=x.ProposalEvidence.Timeframe, EntryPrice=x.ProposalEvidence.EntryPrice,
+                        TakeProfit=x.ProposalEvidence.TakeProfit, StopLoss=x.ProposalEvidence.StopLoss,
+                        EntryTriggeredAtUtc=x.EntryTriggeredAtUtc, CompletedAtUtc=x.CompletedAtUtc,
+                        CreatedAtUtc=x.ProposalEvidence.ObservedAtUtc
+                    }, x.Outcome!, x.ProposalEvidence!.Features)
+                    { ObservedAtUtc = x.ProposalEvidence!.ObservedAtUtc, EvidenceStage = "proposal" }).ToArray();
             _snapshot = new(patterns, DateTime.UtcNow)
             { OutcomeModel = SignalOutcomeModel.Train(patterns, token),
+                ProposalPatterns = proposals, ProposalOutcomeModel = SignalOutcomeModel.Train(proposals, token),
                 SimilarityMetric = SignalSimilarityMetric.Build(patterns) };
             logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}.",
                 patterns.Count, _snapshot.OutcomeModel is not null, _snapshot.OutcomeModel?.ValidationCount ?? 0,

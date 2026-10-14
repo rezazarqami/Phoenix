@@ -329,6 +329,7 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
             signal.TargetSimilarityPercent = result.TargetPercent;
             signal.StopSimilarityPercent = result.StopPercent;
             signal.SimilaritySampleCount = result.SampleCount;
+            signal.SimilarityEvidence = result.Evidence;
             signal.TargetOutcomePercent = result.TargetOutcomePercent;
             signal.StopOutcomePercent = result.StopOutcomePercent;
             signal.OutcomeValidationCount = result.OutcomeValidationCount;
@@ -375,6 +376,34 @@ app.MapGet("/api/strategy2/signals", async (Strategy2Runtime strategy2, Cancella
 app.MapGet("/api/strategy2/history", async (int? days, int? limit, Strategy2Runtime strategy2,
     CancellationToken token) =>
     Results.Ok(await strategy2.Store.GetHistoryAsync(days ?? 30, limit ?? 1000, token)));
+
+app.MapGet("/api/strategy2/recovery-check", async (HttpContext context, Strategy2Runtime strategy2, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(context.Request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    context.Response.Headers.CacheControl = "no-store";
+    try
+    {
+        var recovered = (await strategy2.Store.GetAllAsync(token)).Where(x => x.Status == "RecoveryRequired").ToArray();
+        if (recovered.Length > 100) return Results.BadRequest(new { error = "تعداد رکوردهای بازیابی زیاد است؛ بررسی تخصصی لازم است." });
+        var positions = await strategy2.Client.GetOpenPositionsAsync(token);
+        var activeOrders = 0; var unknownOrders = 0;
+        foreach (var signal in recovered)
+        {
+            var order = !string.IsNullOrWhiteSpace(signal.BybitOrderId)
+                ? await strategy2.Client.GetOrderStatusAsync(signal.BybitOrderId, token)
+                : !string.IsNullOrWhiteSpace(signal.OrderLinkId)
+                    ? await strategy2.Client.GetOrderStatusByLinkIdAsync(signal.OrderLinkId, token) : null;
+            if (order is null) unknownOrders++;
+            else if (order.Status is not ("Filled" or "Cancelled" or "Rejected" or "Deactivated")) activeOrders++;
+        }
+        return Results.Ok(new { checkedAtUtc = DateTime.UtcNow, recoveredRecords = recovered.Length,
+            openPositions = positions.Count, activeMatchingOrders = activeOrders, unknownOrders,
+            executionPaused = recovered.Length > 0, readOnly = true });
+    }
+    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+    catch { return Results.Json(new { error = "بررسی صرافی کامل نشد؛ وضعیت نامعلوم را نبود سفارش تلقی نکنید. ورودها همچنان متوقف‌اند." }, statusCode:503); }
+});
 
 app.MapGet("/api/instruments", async (BybitInstrumentCatalog catalog, CancellationToken token) =>
     Results.Ok(new { symbols = await catalog.GetAsync(token) }));
@@ -453,6 +482,24 @@ app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderS
 });
 
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
+app.MapGet("/api/analysis/learning", async (SignalLearningService learning, HttpContext context, CancellationToken token) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    var snapshot = await learning.GetSnapshotAsync(token);
+    return Results.Ok(new
+    {
+        snapshot.RefreshedAtUtc,
+        entrySamples = SignalPatternIdentity.Unique(snapshot.Patterns).Length,
+        proposalSamples = SignalPatternIdentity.Unique(snapshot.ProposalPatterns).Length,
+        entryModelValidated = snapshot.OutcomeModel is not null,
+        proposalModelValidated = snapshot.ProposalOutcomeModel is not null,
+        minimumSamples = 100,
+        condition = "Entered signals ending in Target or StopLoss only; not all proposed signals.",
+        proposalValidationCount = snapshot.ProposalOutcomeModel?.ValidationCount ?? 0,
+        proposalBrier = snapshot.ProposalOutcomeModel?.ValidationBrier,
+        proposalBaselineBrier = snapshot.ProposalOutcomeModel?.BaselineBrier
+    });
+});
 app.MapGet("/api/analysis/shadow-signals", async (ShadowSignalRuntime shadow, CancellationToken token) =>
 {
     var signals = (await shadow.Store.GetAllAsync(token)).OrderByDescending(x => x.CreatedAtUtc).ToArray();
@@ -529,8 +576,8 @@ app.MapGet("/api/analysis/reviews/export", async (DateTimeOffset? from, DateTime
     }
     catch (ArgumentException exception) { return Results.BadRequest(new { error = exception.Message }); }
 });
-app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, HttpRequest httpRequest,
-    SignalBatchService batches) =>
+app.MapPost("/api/analysis/signal-batch", async (StartSignalBatchRequest request, HttpRequest httpRequest,
+    SignalBatchService batches, SignalLearningService learning, CancellationToken token) =>
 {
     if (!request.TimedMode && request.Count is < 1 or > 200)
         return Results.BadRequest(new { error = "تعداد باید بین ۱ تا ۲۰۰ باشد." });
@@ -546,6 +593,8 @@ app.MapPost("/api/analysis/signal-batch", (StartSignalBatchRequest request, Http
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
     if (request.MinimumTargetProbability is < 0m or > 100m)
         return Results.BadRequest(new { error = "حداقل برآورد تارگت پس از ورود باید بین صفر تا ۱۰۰ درصد باشد." });
+    if (request.MinimumTargetProbability > 0m && (await learning.GetSnapshotAsync(token)).ProposalOutcomeModel is null)
+        return Results.Conflict(new { error = "مدل احتمالِ زمان پیشنهاد هنوز اعتبارسنجی نشده است؛ فیلتر درصد قابل اجرا نیست. برای بررسی پیشنهادها بدون فیلتر احتمال، مقدار حداقل را خودتان صفر کنید. درصد شباهت جای احتمال را نمی‌گیرد." });
     PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
     return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
             timeframeFilter, request.MinimumTargetProbability, request.TimedMode, request.DurationMinutes,

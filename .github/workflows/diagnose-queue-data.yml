@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Inspect application JSON integrity without exposing records
+      - name: Inspect recovery metadata without exposing signal records
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: 91.216.104.210
@@ -18,26 +18,26 @@ jobs:
           command_timeout: 1m
           script: |
             python3 - <<'PY'
-            import pathlib,json,subprocess,os,re
-            roots={pathlib.Path('/opt/Phoenix')}
-            for prop in ['WorkingDirectory','ExecStart']:
-                r=subprocess.run(['systemctl','show','phoenix.service','-p',prop,'--value'],capture_output=True,text=True,timeout=5)
-                if prop=='WorkingDirectory' and r.stdout.strip().startswith('/'): roots.add(pathlib.Path(r.stdout.strip()))
-                if prop=='ExecStart':
-                    for p in re.findall(r'(/[A-Za-z0-9_./-]+\.dll)',r.stdout): roots.add(pathlib.Path(p).parent)
-            for root in sorted(roots):
-                print('APP_ROOT',str(root))
-                for directory,dirs,files in os.walk(root):
-                    dirs[:]=[d for d in dirs if d not in {'.git','node_modules','obj'}]
-                    if len(pathlib.Path(directory).relative_to(root).parts)>5:dirs[:]=[];continue
-                    for name in files:
-                        if not (name.endswith('.json') and ('signal' in name.lower() or 'queue' in name.lower())):continue
-                        path=pathlib.Path(directory)/name
-                        try:
-                            if path.stat().st_size>32*1024*1024: print('QUEUE',str(path),'SKIPPED_LARGE');continue
-                            raw=path.read_bytes()
-                            try:parsed=json.loads(raw);status='VALID_JSON'
-                            except (ValueError,UnicodeError):status='INVALID_JSON'
-                            print('QUEUE',str(path),'BYTES',len(raw),'NUL_BYTES',raw.count(bytes([0])),'STATUS',status)
-                        except PermissionError:print('QUEUE_READ_DENIED',str(path))
+            import pathlib,json,sqlite3,collections,datetime
+            root=pathlib.Path('/opt/Phoenix/Phoenix.Web/bin/Debug/net10.0')
+            for directory in [root/'data-real',root/'data-strategy2']:
+                print('DIRECTORY',str(directory))
+                for path in sorted(directory.iterdir()):
+                    if 'server-signals' not in path.name and 'history' not in path.name:continue
+                    s=path.stat()
+                    print('CANDIDATE',path.name,'BYTES',s.st_size,'MODIFIED',datetime.datetime.fromtimestamp(s.st_mtime,datetime.timezone.utc).isoformat())
+                    if path.name.startswith('server-signals') and s.st_size<32*1024*1024:
+                        raw=path.read_bytes()
+                        try:obj=json.loads(raw);print('JSON_VALID',isinstance(obj,list),'COUNT',len(obj))
+                        except (ValueError,UnicodeError):
+                            nz=[i for i,b in enumerate(raw) if b]
+                            print('JSON_INVALID','FIRST_NONZERO',nz[0] if nz else None,'LAST_NONZERO',nz[-1] if nz else None)
+                db=directory/'phoenix-history.db'
+                if not db.exists():continue
+                conn=sqlite3.connect(db.as_uri()+'?mode=ro',uri=True)
+                print('DB_CHECK',conn.execute('PRAGMA quick_check').fetchone()[0])
+                print('DB_COUNTS',conn.execute('SELECT count(*),sum(removed_at_utc IS NULL),min(updated_at_utc),max(updated_at_utc) FROM signals').fetchone())
+                print('DB_ACTIVE_STATUSES',conn.execute('SELECT status,count(*) FROM signals WHERE removed_at_utc IS NULL GROUP BY status').fetchall())
+                print('DB_PENDING_WITH_ORDER_EVIDENCE',conn.execute("SELECT count(*) FROM signals WHERE removed_at_utc IS NULL AND status='Pending' AND (json_extract(payload,'$.submittedAtUtc') IS NOT NULL OR json_extract(payload,'$.bybitOrderId') IS NOT NULL)").fetchone()[0])
+                conn.close()
             PY

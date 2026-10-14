@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Find application data mounts and inspect queue validity without exposing records
+      - name: Inspect application JSON integrity without exposing records
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: 91.216.104.210
@@ -18,44 +18,26 @@ jobs:
           command_timeout: 1m
           script: |
             python3 - <<'PY'
-            import pathlib,json,subprocess
-            roots=set()
-            try:
-                result=subprocess.run(['systemctl','show','phoenix.service','-p','WorkingDirectory','--value'],capture_output=True,text=True,timeout=5)
-                value=result.stdout.strip()
-                if value.startswith('/'):
-                    roots.add(pathlib.Path(value))
-                    print('APP_WORKING_DIRECTORY',value)
-            except Exception: print('SERVICE_DIRECTORY_UNAVAILABLE')
-            try:
-                result=subprocess.run(['docker','ps','--format','{{.Names}}'],capture_output=True,text=True,timeout=5)
-                if result.returncode: print('DOCKER_METADATA_UNAVAILABLE')
-                for name in result.stdout.splitlines():
-                    if 'phoenix' not in name.lower(): continue
-                    mounts=subprocess.run(['docker','inspect','--format','{{json .Mounts}}',name],capture_output=True,text=True,timeout=5)
-                    if mounts.returncode: continue
-                    for mount in json.loads(mounts.stdout):
-                        source=mount.get('Source','')
-                        if source.startswith('/'):
-                            roots.add(pathlib.Path(source))
-                            print('APP_DATA_MOUNT',source,mount.get('Destination',''))
-            except Exception: print('DOCKER_METADATA_UNAVAILABLE')
-            roots.update(map(pathlib.Path,['/var/lib/phoenix','/opt/phoenix/data','/srv/phoenix/data']))
-            names={'server-signals.json','shadow-signals.json','strategy2-signals.json','signals.json','queue.json'}
-            seen=set()
+            import pathlib,json,subprocess,os,re
+            roots={pathlib.Path('/opt/Phoenix')}
+            for prop in ['WorkingDirectory','ExecStart']:
+                r=subprocess.run(['systemctl','show','phoenix.service','-p',prop,'--value'],capture_output=True,text=True,timeout=5)
+                if prop=='WorkingDirectory' and r.stdout.strip().startswith('/'): roots.add(pathlib.Path(r.stdout.strip()))
+                if prop=='ExecStart':
+                    for p in re.findall(r'(/[A-Za-z0-9_./-]+\.dll)',r.stdout): roots.add(pathlib.Path(p).parent)
             for root in sorted(roots):
-                for directory in [root,root/'data',root/'Phoenix.Web'/'data']:
-                    try:
-                        if not directory.is_dir():continue
-                        for path in directory.iterdir():
-                            if path.name not in names or path in seen:continue
-                            seen.add(path)
-                            if path.stat().st_size>32*1024*1024:
-                                print('QUEUE',str(path),'SKIPPED_LARGE');continue
+                print('APP_ROOT',str(root))
+                for directory,dirs,files in os.walk(root):
+                    dirs[:]=[d for d in dirs if d not in {'.git','node_modules','obj'}]
+                    if len(pathlib.Path(directory).relative_to(root).parts)>5:dirs[:]=[];continue
+                    for name in files:
+                        if not (name.endswith('.json') and ('signal' in name.lower() or 'queue' in name.lower())):continue
+                        path=pathlib.Path(directory)/name
+                        try:
+                            if path.stat().st_size>32*1024*1024: print('QUEUE',str(path),'SKIPPED_LARGE');continue
                             raw=path.read_bytes()
-                            try:json.loads(raw);status='VALID_JSON'
+                            try:parsed=json.loads(raw);status='VALID_JSON'
                             except (ValueError,UnicodeError):status='INVALID_JSON'
                             print('QUEUE',str(path),'BYTES',len(raw),'NUL_BYTES',raw.count(bytes([0])),'STATUS',status)
-                    except PermissionError:print('DATA_DIRECTORY_READ_DENIED',str(directory))
-            if not seen:print('QUEUE_PATH_NOT_LOCATED_WITH_EXISTING_READ_ACCESS')
+                        except PermissionError:print('QUEUE_READ_DENIED',str(path))
             PY

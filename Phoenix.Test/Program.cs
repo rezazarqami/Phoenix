@@ -29,6 +29,8 @@ Run("Cancellation exchange failures, filled orders and in-flight submissions nev
 Run("Cancellation bulk handles All Long Short and preserves active positions", CancellationTests.Bulk);
 
 Run("Proposal evidence survives current reviews, restart and research export", ProposalEvidenceTests.PreservesObservedProposal);
+Run("Queue recovery preserves inactive snapshots, removed records and corrupt original", QueueRecoveryTests.InactiveRecovery);
+Run("Queue recovery refuses active orders and empty history without changing original", QueueRecoveryTests.RefusesActiveOrEmptyHistory);
 
 Run("Evaluation export preserves provenance, excludes private data and refuses truncation", EvaluationExportTests.SchemaAndLimits);
 

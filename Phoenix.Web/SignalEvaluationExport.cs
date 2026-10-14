@@ -28,6 +28,7 @@ internal static class SignalEvaluationExport
             s.Ceiling, s.Floor, s.AverageFillPrice,
             s.TargetSimilarityPercent, s.StopSimilarityPercent, s.SimilaritySampleCount,
             s.TargetOutcomePercent, s.StopOutcomePercent, s.OutcomeValidationCount,
+            proposalEvidence = s.ProposalEvidence,
             entryFeatures = s.EntryTechnicalFeatures,
             latestFeatures = s.TechnicalFeatures,
             latestFeaturesAreFrozenProposal = false,
@@ -61,7 +62,7 @@ internal static class SignalEvaluationExport
             offset, count = rows.Count, nextOffset = offset + rows.Count < all.Length ? (int?)(offset + rows.Count) : null,
             completeForRequestedRange = offset == 0 && rows.Count == all.Length,
             notes = new[] { "Pages are sequential live reads, not an atomic snapshot.",
-                "latestFeatures and percentages are not frozen proposal-time evidence; prediction timestamps are unknown.",
+                "proposalEvidence is frozen observed evidence when present. Legacy proposal evidence remains null. latestFeatures and latest percentages are not frozen.",
                 "Source populations must be evaluated separately; expiry/RiskFree are not StopLoss labels." }, rows };
     }
 
@@ -107,7 +108,7 @@ internal static class SignalEvaluationExport
                     notes = new[] {
                         "Range filters signal creation, not completion. Sources are read sequentially, not an atomic database snapshot.",
                         "Entry features and latest features are distinct. Latest features may have been refreshed after proposal.",
-                        "Stored percentages are latest values, not immutable out-of-sample predictions; their timestamp is unknown.",
+                        "Stored top-level percentages are latest values; proposalEvidence preserves original predictions when present. Older proposal evidence is unknown.",
                         "Target/StopLoss labels are conditional on entry and binary resolution. Do not label expiry or RiskFree as stop.",
                         "Strategy2 is a separate population; never silently pool it with main or observation.",
                         "No images, credentials, usernames, balances, order IDs or free-text logs are included." }

@@ -59,6 +59,7 @@ public sealed class ServerSignal
     public decimal? StopOutcomePercent { get; set; }
     public int OutcomeValidationCount { get; set; }
     public int SimilaritySampleCount { get; set; }
+    public SignalProposalEvidence? ProposalEvidence { get; set; }
     public TechnicalFeatureSnapshot? TechnicalFeatures { get; set; }
     public TechnicalFeatureSnapshot? EntryTechnicalFeatures { get; set; }
     public string? AnalysisSummary { get; set; }
@@ -198,6 +199,8 @@ public sealed class ServerOrderStore
             if (signals[index].CompletedAtUtc is not null) return;
             if (signal.Status == "Pending" && signals[index].Status != "Pending")
                 return; // Never let a stale polling snapshot undo an atomic entry claim.
+            // Preserve the original proposal even when entry/current review rewrites latest fields.
+            signal.ProposalEvidence = signals[index].ProposalEvidence ?? signal.ProposalEvidence;
             signal.EntryTechnicalFeatures ??= signals[index].EntryTechnicalFeatures;
             signal.EntryTriggeredAtUtc ??= signals[index].EntryTriggeredAtUtc;
             signals[index] = Clone(signal);
@@ -434,6 +437,7 @@ public sealed class ServerOrderStore
         StopOutcomePercent = signal.StopOutcomePercent,
         OutcomeValidationCount = signal.OutcomeValidationCount,
         SimilaritySampleCount = signal.SimilaritySampleCount,
+        ProposalEvidence = signal.ProposalEvidence,
         TechnicalFeatures = signal.TechnicalFeatures,
         EntryTechnicalFeatures = signal.EntryTechnicalFeatures,
         AnalysisSummary = signal.AnalysisSummary,
@@ -449,4 +453,4 @@ public sealed record SignalPriceSample(DateTime AtUtc, decimal Price);
 public enum ExclusiveClaimResult { Unavailable, PositionBusy, Claimed }
 public sealed record SignalEvidence(string Timeframe, string ChartMode, byte[] Image,
     TechnicalFeatureSnapshot? TechnicalFeatures = null, string? AnalysisSummary = null,
-    string? MarketRegime = null);
+    string? MarketRegime = null, SignalProposalEvidence? ProposalEvidence = null);

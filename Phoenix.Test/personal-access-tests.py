@@ -3,7 +3,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as tmp:
  password=secrets.token_urlsafe(24)
- env={**os.environ,'ASPNETCORE_URLS':'http://127.0.0.1:5137','ASPNETCORE_CONTENTROOT':str(root/'Phoenix.Web'),'PHOENIX_AUTH_USERNAME':'owner','PHOENIX_AUTH_PASSWORD':password,'PHOENIX_QUEUE_PATH':tmp+'/signals.json','PERSONAL_DATABASE_PATH':tmp+'/personal.db','PHOENIX_USERS_FILE':tmp+'/users.json','PHOENIX_ENV_FILE':tmp+'/phoenix.env','PHOENIX_FIREBASE_SERVICE_ACCOUNT':''}
+ env={**os.environ,'OwnerOnlyAccess':'false','ASPNETCORE_URLS':'http://127.0.0.1:5137','ASPNETCORE_CONTENTROOT':str(root/'Phoenix.Web'),'PHOENIX_AUTH_USERNAME':'owner','PHOENIX_AUTH_PASSWORD':password,'PHOENIX_QUEUE_PATH':tmp+'/signals.json','PERSONAL_DATABASE_PATH':tmp+'/personal.db','PHOENIX_USERS_FILE':tmp+'/users.json','PHOENIX_ENV_FILE':tmp+'/phoenix.env','PHOENIX_FIREBASE_SERVICE_ACCOUNT':''}
  log=open(Path(tmp)/'server.log','w')
  process=subprocess.Popen([shutil.which('dotnet') or os.environ['PERSONAL_TEST_DOTNET'],str(root/'Phoenix.Web/bin/Release/net10.0/Phoenix.Web.dll')],env=env,cwd=root/'Phoenix.Web',stdout=log,stderr=log)
  def client():return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))

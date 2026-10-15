@@ -69,6 +69,35 @@ public sealed class PhoenixUserStore
         finally { _gate.Release(); }
     }
 
+    // The primary administrator is configured separately and is never stored in this file.
+    public async Task<int> DeleteAllAdditionalAsync(CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var count = (await ReadAsync(token)).Count;
+            await WriteAsync(Array.Empty<PhoenixUser>(), token);
+            return count;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task WriteOwnerOnlyStatusAsync(string owner, int removed, CancellationToken token)
+    {
+        // Operational status only: no secondary usernames, password hashes, cookies or secrets.
+        var path = StorePath + ".owner-only.json";
+        var temporary = path + ".tmp";
+        await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(new
+        {
+            enabled = true, owner, additionalUsers = 0, removedOnStartup = removed,
+            checkedAtUtc = DateTime.UtcNow
+        }), token);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        File.Move(temporary, path, true);
+    }
+
     private static string Hash(string password, byte[] salt) => Convert.ToBase64String(
         Rfc2898DeriveBytes.Pbkdf2(password, salt, 210_000, HashAlgorithmName.SHA256, 32));
 

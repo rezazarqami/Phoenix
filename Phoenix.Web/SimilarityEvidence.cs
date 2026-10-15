@@ -6,9 +6,25 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
     decimal EffectiveTargets, decimal EffectiveStops, int SameTimeframeNearbyTargets,
     int SameTimeframeNearbyStops)
 {
+    public TechnicalCohortEvidence? TechnicalCohort { get; init; }
+    public OutcomeWindowEvidence? MainOutcomeWindow { get; init; }
+    public OutcomeWindowEvidence? ObservationOutcomeWindow { get; init; }
+    public TradePayoffEvidence? Payoff { get; init; }
     public int SameTimeframeNearbyCount => SameTimeframeNearbyTargets + SameTimeframeNearbyStops;
     public decimal? HistoricalTargetRate => SameTimeframeNearbyCount < 10 ? null
         : Math.Round(100m * SameTimeframeNearbyTargets / SameTimeframeNearbyCount, 1);
+}
+
+public sealed record TradePayoffEvidence(decimal RewardRisk, decimal GrossBinaryBreakEvenRate)
+{
+    internal static TradePayoffEvidence? From(ServerSignal s)
+    {
+        if(s.EntryPrice<=0 || s.TakeProfit<=0 || s.StopLoss<=0)return null;
+        var sign=s.Direction.Equals("Long",StringComparison.OrdinalIgnoreCase)?1m:
+            s.Direction.Equals("Short",StringComparison.OrdinalIgnoreCase)?-1m:0m;
+        var risk=(s.EntryPrice-s.StopLoss)*sign;var reward=(s.TakeProfit-s.EntryPrice)*sign;
+        return risk>0 && reward>0 ? new(Math.Round(reward/risk,3),Math.Round(100m*risk/(risk+reward),1)):null;
+    }
 }
 
 internal static class SignalPatternIdentity

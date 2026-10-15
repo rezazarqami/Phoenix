@@ -17,6 +17,13 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             snapshot.ProposalPatterns.Count(x => x.Outcome == "StopLoss") >= 5;
         var patterns = useProposals ? snapshot.ProposalPatterns : snapshot.Patterns;
         var similarity = CalculateFromPatterns(candidate, patterns, token);
+        var referenceStage=similarity.Evidence?.ReferenceStage ?? (useProposals?"proposal":"entry");
+        var windows=OutcomeWindows.Calculate(candidate,snapshot.OutcomeHistory,referenceStage);
+        var evidence=similarity.Evidence ?? new SimilarityEvidence(stage,referenceStage,0,0,0,0,0,0,0,0);
+        similarity=similarity with { Evidence=evidence with {
+            Payoff=TradePayoffEvidence.From(candidate),
+            MainOutcomeWindow=windows.FirstOrDefault(x=>x.Source=="main"),
+            ObservationOutcomeWindow=windows.FirstOrDefault(x=>x.Source=="observation") } };
         var model = atEntry ? snapshot.OutcomeModel : snapshot.ProposalOutcomeModel;
         var probability = model?.Predict(candidate, candidate.TechnicalFeatures, stage);
         return similarity with { TargetOutcomePercent = probability,
@@ -40,6 +47,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             return new(null, null, patterns.Count, targets.Length, stops.Length);
         // Every valid entry-time example contributes. Exponential weights make
         // distant examples less influential without a fixed nearest-N cutoff.
+        var nearby = new List<(LearnedSignalPattern Pattern, double Weight)>();
         var targetEvidence = Score(targets);
         var stopEvidence = Score(stops);
         var compared = targetEvidence.UsedCount + stopEvidence.UsedCount;
@@ -47,7 +55,8 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             patterns.All(x => x.EvidenceStage == "proposal") ? "proposal" : "entry",
             targetEvidence.UsedCount, stopEvidence.UsedCount, targetEvidence.CloseCount, stopEvidence.CloseCount,
             (decimal)targetEvidence.Effective, (decimal)stopEvidence.Effective,
-            targetEvidence.SameTimeframeClose, stopEvidence.SameTimeframeClose);
+            targetEvidence.SameTimeframeClose, stopEvidence.SameTimeframeClose)
+        { TechnicalCohort = TechnicalCohorts.Build(candidate, patterns, nearby) };
         if (targetEvidence.UsedCount < 5 || stopEvidence.UsedCount < 5 ||
             Math.Max(targetEvidence.CloseCount, stopEvidence.CloseCount) < 5)
             return new(null, null, patterns.Count, targets.Length, stops.Length, compared) { Evidence = support };
@@ -77,6 +86,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
                 if (similarity >= (metric is null ? 0.65d : 0.5d))
                 {
                     closeCount++;
+                    nearby.Add((example,weight));
                     if (!string.IsNullOrWhiteSpace(candidate.Timeframe) && candidate.Timeframe == example.Signal.Timeframe)
                         sameTimeframeClose++;
                 }

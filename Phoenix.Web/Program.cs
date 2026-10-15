@@ -79,6 +79,16 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Strate
 builder.Services.AddHostedService<Strategy2EntryWebSocketWorker>();
 
 var app = builder.Build();
+var ownerOnlyAccess = builder.Configuration.GetValue<bool>("OwnerOnlyAccess");
+if (ownerOnlyAccess)
+{
+    if (!PhoenixSessionAuth.CredentialsConfigured(out var primaryOwner, out _))
+        throw new InvalidOperationException("Owner-only access requires configured primary credentials.");
+    var userStore = app.Services.GetRequiredService<PhoenixUserStore>();
+    var removed = await userStore.DeleteAllAdditionalAsync(CancellationToken.None);
+    await userStore.WriteOwnerOnlyStatusAsync(primaryOwner, removed, CancellationToken.None);
+    app.Logger.LogInformation("Owner-only access enabled; removed {Count} additional accounts.", removed);
+}
 app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.Use(async (context, next) =>
@@ -114,7 +124,7 @@ app.Use(async (context, next) =>
             return;
         }
         if (!AnalysisSessionAuth.TryGetIdentity(context.Request, out var identity) ||
-            !identity.IsAdmin && !await users.ExistsAsync(identity.Username, identity.ViewerOnly, context.RequestAborted))
+            !identity.IsAdmin && (ownerOnlyAccess || !await users.ExistsAsync(identity.Username, identity.ViewerOnly, context.RequestAborted)))
         {
             if (context.Request.Path.StartsWithSegments("/api"))
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -151,7 +161,7 @@ app.Use(async (context, next) =>
         return;
     }
     if (!PhoenixSessionAuth.TryGetIdentity(context.Request, out var phoenixIdentity) ||
-        !phoenixIdentity.IsAdmin && !await users.ExistsAsync(phoenixIdentity.Username, phoenixIdentity.ViewerOnly, context.RequestAborted))
+        !phoenixIdentity.IsAdmin && (ownerOnlyAccess || !await users.ExistsAsync(phoenixIdentity.Username, phoenixIdentity.ViewerOnly, context.RequestAborted)))
     {
         if (context.Request.Path.StartsWithSegments("/api"))
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -202,7 +212,7 @@ app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse respons
     CancellationToken cancellationToken) =>
 {
     var admin = PhoenixSessionAuth.CredentialsMatch(request.Username, request.Password);
-    var user = admin ? null : await users.AuthenticateAsync(request.Username, request.Password, cancellationToken);
+    var user = admin || ownerOnlyAccess ? null : await users.AuthenticateAsync(request.Username, request.Password, cancellationToken);
     if (!admin && user is null)
         return Results.Json(new { error = "نام کاربری یا رمز عبور صحیح نیست." }, statusCode: StatusCodes.Status401Unauthorized);
     var viewerOnly = !admin && user!.ViewerOnly;
@@ -246,6 +256,8 @@ app.MapPost("/api/users", async (CreateUserRequest request, HttpRequest httpRequ
 {
     if (!PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity) || !identity.IsAdmin)
         return Results.Forbid();
+    if (ownerOnlyAccess)
+        return Results.Json(new { error = "ورود فقط برای حساب اصلی فعال است؛ ایجاد کاربر فرعی بسته شده است." }, statusCode: StatusCodes.Status403Forbidden);
     var error = request.Validate();
     if (error is not null) return Results.BadRequest(new { error });
     if (PhoenixSessionAuth.CredentialsConfigured(out var adminUsername, out _) &&

@@ -79,7 +79,7 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Strate
 builder.Services.AddHostedService<Strategy2EntryWebSocketWorker>();
 
 var app = builder.Build();
-var ownerOnlyAccess = builder.Configuration.GetValue<bool>("OwnerOnlyAccess");
+var ownerOnlyAccess = builder.Configuration.GetValue("OwnerOnlyAccess", true);
 if (ownerOnlyAccess)
 {
     if (!PhoenixSessionAuth.CredentialsConfigured(out var primaryOwner, out _))

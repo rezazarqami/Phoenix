@@ -36,7 +36,7 @@ public class StartupTest {
                     WebView web=(WebView)get(app,"browser");
                     web.evaluateJavascript("!!document.getElementById('loginForm')",login::set);
                     revealed.set(((View)get(app,"pageCover")).getVisibility()==View.GONE&&((View)get(app,"browser")).getVisibility()==View.VISIBLE);
-                    status.set("URL="+web.getUrl()+" loading="+get(app,"pageLoading")+" failed="+get(app,"pageFailed")+" progress="+get(app,"loadProgress")+" message="+((android.widget.TextView)get(app,"pageStatus")).getText());
+                    status.set("URL="+web.getUrl()+" loading="+get(app,"pageLoading")+" failed="+get(app,"pageFailed")+" message="+((android.widget.TextView)get(app,"pageStatus")).getText());
                 }catch(Throwable e){failure.set(e);}});
                 Thread.sleep(200);
             }

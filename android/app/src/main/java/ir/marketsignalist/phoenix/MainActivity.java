@@ -29,16 +29,12 @@ public final class MainActivity extends FragmentActivity {
     private LinearLayout cover;
     private TextView lockStatus, pageStatus;
     private LinearLayout pageCover;
-    private Button retry, connectionCheck;
-    private int loadProgress=0;
-    private String loadStage="شروع درخواست";
-    private boolean checkingConnection=false;
-    private final java.util.concurrent.ExecutorService network=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private Button retry;
     private final Handler ui=new Handler(Looper.getMainLooper());
     private boolean pageLoading=false, pageFailed=false;
     private long navigation=0;
     private String lastUrl=HOME+"/";
-    private final Runnable loadTimeout=()->{if(pageLoading){pageError("باز شدن صفحه کامل نشد. مرحله: "+loadStage+"؛ پیشرفت: "+loadProgress+"٪. در حال بررسی مستقل اتصال گوشی…");checkConnection();}};
+    private final Runnable loadTimeout=()->{if(pageLoading)pageError("زمان اتصال به سرور تمام شد. اینترنت یا VPN را بررسی کن و دوباره تلاش کن.");};
     private boolean unlocked=false, authenticating=false, initialLoaded=false;
     private String requestedRoute="/";
     private boolean openReminders=false;
@@ -55,10 +51,9 @@ public final class MainActivity extends FragmentActivity {
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(16,13,26));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();makeCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.5");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.4");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
-            @Override public void onProgressChanged(WebView view,int progress){loadProgress=progress;}
             @Override public boolean onShowFileChooser(WebView web,android.webkit.ValueCallback<Uri[]> callback,FileChooserParams params){
                 if(!unlocked||!TrustedNavigation.trusted(web.getUrl()))return false;
                 if(files!=null)files.onReceiveValue(null);files=callback;
@@ -72,14 +67,20 @@ public final class MainActivity extends FragmentActivity {
                 return null;
             }
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){
-                if(TrustedNavigation.trusted(url)){lastUrl=url;beginLoading();loadStage="دریافت صفحه";}
+                if(TrustedNavigation.trusted(url)){lastUrl=url;beginLoading();}
             }
-            @Override public void onPageCommitVisible(WebView view,String url){pageReady(url);}
             @Override public void onPageFinished(WebView view,String url){
-                CookieManager.getInstance().flush();pageReady(url);
+                CookieManager.getInstance().flush();
+                if(!pageFailed&&TrustedNavigation.trusted(url)){
+                    // Wait until WebView can actually draw, rather than exposing an empty surface.
+                    final long frame=navigation;
+                    view.postVisualStateCallback(frame,new WebView.VisualStateCallback(){
+                        @Override public void onComplete(long id){if(frame==navigation&&!pageFailed){pageLoading=false;ui.removeCallbacks(loadTimeout);renderPageState();}}
+                    });
+                }
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
-                if(request.isForMainFrame())pageError("اتصال به سرور برقرار نشد ("+error.getErrorCode()+"). اتصال اینترنت را بررسی کن.");
+                if(request.isForMainFrame())pageError("اتصال به سرور برقرار نشد ("+error.getErrorCode()+"). اینترنت یا VPN را بررسی کن.");
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
                 if(request.isForMainFrame())pageError("سرور پاسخ ناموفق داد (HTTP "+response.getStatusCode()+"). دوباره تلاش کن.");
@@ -108,7 +109,6 @@ public final class MainActivity extends FragmentActivity {
         TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
         pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
         retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
-        connectionCheck=new Button(this);connectionCheck.setText("بررسی اتصال همین گوشی");connectionCheck.setOnClickListener(v->{if(unlocked&&pageFailed)checkConnection();});pageCover.addView(connectionCheck);
         pageCover.setVisibility(View.GONE);root.addView(pageCover,new FrameLayout.LayoutParams(-1,-1));
     }
     private void renderPageState(){
@@ -117,41 +117,11 @@ public final class MainActivity extends FragmentActivity {
         pageCover.setVisibility(covered?View.VISIBLE:View.GONE);
         // Keep the WebView visible behind the opaque cover so its compositor can produce a frame.
         browser.setVisibility(View.VISIBLE);
-        retry.setVisibility(pageFailed?View.VISIBLE:View.GONE);connectionCheck.setVisibility(pageFailed?View.VISIBLE:View.GONE);connectionCheck.setEnabled(!checkingConnection);
+        retry.setVisibility(pageFailed?View.VISIBLE:View.GONE);
     }
     private void beginLoading(){
-        navigation++;loadProgress=0;loadStage="شروع درخواست";pageLoading=true;pageFailed=false;pageStatus.setText("در حال اتصال و بازکردن برنامه…");
+        navigation++;pageLoading=true;pageFailed=false;pageStatus.setText("در حال اتصال و بازکردن برنامه…");
         ui.removeCallbacks(loadTimeout);ui.postDelayed(loadTimeout,30000);renderPageState();
-    }
-    private void pageReady(String url){
-        // A committed document is usable even when a font/image is still loading.
-        // Never make page availability depend on a compositor fence beneath an opaque cover.
-        if(!pageFailed&&TrustedNavigation.trusted(url)&&url.equals(browser.getUrl())){
-            lastUrl=url;pageLoading=false;ui.removeCallbacks(loadTimeout);renderPageState();
-        }
-    }
-    private void checkConnection(){
-        if(checkingConnection||isDestroyed())return;
-        checkingConnection=true;connectionCheck.setEnabled(false);
-        final long attempt=navigation;
-        final String context=pageStatus.getText().toString().split("\n")[0];
-        final String agent=browser.getSettings().getUserAgentString();
-        network.execute(()->{
-            javax.net.ssl.HttpsURLConnection connection=null;String result;
-            try{
-                connection=(javax.net.ssl.HttpsURLConnection)new java.net.URL(HOME+"/login").openConnection();
-                connection.setConnectTimeout(10000);connection.setReadTimeout(10000);connection.setInstanceFollowRedirects(false);connection.setUseCaches(false);
-                connection.setRequestProperty("User-Agent",agent);
-                int code=connection.getResponseCode();
-                result=code==200?"آزمون همین گوشی: سرور پاسخ سالم داد (HTTP 200). دریافت یا نمایش صفحه داخل برنامه کامل نشده است.":"آزمون همین گوشی: پاسخ سرور HTTP "+code+"؛ ممکن است محدودیت دسترسی یا خطای سرور باشد.";
-            }catch(java.net.UnknownHostException e){result="آزمون همین گوشی: نام دامنه پیدا نشد (DNS). اینترنت یا DNS گوشی را بررسی کن.";}
-            catch(javax.net.ssl.SSLException e){result="آزمون همین گوشی: اتصال امن TLS برقرار نشد. تاریخ گوشی و گواهی سرور باید بررسی شود.";}
-            catch(java.net.SocketTimeoutException e){result="آزمون همین گوشی: اتصال مستقل هم بی‌پاسخ ماند. مسیر شبکه، اپراتور یا فایروال باید بررسی شود.";}
-            catch(Exception e){result="آزمون همین گوشی: اتصال برقرار نشد ("+e.getClass().getSimpleName()+").";}
-            finally{if(connection!=null)connection.disconnect();}
-            final String message=result;
-            ui.post(()->{if(isDestroyed())return;checkingConnection=false;if(pageFailed&&attempt==navigation)pageStatus.setText(context+"\n\n"+message);renderPageState();});
-        });
     }
     private void pageError(String text){pageLoading=false;pageFailed=true;pageStatus.setText(text);ui.removeCallbacks(loadTimeout);renderPageState();}
     private void loadPage(String url){lastUrl=url;beginLoading();browser.loadUrl(url);}
@@ -254,5 +224,5 @@ public final class MainActivity extends FragmentActivity {
         }catch(Exception e){reply(proxy,id,null,e instanceof JSONException?"ساختار درخواست معتبر نیست.":e.getMessage());}
     }
     @Override public void onBackPressed(){if(!unlocked){finish();return;}if(browser.canGoBack())browser.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){network.shutdownNow();ui.removeCallbacksAndMessages(null);if(files!=null)files.onReceiveValue(null);if(biometric!=null)biometric.cancelAuthentication();browser.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){ui.removeCallbacksAndMessages(null);if(files!=null)files.onReceiveValue(null);if(biometric!=null)biometric.cancelAuthentication();browser.destroy();super.onDestroy();}
 }

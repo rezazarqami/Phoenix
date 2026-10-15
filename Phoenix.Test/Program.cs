@@ -9,6 +9,9 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Mobile signal events isolate owner/public routes and cover the lifecycle", MobilePushTests.SignalEvents);
+Run("Mobile push persists per-device retries without duplicate or historic delivery", MobilePushTests.DurableDelivery);
+
 Run("Personal workspace idempotent sync, version conflicts, references, decision provenance and media backup", Phoenix.Test.PersonalWorkspaceTests.Workspace);
 Run("Personal reports count car costs once and preserve missing data", Phoenix.Test.PersonalWorkspaceTests.Reports);
 

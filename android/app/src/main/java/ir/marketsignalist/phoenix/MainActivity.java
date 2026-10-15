@@ -55,7 +55,7 @@ public final class MainActivity extends FragmentActivity {
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(16,13,26));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();makeCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.5");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.6");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView view,int progress){loadProgress=progress;}
@@ -217,6 +217,7 @@ public final class MainActivity extends FragmentActivity {
     private void reply(JavaScriptReplyProxy proxy,String id,JSONObject value,String error){try{JSONObject out=new JSONObject().put("id",id).put("ok",error==null);if(value!=null)out.put("value",value);if(error!=null)out.put("error",error);proxy.postMessage(out.toString());}catch(Exception ignored){}}
     private void resetDevice() throws JSONException {
         getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").apply();
+        androidx.work.WorkManager.getInstance(this).cancelUniqueWork("orbit-push-registration");
         if(!FirebaseApp.getApps(this).isEmpty()){FirebaseMessaging.getInstance().setAutoInitEnabled(false);FirebaseMessaging.getInstance().deleteToken();}
         Reminders.clear(this);
     }
@@ -226,6 +227,7 @@ public final class MainActivity extends FragmentActivity {
             if(raw==null||raw.length()>10000)throw new IllegalArgumentException("درخواست معتبر نیست.");
             JSONObject input=new JSONObject(raw);id=input.getString("id");if(id.length()>100)throw new IllegalArgumentException("شناسه معتبر نیست.");
             String command=input.getString("command");
+            if(command.equals("configurePush")){OrbitFirebase.configure(this,input.getJSONObject("config"));reply(proxy,id,status(),null);return;}
             if(command.equals("status")){reply(proxy,id,status(),null);return;}
             if(command.equals("requestNotifications")){
                 if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},44);
@@ -245,6 +247,7 @@ public final class MainActivity extends FragmentActivity {
             }
             if(command.equals("disablePush")||command.equals("logout")){
                 getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").apply();
+        androidx.work.WorkManager.getInstance(this).cancelUniqueWork("orbit-push-registration");
                 if(!FirebaseApp.getApps(this).isEmpty()){FirebaseMessaging.getInstance().setAutoInitEnabled(false);FirebaseMessaging.getInstance().deleteToken();}
                 if(command.equals("logout"))resetDevice();
                 reply(proxy,id,new JSONObject().put("disabled",true),null);return;

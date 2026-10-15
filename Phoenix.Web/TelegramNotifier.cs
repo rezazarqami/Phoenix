@@ -53,7 +53,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         } })), "reply_markup");
         var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png");
         content.Add(photo, "photo", $"entry-{signalId:N}.png");
-        using var response = await _httpClient.PostAsync(
+        using var response = await TelegramPhotoDelivery.SendAsync(_httpClient,
             $"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
         return response.IsSuccessStatusCode;
     }
@@ -178,7 +178,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
             }
         } })), "reply_markup");
         var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png"); content.Add(photo, "photo", $"signal-{key}.png");
-        using var response = await _httpClient.PostAsync($"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
+        using var response = await TelegramPhotoDelivery.SendAsync(_httpClient,$"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
         return response.IsSuccessStatusCode;
     }
 
@@ -237,7 +237,7 @@ public sealed class TelegramNotifier(TelegramOptions options, BybitDemoOptions b
         var photo = new ByteArrayContent(image);
         photo.Headers.ContentType = new("image/png");
         content.Add(photo, "photo", $"result-{signal.Id:N}.png");
-        using var response = await _httpClient.PostAsync(
+        using var response = await TelegramPhotoDelivery.SendAsync(_httpClient,
             $"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
         return response.IsSuccessStatusCode;
     }

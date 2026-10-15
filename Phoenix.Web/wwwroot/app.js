@@ -1,11 +1,22 @@
 const fa = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 4 });
 
+function outcomeWindowSupport(w) {
+  if (!w) return '';
+  const source=w.source==='main'?'اصلی':'فقط تأیید', stage=w.stage==='proposal'?'پیشنهاد':'ورود';
+  if(w.matureCount===0 && w.immature===0)return `<br>⏱ پنجرهٔ ${fa.format(w.horizonMinutes)} دقیقه‌ای از ${stage} — ${source}: سابقهٔ قابل‌مقایسه نداریم.`;
+  const shares=w.recordedTargetShare==null?'نمونه برای نمایش سهم‌ها کافی نیست.':`سهم ثبت‌شده از کل ${fa.format(w.matureCount)} نمونه: تارگت ${fa.format(w.recordedTargetShare)}٪ / استاپ ${fa.format(w.recordedStopShare)}٪`;
+  return `<br>⏱ تا ${fa.format(w.horizonMinutes)} دقیقه از ${stage} — ${source}<br>تارگت ${fa.format(w.targets)} / استاپ ${fa.format(w.stops)} / ریسک‌فری ${fa.format(w.riskFree)} / انقضا ${fa.format(w.expired)} / خروج دیگر ${fa.format(w.otherExit)}<br>بدون نتیجهٔ ثبت‌شده ${fa.format(w.noRecordedResolution)} / نامعلوم ${fa.format(w.unknown)} / نرسیده به مهلت ${fa.format(w.immature)}<br>${shares}<br>آمار گذشته است؛ پایان مهلت به معنی بستن معامله نیست.`;
+}
+
 function similaritySupport(e) {
   if (!e) return '';
   const stage = e.referenceStage === 'proposal' ? 'زمان پیشنهاد' : 'لحظه ورود';
   const mismatch = e.queryStage !== e.referenceStage ? '<br>سابقهٔ کافی از زمان پیشنهاد نداریم؛ مقایسه با شرایط ورود است.' : '';
   const frequency = e.historicalTargetRate == null ? 'نمونه‌های نزدیک برای اعلام نرخ تاریخی کافی نیستند.' : `سهم تارگت در این نمونه‌های گذشته: ${fa.format(e.historicalTargetRate)}٪؛ احتمال این سیگنال نیست.`;
-  return `<small>مرجع: ${stage} · نزدیک و هم‌تایم‌فریم: ${fa.format(e.sameTimeframeNearbyTargets)} تارگت / ${fa.format(e.sameTimeframeNearbyStops)} استاپ${mismatch}<br>${frequency}</small>`;
+  const payoff=e.payoff ? `<br>⚖️ سود هدف / زیان استاپ: ${fa.format(e.payoff.rewardRisk)}R · سربه‌سر نظری: ${fa.format(e.payoff.grossBinaryBreakEvenRate)}٪<br>فقط دو خروج تارگت/استاپ، بدون کارمزد و لغزش؛ احتمال موفقیت نیست.` : '';
+  const c=e.technicalCohort;
+  const details=c ? `<br>نزدیک، هم‌جهت و فاصله‌های معاملاتی مشابه: ${fa.format(c.targets)} تارگت / ${fa.format(c.stops)} استاپ<br>${fa.format(c.distinctDays)} روز / ${fa.format(c.distinctSymbols)} نماد · تعداد مؤثر وزنی: ${fa.format(c.effectiveSamples)}<br>۳۰ روز اخیر این گروه: ${fa.format(c.recentTargets)} تارگت / ${fa.format(c.recentStops)} استاپ${c.baselineTargetRate == null ? '' : `<br>مرجع کل هم‌جهت و هم‌تایم‌فریم: ${fa.format(c.baselineTargets)} تارگت / ${fa.format(c.baselineStops)} استاپ (${fa.format(c.baselineTargetRate)}٪ تارگت)`}${(c.conditions||[]).map(x=>`<br>${escapeHtml(x.label)}: ${fa.format(x.targets)} تارگت / ${fa.format(x.stops)} استاپ`).join('')}<br>زیرگروه‌ها هم‌پوشان‌اند؛ این شمارش‌ها اثر علّی یا احتمال معتبر نیستند.` : '';
+  return `<small>مرجع: ${stage} · نزدیک و هم‌تایم‌فریم: ${fa.format(e.sameTimeframeNearbyTargets)} تارگت / ${fa.format(e.sameTimeframeNearbyStops)} استاپ${mismatch}<br>${frequency}${details}${outcomeWindowSupport(e.mainOutcomeWindow)}${outcomeWindowSupport(e.observationOutcomeWindow)}${payoff}</small>`;
 }
 const connection = document.querySelector('#connection');
 const price = document.querySelector('#price');

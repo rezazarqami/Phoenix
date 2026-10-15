@@ -14,6 +14,7 @@ public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> 
     internal SignalOutcomeModel? OutcomeModel { get; init; }
     internal SignalOutcomeModel? ProposalOutcomeModel { get; init; }
     public IReadOnlyList<LearnedSignalPattern> ProposalPatterns { get; init; } = [];
+    internal IReadOnlyList<(string Source,SignalHistoryItem Item)> OutcomeHistory { get; init; } = [];
     public static readonly SignalLearningSnapshot Empty = new([], DateTime.MinValue);
 }
 
@@ -51,8 +52,9 @@ public sealed class SignalLearningService(
         await _refreshGate.WaitAsync(token);
         try
         {
-            var history = (await store.GetHistoryAsync(3650, 5000, token))
-                .Concat(await shadow.Store.GetHistoryAsync(3650, 5000, token));
+            var outcomeHistory = (await store.GetHistoryAsync(3650, 5000, token)).Select(x=>(Source:"main",Item:x))
+                .Concat((await shadow.Store.GetHistoryAsync(3650, 5000, token)).Select(x=>(Source:"observation",Item:x))).ToArray();
+            var history=outcomeHistory.Select(x=>x.Item);
             var completed = history.Select(x => x.Signal)
                 .Where(x => x.Outcome is "Target" or "StopLoss")
                 .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
@@ -80,6 +82,7 @@ public sealed class SignalLearningService(
                     { ObservedAtUtc = x.ProposalEvidence!.ObservedAtUtc, EvidenceStage = "proposal" }).ToArray();
             _snapshot = new(patterns, DateTime.UtcNow)
             { OutcomeModel = SignalOutcomeModel.Train(patterns, token),
+                OutcomeHistory = outcomeHistory,
                 ProposalPatterns = proposals, ProposalOutcomeModel = SignalOutcomeModel.Train(proposals, token),
                 SimilarityMetric = SignalSimilarityMetric.Build(patterns) };
             logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}.",

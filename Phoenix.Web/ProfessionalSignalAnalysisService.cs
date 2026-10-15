@@ -58,6 +58,7 @@ public sealed class ProfessionalSignalAnalysisService(
         var serverSignal = new ServerSignal
         {
             Symbol = candidate.Symbol, Direction = candidate.Direction, Timeframe = signalInterval,
+            EntryPrice = candidate.EntryPrice, TakeProfit = candidate.TakeProfit, StopLoss = candidate.StopLoss,
             CreatedAtUtc = observedAtUtc,
             EntryTriggeredAtUtc = asOfUtc,
             ChartMode = "Professional", TechnicalFeatures = enriched

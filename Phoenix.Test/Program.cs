@@ -43,6 +43,11 @@ Run("Outcome model rejects failed validation, duplication and future labels", Ou
 Run("Outcome calibration isolates audit labels and rejects recent drift", OutcomeModelTests.CalibrationAndAuditIsolation);
 Run("Outcome models keep proposal and entry evidence separate", OutcomeModelTests.SeparatesEvidenceStages);
 Run("Similarity support excludes economic duplicates and labels historical frequencies", SimilarityTests.SupportAndEconomicDuplicates);
+Run("Technical cohorts enforce geometry, direction, past-only labels and diversity", TechnicalCohortTests.MembershipAndGeometry);
+Run("Outcome windows preserve first events, censoring and other exits", OutcomeWindowTests.FirstEventAndMissingness);
+Run("Outcome windows use all mature outcomes and separate populations", OutcomeWindowTests.DenominatorsAndCohorts);
+Run("Technical geometry records exact ATR and preserves missing legacy values", TechnicalCohortTests.ExactAtrGeometry);
+Run("Technical evidence delivers long Telegram reports without truncation or premature controls", TechnicalCohortTests.LongTelegramEvidence);
 
 Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
 Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);

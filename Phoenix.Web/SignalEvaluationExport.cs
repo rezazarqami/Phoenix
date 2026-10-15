@@ -34,9 +34,17 @@ internal static class SignalEvaluationExport
             latestFeaturesAreFrozenProposal = false,
             predictionTimestampKnown = false,
             eligibleForEntryBinaryEvaluation = eligible,
+            recordedEntryWindow = Window(row, s.EntryTriggeredAtUtc, s.Timeframe),
+            recordedProposalWindow = Window(row, s.ProposalEvidence?.ObservedAtUtc, s.ProposalEvidence?.Timeframe),
             row.UpdatedAtUtc, row.RemovedAtUtc, row.HasImage
         };
     }
+
+    private static object? Window(SignalHistoryItem row, DateTime? observed, string? timeframe) =>
+        observed is { } start && OutcomeWindows.Horizon(timeframe) is { } minutes
+            ? new { horizonMinutes=minutes, observedAtUtc=start, deadlineUtc=start.AddMinutes(minutes),
+                label=OutcomeWindows.Classify(row,start,start.AddMinutes(minutes),DateTime.UtcNow),
+                interpretation="Recorded first event; not reconstructed market path or an automatic trading exit." } : null;
 
     internal static object Page(DateTime from, DateTime to,
         IReadOnlyList<(string Source, IReadOnlyList<SignalHistoryItem> Rows)> sources,

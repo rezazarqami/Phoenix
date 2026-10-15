@@ -78,7 +78,7 @@ public sealed class DedicatedTelegramNotifier(
             } })), "reply_markup");
             var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png");
             content.Add(photo, "photo", $"entry-{signalId:N}.png");
-            using var response = await _httpClient.PostAsync(
+            using var response = await TelegramPhotoDelivery.SendAsync(_httpClient,
                 $"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
             sent |= response.IsSuccessStatusCode;
         }
@@ -105,7 +105,7 @@ public sealed class DedicatedTelegramNotifier(
         var photo = new ByteArrayContent(image);
         photo.Headers.ContentType = new("image/png");
         content.Add(photo, "photo", $"signal-{key}.png");
-        using var response = await _httpClient.PostAsync(
+        using var response = await TelegramPhotoDelivery.SendAsync(_httpClient,
             $"https://api.telegram.org/bot{options.BotToken}/sendPhoto", content, token);
         if (response.IsSuccessStatusCode) return true;
         logger.LogWarning("Dedicated Telegram candidate failed: {Status}", response.StatusCode);

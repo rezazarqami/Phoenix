@@ -3,12 +3,27 @@ plugins { id 'com.android.application' }
 android {
     namespace 'ir.marketsignalist.phoenix'
     compileSdk 35
-
     defaultConfig {
         applicationId 'ir.marketsignalist.phoenix'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1'
+        versionCode 4
+        versionName '1.3-orbit'
+        // Public Firebase app identifiers only. Never place a service account here.
+        ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
+            def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''
+            if (!(value ==~ /[A-Za-z0-9:_\-.]*/)) throw new GradleException('Invalid Firebase identifier')
+            buildConfigField 'String', 'FIREBASE_' + key, '"' + value + '"'
+        }
     }
+    buildTypes { debug { applicationIdSuffix '.orbit'; versionNameSuffix '-test' } }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    implementation 'androidx.biometric:biometric:1.1.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }

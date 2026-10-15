@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Phoenix.Core.Entities;
 using Phoenix.Engine.Exchanges.Bybit;
 using Phoenix.Engine.Managers;
@@ -5,6 +8,13 @@ using Phoenix.Engine.Services;
 using Phoenix.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.Configure<ForwardedHeadersOptions>(options => options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+builder.Services.AddRateLimiter(options => {
+    options.AddPolicy("account-login", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.OnRejected = async (context, token) => { context.HttpContext.Response.StatusCode = 429; context.HttpContext.Response.Headers.RetryAfter = "60"; await context.HttpContext.Response.WriteAsJsonAsync(new { error = "تلاش‌های ورود زیاد شده؛ یک دقیقه بعد دوباره امتحان کنید." }, token); };
+});
+builder.Services.AddSingleton<MobilePushService>();
+builder.Services.AddHttpClient("MobilePush", client => client.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddSingleton(BybitDemoOptions.FromEnvironment());
 builder.Services.AddSingleton<BybitDemoClient>();
 builder.Services.AddSingleton<ServerState>();
@@ -68,6 +78,8 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Strate
 builder.Services.AddHostedService<Strategy2EntryWebSocketWorker>();
 
 var app = builder.Build();
+app.UseForwardedHeaders();
+app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
     var users = context.RequestServices.GetRequiredService<PhoenixUserStore>();
@@ -124,7 +136,7 @@ app.Use(async (context, next) =>
         "/login-analysis-link.css" or "/login-gold.css" or "/viewer-mode.js" or "/api/auth/login" or
         "/analysis-login.css" or "/analysis-login.js" or
         "/manifest.webmanifest" or "/sw.js" ||
-        context.Request.Path.StartsWithSegments("/icons");
+        context.Request.Path.StartsWithSegments("/icons") || path is "/fonts/Vazirmatn-variable.woff2";
     if (publicPath)
     {
         context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
@@ -171,6 +183,7 @@ app.UseStaticFiles();
 
 app.MapGet("/phoenix", () => Results.File(Path.Combine(app.Environment.WebRootPath, "phoenix.html"), "text/html; charset=utf-8"));
 app.MapPersonalEndpoints();
+app.MapMobileEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
@@ -195,7 +208,7 @@ app.MapPost("/api/auth/login", async (LoginRequest request, HttpResponse respons
     var token = PhoenixSessionAuth.CreateToken(request.Username, viewerOnly, admin);
     PhoenixSessionAuth.WriteSessionCookie(response, token);
     return Results.Ok(new { loggedIn = true, viewerOnly, isAdmin = admin });
-});
+}).RequireRateLimiting("account-login");
 app.MapPost("/api/auth/logout", (HttpResponse response) =>
 {
     PhoenixSessionAuth.ClearSessionCookies(response);

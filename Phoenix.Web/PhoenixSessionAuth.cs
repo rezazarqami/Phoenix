@@ -63,7 +63,7 @@ public static class PhoenixSessionAuth
     public static void WriteSessionCookie(HttpResponse response, string token) =>
         response.Cookies.Append(CookieName, token, new CookieOptions
         {
-            HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = false,
+            HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = response.HttpContext.Request.IsHttps,
             MaxAge = CookieLifetime, Path = "/"
         });
 

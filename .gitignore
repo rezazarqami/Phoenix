@@ -361,3 +361,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Generated Android branch-preview bundle and launcher asset
+android/app/src/main/assets/preview/
+android/app/src/main/res/drawable/phoenix_logo.png
+android/.gradle/
+android/app/build/

@@ -22,6 +22,31 @@ public class StartupTest {
     private static void call(Object app,String name)throws Exception{Method m=MainActivity.class.getDeclaredMethod(name);m.setAccessible(true);m.invoke(app);}
     @Test public void realWebViewRevealsLoadedPageAfterUnlock()throws Exception{exercise(false);}
     @Test public void slowImageDoesNotTrapUserBehindLoadingCover()throws Exception{exercise(true);}
+    @Test public void liveServerLoginLoadsInTheAppWebView()throws Exception{
+        Instrumentation instrument=InstrumentationRegistry.getInstrumentation();
+        Instrumentation.ActivityMonitor monitor=instrument.addMonitor(new IntentFilter(Settings.ACTION_SECURITY_SETTINGS),null,true);
+        AtomicReference<Throwable> failure=new AtomicReference<>();
+        AtomicReference<String> login=new AtomicReference<>("false"),status=new AtomicReference<>("");
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+            scenario.onActivity(app->{try{call(app,"verified");}catch(Throwable e){failure.set(e);}});
+            long deadline=System.currentTimeMillis()+25000;
+            while(System.currentTimeMillis()<deadline&&!"true".equals(login.get())&&failure.get()==null){
+                scenario.onActivity(app->{try{
+                    WebView web=(WebView)get(app,"browser");
+                    web.evaluateJavascript("!!document.getElementById('loginForm')",login::set);
+                    status.set("URL="+web.getUrl()+" loading="+get(app,"pageLoading")+" failed="+get(app,"pageFailed")+" progress="+get(app,"loadProgress")+" message="+((android.widget.TextView)get(app,"pageStatus")).getText());
+                }catch(Throwable e){failure.set(e);}});
+                Thread.sleep(200);
+            }
+            if(failure.get()!=null)throw new AssertionError(failure.get());
+            assertEquals("Live login did not load: "+status.get(),"true",login.get());
+            scenario.onActivity(app->{try{
+                assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
+                assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
+            }catch(Throwable e){failure.set(e);}});
+            if(failure.get()!=null)throw new AssertionError(failure.get());
+        }finally{instrument.removeMonitor(monitor);}
+    }
     private void exercise(boolean slowImage)throws Exception{
         Instrumentation instrument=InstrumentationRegistry.getInstrumentation();
         Instrumentation.ActivityMonitor monitor=instrument.addMonitor(new IntentFilter(Settings.ACTION_SECURITY_SETTINGS),null,true);

@@ -1,0 +1,29 @@
+name: Inspect Phoenix notification setup
+on:
+  push:
+    branches: [ops/mobile-push-setup]
+    paths: ['.github/workflows/mobile-push-setup.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect notification deployment permissions without reading credentials
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 91.216.104.210
+          username: phoenix-deploy
+          key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            set -eu
+            id
+            sudo -n -l
+            systemctl show phoenix.service --property=User --property=Group --property=WorkingDirectory --property=EnvironmentFiles --property=FragmentPath
+            for path in /usr/local/sbin/deploy-phoenix /opt/phoenix /var/lib/phoenix /etc/phoenix; do
+              if [ -e "$path" ]; then stat -c '%A %U %G %n' "$path"; fi
+            done
+            command -v setfacl || true
+            openssl version

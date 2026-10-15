@@ -39,6 +39,8 @@ final class Reminders {
         long at=input.getLong("at"),now=System.currentTimeMillis();
         if(at<now+15000||at>now+366L*86400000)throw new IllegalArgumentException("زمان را بین ۱۵ ثانیهٔ آینده و یک سال انتخاب کن.");
         permissions(c);
+        // Recurrence has minute precision; round forward so a fractional first minute is never skipped.
+        if(!repeat.equals("none"))at=((at+59999)/60000)*60000;
         ZonedDateTime local=Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault());
         JSONObject row=new JSONObject().put("id",id).put("title",title.trim()).put("at",at).put("startAt",at).put("hour",local.getHour()).put("minute",local.getMinute()).put("repeat",repeat).put("days",repeat.equals("weekly")?input.optJSONArray("days"):new JSONArray()).put("entryId",entryId).put("entryKind",entryKind).put("delivered",false);
         if(repeat.equals("weekly")&&days(row).isEmpty())throw new IllegalArgumentException("حداقل یک روز هفته را انتخاب کن.");

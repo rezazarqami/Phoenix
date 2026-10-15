@@ -36,7 +36,7 @@ internal static class SignalReviewText
                 text += $"\nمرجع کل هم‌جهت و هم‌تایم‌فریم: {c.BaselineTargets} تارگت / {c.BaselineStops} استاپ ({baseline:0.#}٪ تارگت).";
             foreach(var item in c.Conditions)
                 text += $"\n{item.Label}: {item.Targets} تارگت / {item.Stops} استاپ.";
-            text += "\nزیرگروه‌ها هم‌پوشان‌اند؛ این شمارش‌ها اثر علّی یا احتمال معتبر نیستند.";
+            text += "\nزیرگروه‌ها هم‌پوشان‌اند؛ تعداد مؤثر وزنی، تعداد تجربه‌های مستقل نیست؛ سیگنال‌های هم‌زمان می‌توانند وابسته باشند.";
         }
         text += Window(evidence.MainOutcomeWindow) + Window(evidence.ObservationOutcomeWindow);
         if(evidence.Payoff is { } payoff)
@@ -55,8 +55,8 @@ internal static class SignalReviewText
             $"\nبدون نتیجهٔ ثبت‌شده {w.NoRecordedResolution} / نامعلوم {w.Unknown}؛ هنوز نرسیده به مهلت {w.Immature}.";
         if(w.RecordedTargetShare is { } tp)
             text+=$"\nسهم ثبت‌شده از کل {w.MatureCount} نمونه: تارگت {tp:0.#}٪ / استاپ {w.RecordedStopShare:0.#}٪.";
-        else text+="\nنمونه برای نمایش سهم‌ها کافی نیست.";
-        return text+"\nاین آمار گذشته است؛ پایان مهلت به معنی بستن معامله نیست.";
+        else text+=w.LegacyObservationCount>0 ? $"\n{w.LegacyObservationCount} نمونه با رصد قدیمیِ ناقص ریسک‌فری؛ سهم درصدی نمایش داده نمی‌شود." : "\nنمونه برای نمایش سهم‌ها کافی نیست.";
+        return text+(w.Source=="observation" ? "\nرصد بدون معامله: سابقهٔ قدیمی ریسک‌فری را کامل ثبت نمی‌کرد؛ نتیجهٔ رصد، تضمین اجرای سفارش نیست." : "")+"\nاین آمار گذشته است؛ پایان مهلت به معنی بستن معامله نیست.";
     }
     internal static string Comparison(decimal? target, decimal? stop)
     {

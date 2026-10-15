@@ -20,7 +20,7 @@ internal static class SignalEvaluationExport
             s.EntryTechnicalFeatures is not null;
         return new
         {
-            source, s.Id, s.Symbol, s.Direction, s.Timeframe, s.ChartMode,
+            source, s.ObservationPolicyVersion, s.Id, s.Symbol, s.Direction, s.Timeframe, s.ChartMode,
             s.CreatedAtUtc, s.EntryTriggeredAtUtc, s.FilledAtUtc, s.CompletedAtUtc,
             s.TargetReachedAtUtc, s.StopLossReachedAtUtc, s.RiskFreeReachedAtUtc,
             s.RiskFreeClosedAtUtc, s.ExpiredAtUtc, s.Status, s.RecoveryOriginalStatus, s.Outcome, s.ExpireReason,

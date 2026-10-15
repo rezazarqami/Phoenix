@@ -38,6 +38,14 @@ internal static class OutcomeWindowTests
         Check(OutcomeWindows.Calculate(candidate,history,"proposal")[0].MatureCount==0,"Missing frozen proposal evidence cannot become entry evidence silently");
         Check(OutcomeWindows.Horizon("5")==120 && OutcomeWindows.Horizon("unknown") is null,"Window is 24 declared bars; unsupported intervals must abstain");
         Check(SignalReviewText.Window(w).Contains("آمار گذشته"),"Window shares must not be described as signal probabilities");
+        var observations=history.Select(x=>(Source:"observation",x.Item)).ToArray();
+        var legacy=OutcomeWindows.Calculate(candidate,observations,"entry")[1];
+        Check(legacy.LegacyObservationCount==10 && legacy.RecordedTargetShare is null,
+            "Legacy observations must not advertise mixed-policy outcome percentages");
+        foreach(var row in observations)row.Item.Signal.ObservationPolicyVersion=1;
+        var current=OutcomeWindows.Calculate(candidate,observations,"entry")[1];
+        Check(current.LegacyObservationCount==0 && current.RecordedTargetShare==30,
+            "Versioned observations retain all outcomes in their denominator");
         candidate.TakeProfit=120;
         Check(TradePayoffEvidence.From(candidate) is { RewardRisk:2,GrossBinaryBreakEvenRate:33.3m },"Win counts must be interpreted alongside risk/reward, without claiming net profitability");
         candidate.StopLoss=101;

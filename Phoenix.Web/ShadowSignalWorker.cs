@@ -20,9 +20,19 @@ public sealed class ShadowSignalWorker(
                     .Where(x => x.CompletedAtUtc is null && x.Status is "Pending" or "Filled")
                     .GroupBy(x => x.Symbol, StringComparer.OrdinalIgnoreCase))
                 {
-                    var price = (await bybit.GetLastPriceAsync(group.Key, token)).LastPrice;
-                    foreach (var signal in group)
-                        await TrackAsync(signal, price, token);
+                    try
+                    {
+                        var price = (await bybit.GetLastPriceAsync(group.Key, token)).LastPrice;
+                        if (price <= 0) continue;
+                        foreach (var signal in group)
+                        {
+                            try { await TrackAsync(signal, price, token); }
+                            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                            catch (Exception ex) { logger.LogWarning(ex, "Observation update failed for {SignalId}", signal.Id); }
+                        }
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception ex) { logger.LogWarning(ex, "Observation price unavailable for {Symbol}", group.Key); }
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
@@ -43,6 +53,8 @@ public sealed class ShadowSignalWorker(
                 signal.FilledAtUtc = DateTime.UtcNow;
                 signal.EntryTriggeredAtUtc = signal.FilledAtUtc;
                 signal.AverageFillPrice = signal.EntryPrice;
+                // The entry sample can already be beyond the stop after a market gap.
+                ObservationOutcomeTracker.TrackFilled(signal, price, signal.EntryTriggeredAtUtc.Value);
                 await runtime.Store.UpdateAsync(signal, token);
                 try
                 {
@@ -64,18 +76,16 @@ public sealed class ShadowSignalWorker(
                 catch (Exception ex) { logger.LogWarning(ex, "Entry fingerprint unavailable for {Symbol}", signal.Symbol); }
             }
             else if (InitialExpiryReached(signal, price))
-                await runtime.Store.RemoveAsync(signal.Id, token);
+            {
+                ObservationOutcomeTracker.Expire(signal, DateTime.UtcNow);
+                await runtime.Store.UpdateAsync(signal, token);
+            }
             else
                 await runtime.Store.UpdateAsync(signal, token);
             return;
         }
 
-        if (DemoOrderWorker.TargetReached(signal, price)) Complete(signal, "Target");
-        else if (DemoOrderWorker.StopLossReached(signal, price))
-        {
-            Complete(signal, "StopLoss");
-            signal.FailureReason = ProfessionalSignalAnalysisService.ExplainStop(signal.TechnicalFeatures);
-        }
+        ObservationOutcomeTracker.TrackFilled(signal, price, DateTime.UtcNow);
         await runtime.Store.UpdateAsync(signal, token);
     }
 
@@ -86,13 +96,4 @@ public sealed class ShadowSignalWorker(
         _ => false
     };
 
-    private static void Complete(ServerSignal signal, string outcome)
-    {
-        var now = DateTime.UtcNow;
-        signal.Status = "Completed";
-        signal.Outcome = outcome;
-        signal.CompletedAtUtc = now;
-        if (outcome == "Target") signal.TargetReachedAtUtc = now;
-        else signal.StopLossReachedAtUtc = now;
-    }
 }

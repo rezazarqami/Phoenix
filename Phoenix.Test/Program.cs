@@ -14,6 +14,7 @@ Run("Mobile push persists per-device retries without duplicate or historic deliv
 
 Run("Personal workspace idempotent sync, version conflicts, references, decision provenance and media backup", Phoenix.Test.PersonalWorkspaceTests.Workspace);
 Run("Personal reports count car costs once and preserve missing data", Phoenix.Test.PersonalWorkspaceTests.Reports);
+Run("Observation outcomes track both directions, gaps, expiry and legacy policy", ObservationOutcomeTests.Transitions);
 
 Run("Personal records persist across store instances and delete accurately", Phoenix.Test.PersonalStoreTests.Persistence);
 

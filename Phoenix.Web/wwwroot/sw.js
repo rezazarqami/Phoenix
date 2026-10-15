@@ -1,13 +1,14 @@
 // Cache the generic owner shell only after an authenticated owner explicitly opens it.
 // Actual records and outbox live in IndexedDB; APIs and private media are never HTTP-cached.
-const PERSONAL_CACHE = "personal-shell-v5";
+const PERSONAL_CACHE = "personal-shell-v6";
 const SHELL = [
   "/",
-  "/personal.css?v=5",
+  "/personal.css?v=6",
   "/fonts/Vazirmatn-variable.woff2",
   "/personal-core.js?v=2",
   "/personal-storage.js?v=2",
-  "/personal.js?v=4",
+  "/personal.js?v=5",
+  "/mobile.js?v=1",
 ];
 async function clearPersonal() {
   await Promise.all(

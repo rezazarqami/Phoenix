@@ -15,6 +15,7 @@
     captureFiles = [],
     online = false,
     syncing = false,
+    syncAgain = false,
     recorder = null,
     recordStream = null,
     recognition = null,
@@ -247,7 +248,7 @@
     $("#offlineBanner").hidden = online;
   }
   async function synchronize() {
-    if (syncing) return;
+    if (syncing) { syncAgain = true; return; }
     syncing = true;
     await syncStatus();
     try {
@@ -281,6 +282,7 @@
     } finally {
       syncing = false;
       await syncStatus();
+      if (syncAgain) { syncAgain = false; if (online) queueMicrotask(() => synchronize().catch(fail)); }
     }
   }
   async function persist(values, existing) {
@@ -2128,6 +2130,7 @@
     )
       return;
     try {
+      await window.OrbitMobile?.prepareLogout();
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw Error("خروج از سرور انجام نشد.");
       await S.clear();

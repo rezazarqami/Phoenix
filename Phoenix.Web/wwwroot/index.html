@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#100d1a" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/phoenix-192.png" />
-    <link rel="stylesheet" href="/personal.css?v=5" />
+    <link rel="stylesheet" href="/personal.css?v=6" />
     <title>فضای شخصی رضا</title>
   </head>
   <body data-personal-workspace="2">
@@ -42,6 +42,7 @@
             ><span id="todayDate"></span>
           </div>
           <div class="top-actions">
+            <a class="phoenix-entry" href="/phoenix">ورود به فونیکس ↗</a>
             <button id="profileButton" class="profile-button" aria-label="تنظیمات فضای شخصی">ر</button>
             <button id="syncButton" class="sync-button" aria-label="همگام‌سازی">
               <i id="syncDot"></i
@@ -413,6 +414,16 @@
           ×
         </button>
       </div>
+      <section class="settings-section mobile-security">
+        <span class="section-kicker">DEVICE / SECURITY</span><h3>امنیت و اعلان‌های گوشی</h3>
+        <p id="mobileSecurityStatus" role="status">در حال بررسی قابلیت‌های دستگاه…</p>
+        <div class="button-row"><button id="mobileLock" class="quiet" type="button">قفل‌کردن برنامه</button><button id="mobileNotifyPermission" class="quiet" type="button">اجازهٔ اعلان</button><button id="mobileExactPermission" class="quiet" type="button">اجازهٔ آلارم دقیق</button><button id="mobileTest" class="quiet" type="button">اعلان آزمایشی گوشی</button></div>
+        <p id="mobilePushStatus" role="status"></p><div class="button-row"><button id="mobileEnablePush" class="quiet" type="button">فعال‌سازی اعلان‌های سرور</button><button id="mobileDisablePush" class="quiet" type="button">خاموش‌کردن اعلان‌های سرور</button><button id="mobilePushTest" class="quiet" type="button">آزمایش اتصال سرور</button></div>
+        <h3>یادآوری روی این گوشی</h3><p>یادآوری حتی بیرون برنامه اجرا می‌شود؛ پس از ثبت نیازی به اینترنت ندارد.</p>
+        <form id="mobileReminderForm" class="form-grid"><label>عنوان<input id="mobileReminderTitle" maxlength="200" required placeholder="مثلاً زمان مصرف دارو"></label><label>تاریخ و زمان<input id="mobileReminderTime" type="datetime-local" required></label><button class="primary" id="mobileReminderSave" type="submit">ثبت یادآوری</button></form>
+        <p id="mobileMessage" role="status" aria-live="polite"></p><div id="mobileReminderList"></div>
+        <small>مجوز اعلان و آلارم دقیق باید در اندروید فعال باشد. توقف اجباری برنامه و محدودیت باتری گوشی می‌تواند اعلان را متوقف یا عقب بیندازد؛ برای یادآوری حیاتی فقط به این برنامه تکیه نکن.</small>
+      </section>
       <section class="settings-section">
         <h3>پشتیبان و انتقال اطلاعات</h3>
         <p>پشتیبان کامل شامل ثبت‌های همگام‌شده، عکس‌ها و صداهای مرتبط است.</p>
@@ -459,6 +470,7 @@
     </dialog>
     <script src="/personal-core.js?v=2"></script>
     <script src="/personal-storage.js?v=2"></script>
-    <script src="/personal.js?v=4"></script>
+    <script src="/mobile.js?v=1"></script>
+    <script src="/personal.js?v=5"></script>
   </body>
 </html>

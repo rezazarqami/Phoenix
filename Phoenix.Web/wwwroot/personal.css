@@ -1535,3 +1535,6 @@ footer { padding: 20px 0 32px; color: #ac97c0; font-size: 11px; display: flex; a
   .day-cell small { font-size: 11px; }.capture-hint { font-size: 0; }.capture-hint span { font-size: 21px; }
   .panel { padding: var(--space-3); }.discovery-card strong { font-size: 34px; }
 }
+
+@media screen {.phoenix-entry{display:inline-flex;align-items:center;min-height:44px;border:1px solid #795b8c;border-radius:13px;padding:8px 13px;color:#dcfa52;background:#2b2036;font-size:13px;white-space:nowrap}.mobile-security h3{margin-top:21px}.mobile-security h3:first-of-type{margin-top:0}.mobile-reminder{display:flex;gap:13px;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #594268}.mobile-reminder>div{min-width:0;overflow-wrap:anywhere}.mobile-reminder small{display:block}.mobile-security .button-row{margin:13px 0}.mobile-security [hidden]{display:none!important}.mobile-security form button{align-self:end}.mobile-security #mobileMessage{color:#dcfa52}.mobile-security #mobileMessage.error{color:#ffb2ce}}
+@media screen and (max-width:760px){.top-actions{flex-wrap:wrap}.phoenix-entry{font-size:11px;padding:8px}.mobile-security .form-grid{grid-template-columns:1fr}}

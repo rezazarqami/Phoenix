@@ -28,7 +28,7 @@ final class Reminders {
         return result;
     }
     private static long next(JSONObject row,long after) throws JSONException {
-        return ReminderSchedule.next(after,row.getLong("startAt"),row.getInt("hour"),row.getInt("minute"),days(row),ZoneId.systemDefault());
+        return ReminderSchedule.next(Math.max(after,row.optLong("lastDeliveredAt")),row.getLong("startAt"),row.getInt("hour"),row.getInt("minute"),days(row),ZoneId.systemDefault());
     }
     static synchronized JSONObject schedule(Context c,JSONObject input) throws JSONException {
         String id=input.getString("reminderId"),title=input.getString("title"),repeat=input.optString("repeat","none"),entryId=input.optString("entryId",""),entryKind=input.optString("entryKind","");
@@ -74,6 +74,7 @@ final class Reminders {
             else row.put("delivered",true);
             row.put("lastDeliveredAt",now);SecureStore.put(c,"reminders",rows.toString());
             if(!snooze&&!row.optBoolean("delivered")&&exactAllowed(c))arm(c,row,false);
+            c.getSystemService(NotificationManager.class).cancel(id,1);
             OrbitNotifications.show(c,OrbitNotifications.REMINDERS,id,"/");return;
         }
     }

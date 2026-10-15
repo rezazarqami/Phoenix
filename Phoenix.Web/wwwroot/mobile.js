@@ -47,7 +47,7 @@
   function drawReminders(){
     const host=$('mobileReminderList');host.replaceChildren();
     const dateText=at=>new Intl.DateTimeFormat('fa-IR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(at));
-    const rows=[...(state?.reminders||[])].sort((a,b)=>Number(a.delivered)-Number(b.delivered)||a.at-b.at);
+    const rows=[...(state?.reminders||[])].sort((a,b)=>Number(a.delivered&&!a.snoozeAt)-Number(b.delivered&&!b.snoozeAt)||Math.min(a.at,a.snoozeAt||Infinity)-Math.min(b.at,b.snoozeAt||Infinity));
     for(const row of rows){
       const item=document.createElement('div'),text=document.createElement('div'),title=document.createElement('strong'),time=document.createElement('small'),actions=document.createElement('div');
       item.className='mobile-reminder';actions.className='button-row';title.textContent=row.title;

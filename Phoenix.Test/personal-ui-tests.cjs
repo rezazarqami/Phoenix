@@ -98,6 +98,8 @@ async function boot() {
   w.fetch = mockFetch;
   w.Response = Response;
   w.confirm = () => true;
+  w.reminderLinks=[];w.reminderCancellations=[];
+  w.OrbitMobile={available:()=>true,openForEntry:async entry=>w.reminderLinks.push(entry.id),cancelForEntry:async id=>w.reminderCancellations.push(id)};
   w.scrollTo = () => {};
   w.print = () => {};
   w.URL.createObjectURL = () => "blob:fixture";
@@ -203,6 +205,13 @@ async function run() {
   field(w, "d.goalId", goal.id);
   await submit(w);
   await waitFor(() => [...rows.values()].some((e) => e.kind === "project"));
+  await openNew(w, "task");field(w,"title","کار متصل به یادآور");await submit(w);
+  await waitFor(()=>[...rows.values()].some(e=>e.title==="کار متصل به یادآور"));
+  const linkedTask=[...rows.values()].find(e=>e.title==="کار متصل به یادآور");
+  const linkedRow=[...$("#todayTasks").children].find(e=>e.textContent.includes(linkedTask.title));
+  assert(linkedRow,"Linked task missing");[...linkedRow.querySelectorAll("button")].find(b=>b.textContent==="یادآور").click();
+  await waitFor(()=>w.reminderLinks.includes(linkedTask.id));linkedRow.querySelector(".check-button").click();
+  await waitFor(()=>w.reminderCancellations.includes(linkedTask.id));
   await openNew(w, "checkin");
   field(w, "title", "وضعیت روز");
   field(w, "d.energy", "4");

@@ -1538,3 +1538,13 @@ footer { padding: 20px 0 32px; color: #ac97c0; font-size: 11px; display: flex; a
 
 @media screen {.phoenix-entry{display:inline-flex;align-items:center;min-height:44px;border:1px solid #795b8c;border-radius:13px;padding:8px 13px;color:#dcfa52;background:#2b2036;font-size:13px;white-space:nowrap}.mobile-security h3{margin-top:21px}.mobile-security h3:first-of-type{margin-top:0}.mobile-reminder{display:flex;gap:13px;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #594268}.mobile-reminder>div{min-width:0;overflow-wrap:anywhere}.mobile-reminder small{display:block}.mobile-security .button-row{margin:13px 0}.mobile-security [hidden]{display:none!important}.mobile-security form button{align-self:end}.mobile-security #mobileMessage{color:#dcfa52}.mobile-security #mobileMessage.error{color:#ffb2ce}}
 @media screen and (max-width:760px){.top-actions{flex-wrap:wrap}.phoenix-entry{font-size:11px;padding:8px}.mobile-security .form-grid{grid-template-columns:1fr}}
+
+/* Reminder controls follow the existing compact Orbit forms. */
+.reminder-days{display:flex;flex-wrap:wrap;gap:.618rem}
+.reminder-days label{display:flex;align-items:center;gap:.382rem;padding:.618rem;border-radius:.618rem;background:var(--surface,#f5f0f7)}
+.reminder-days input{width:auto;min-height:auto}
+#mobileReminderDays{grid-column:1/-1;border:1px solid #d9cedf;border-radius:1rem;padding:1rem}
+#mobileReminderLink{grid-column:1/-1}
+.mobile-reminder{align-items:flex-start;gap:1rem;flex-wrap:wrap}
+.mobile-reminder small{display:block;line-height:1.618}
+.mobile-reminder .button-row{flex-wrap:wrap}

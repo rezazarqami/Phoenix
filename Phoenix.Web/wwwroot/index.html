@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#100d1a" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/phoenix-192.png" />
-    <link rel="stylesheet" href="/personal.css?v=6" />
+    <link rel="stylesheet" href="/personal.css?v=7" />
     <title>فضای شخصی رضا</title>
   </head>
   <body data-personal-workspace="2">
@@ -420,7 +420,14 @@
         <div class="button-row"><button id="mobileLock" class="quiet" type="button">قفل‌کردن برنامه</button><button id="mobileNotifyPermission" class="quiet" type="button">اجازهٔ اعلان</button><button id="mobileExactPermission" class="quiet" type="button">اجازهٔ آلارم دقیق</button><button id="mobileTest" class="quiet" type="button">اعلان آزمایشی گوشی</button></div>
         <p id="mobilePushStatus" role="status"></p><div class="button-row"><button id="mobileEnablePush" class="quiet" type="button">فعال‌سازی اعلان‌های سرور</button><button id="mobileDisablePush" class="quiet" type="button">خاموش‌کردن اعلان‌های سرور</button><button id="mobilePushTest" class="quiet" type="button">آزمایش اتصال سرور</button></div>
         <h3>یادآوری روی این گوشی</h3><p>یادآوری حتی بیرون برنامه اجرا می‌شود؛ پس از ثبت نیازی به اینترنت ندارد.</p>
-        <form id="mobileReminderForm" class="form-grid"><label>عنوان<input id="mobileReminderTitle" maxlength="200" required placeholder="مثلاً زمان مصرف دارو"></label><label>تاریخ و زمان<input id="mobileReminderTime" type="datetime-local" required></label><button class="primary" id="mobileReminderSave" type="submit">ثبت یادآوری</button></form>
+        <form id="mobileReminderForm" class="form-grid">
+          <label>عنوان<input id="mobileReminderTitle" maxlength="200" required placeholder="مثلاً زمان مصرف دارو"></label>
+          <label>شروع از تاریخ و ساعت<input id="mobileReminderTime" type="datetime-local" required></label>
+          <label>تکرار<select id="mobileReminderRepeat"><option value="none">یک‌بار</option><option value="daily">هر روز</option><option value="weekly">روزهای منتخب هفته</option></select></label>
+          <fieldset id="mobileReminderDays" hidden><legend>روزهای تکرار</legend><div class="reminder-days"><label><input type="checkbox" value="6">شنبه</label><label><input type="checkbox" value="7">یکشنبه</label><label><input type="checkbox" value="1">دوشنبه</label><label><input type="checkbox" value="2">سه‌شنبه</label><label><input type="checkbox" value="3">چهارشنبه</label><label><input type="checkbox" value="4">پنجشنبه</label><label><input type="checkbox" value="5">جمعه</label></div></fieldset>
+          <p id="mobileReminderLink" class="record-meta"></p>
+          <div class="button-row"><button class="primary" id="mobileReminderSave" type="submit">ثبت یادآوری</button><button class="quiet" id="mobileReminderReset" type="button">پاک‌کردن فرم</button></div>
+        </form>
         <p id="mobileMessage" role="status" aria-live="polite"></p><div id="mobileReminderList"></div>
         <small>مجوز اعلان و آلارم دقیق باید در اندروید فعال باشد. توقف اجباری برنامه و محدودیت باتری گوشی می‌تواند اعلان را متوقف یا عقب بیندازد؛ برای یادآوری حیاتی فقط به این برنامه تکیه نکن.</small>
       </section>
@@ -470,7 +477,7 @@
     </dialog>
     <script src="/personal-core.js?v=2"></script>
     <script src="/personal-storage.js?v=2"></script>
-    <script src="/mobile.js?v=1"></script>
-    <script src="/personal.js?v=5"></script>
+    <script src="/mobile.js?v=2"></script>
+    <script src="/personal.js?v=6"></script>
   </body>
 </html>

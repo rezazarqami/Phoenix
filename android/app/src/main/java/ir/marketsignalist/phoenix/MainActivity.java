@@ -211,7 +211,7 @@ public final class MainActivity extends FragmentActivity {
     private JSONObject status() throws JSONException {
         OrbitNotifications.channels(this);
         String id=getPreferences().getString("device-id",null);if(id==null){id=UUID.randomUUID().toString();getPreferences().edit().putString("device-id",id).apply();}
-        return new JSONObject().put("deviceId",id).put("deviceLock",deviceSecure()).put("notifications",OrbitNotifications.allowed(this)).put("reminderChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.REMINDERS)).put("signalChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.SIGNALS)).put("exactAlarms",Reminders.exactAllowed(this)).put("pushConfigured",!FirebaseApp.getApps(this).isEmpty()).put("enrollmentId",getPreferences().getString("push-enrollment",null)).put("pushEnabled",getPreferences().getBoolean("push-enabled",false)).put("token",getPreferences().getBoolean("push-enabled",false)?getPreferences().getString("push-token",null):JSONObject.NULL).put("reminders",Reminders.list(this));
+        return new JSONObject().put("reminderVersion",2).put("deviceId",id).put("deviceLock",deviceSecure()).put("notifications",OrbitNotifications.allowed(this)).put("reminderChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.REMINDERS)).put("signalChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.SIGNALS)).put("exactAlarms",Reminders.exactAllowed(this)).put("pushConfigured",!FirebaseApp.getApps(this).isEmpty()).put("enrollmentId",getPreferences().getString("push-enrollment",null)).put("pushEnabled",getPreferences().getBoolean("push-enabled",false)).put("token",getPreferences().getBoolean("push-enabled",false)?getPreferences().getString("push-token",null):JSONObject.NULL).put("reminders",Reminders.list(this));
     }
     private android.content.SharedPreferences getPreferences(){return getSharedPreferences("orbit-device",MODE_PRIVATE);}
     private void reply(JavaScriptReplyProxy proxy,String id,JSONObject value,String error){try{JSONObject out=new JSONObject().put("id",id).put("ok",error==null);if(value!=null)out.put("value",value);if(error!=null)out.put("error",error);proxy.postMessage(out.toString());}catch(Exception ignored){}}
@@ -235,7 +235,8 @@ public final class MainActivity extends FragmentActivity {
                 reply(proxy,id,new JSONObject().put("requested",true),null);return;
             }
             if(command.equals("requestExactAlarms")){if(Build.VERSION.SDK_INT>=31&&!Reminders.exactAllowed(this))startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())));reply(proxy,id,new JSONObject().put("requested",true),null);return;}
-            if(command.equals("schedule")){reply(proxy,id,Reminders.schedule(this,input.getString("reminderId"),input.getString("title"),input.getLong("at")),null);return;}
+            if(command.equals("schedule")){reply(proxy,id,Reminders.schedule(this,input),null);return;}
+            if(command.equals("snooze")){Reminders.snooze(this,input.getString("reminderId"),input.getInt("minutes"));reply(proxy,id,status(),null);return;}
             if(command.equals("cancel")){Reminders.cancel(this,input.getString("reminderId"));reply(proxy,id,status(),null);return;}
             if(command.equals("testNotification")){if(!OrbitNotifications.channelAllowed(this,OrbitNotifications.REMINDERS))throw new IllegalStateException("اجازهٔ اعلان و کانال یادآوری را فعال کن.");OrbitNotifications.show(this,OrbitNotifications.REMINDERS,UUID.randomUUID().toString(),"/");reply(proxy,id,new JSONObject().put("shown",true),null);return;}
             if(command.equals("enablePush")){

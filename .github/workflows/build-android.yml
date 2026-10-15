@@ -25,7 +25,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
-          key: orbit-debug-key-v1
+          key: orbit-debug-key-v2
+      - name: Ensure persistent test signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - name: Add launcher logo
         run: |
           mkdir -p android/app/src/main/res/drawable
@@ -38,6 +44,28 @@ jobs:
           PHOENIX_FIREBASE_PROJECT_ID: ${{ vars.PHOENIX_FIREBASE_PROJECT_ID }}
           PHOENIX_FIREBASE_SENDER_ID: ${{ vars.PHOENIX_FIREBASE_SENDER_ID }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise startup in a real Android WebView
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon
+      - name: Save Android test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-android-test-reports
+          path: |
+            android/app/build/reports/androidTests
+            android/app/build/reports/tests
+            android/app/build/outputs/androidTest-results
       - uses: actions/upload-artifact@v4
         with:
           name: phoenix-android-test-apk

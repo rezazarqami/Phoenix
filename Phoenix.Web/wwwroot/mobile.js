@@ -49,8 +49,8 @@
       state=await command('status');
       $('mobileSecurityStatus').textContent='قفل دستگاه: '+(state.deviceLock?'فعال':'غیرفعال')+' · اعلان: '+(state.notifications&&state.reminderChannel?'مجاز':'نیاز به اجازه')+' · آلارم دقیق: '+(state.exactAlarms?'مجاز':'نیاز به اجازه');
       drawReminders();
-      try{serverConfigured=(await api('status')).pushConfigured;if(serverConfigured&&state.pushEnabled&&state.token)await api('devices',{method:'POST',body:JSON.stringify({deviceId:state.deviceId,token:state.token})});}catch{serverConfigured=false;}
-      $('mobilePushStatus').textContent=state.pushConfigured&&serverConfigured?(state.pushEnabled?'دریافت اعلان سرور روی گوشی فعال است.':'سرویس آماده است؛ دریافت اعلان را فعال کن.'):'یادآوری گوشی آماده است؛ برای اعلان سیگنال، تنظیم سرویس Push در برنامه و سرور لازم است.';
+      try{const server=await api('status');serverConfigured=server.pushConfigured;if(!state.pushConfigured&&server.clientConfig)state=await command('configurePush',{config:server.clientConfig});if(serverConfigured&&state.pushEnabled&&state.token)await api('devices',{method:'POST',body:JSON.stringify({deviceId:state.deviceId,token:state.token,enrollmentId:state.enrollmentId})});}catch{serverConfigured=false;}
+      $('mobilePushStatus').textContent=state.pushConfigured&&serverConfigured?(state.pushEnabled?'دریافت اعلان سیگنال و تغییر وضعیت معاملات روی این گوشی فعال است.':'سرویس آماده است؛ دریافت اعلان را فعال کن.'):'یادآوری گوشی آماده است؛ برای اعلان سیگنال، تنظیم سرویس Push در برنامه و سرور لازم است.';
       $('mobilePushTest').disabled=!state.pushEnabled||!serverConfigured;
       $('mobileEnablePush').disabled=!state.pushConfigured||!serverConfigured;
     }catch(error){note(error.message,true);}finally{refreshing=false;}
@@ -60,7 +60,7 @@
   $('mobileEnablePush').addEventListener('click',event=>run(event.currentTarget,async()=>{
     if(window.OrbitPreview)throw new Error('اتصال سرور در پیش‌نمایش فعال نیست.');
     const device=await command('enablePush');
-    try{await api('devices',{method:'POST',body:JSON.stringify({deviceId:device.deviceId,token:device.token})});}
+    try{await api('devices',{method:'POST',body:JSON.stringify({deviceId:device.deviceId,token:device.token,enrollmentId:device.enrollmentId})});}
     catch(error){await command('disablePush').catch(()=>{});throw error;}
     note('اعلان‌های سرور برای این گوشی فعال شد.');await refresh();
   }));

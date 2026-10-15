@@ -8,8 +8,8 @@ using System.Text.RegularExpressions;
 namespace Phoenix.Web;
 
 // Device registrations are private server state. No service-account key is ever
-// returned to a browser/APK. Signal producers can call SendAsync after release.
-public sealed class MobilePushService
+// returned to a browser/APK. Real signal delivery uses the durable per-device outbox.
+public sealed partial class MobilePushService
 {
     private readonly string connectionString;
     private readonly HttpClient http;
@@ -35,7 +35,9 @@ public sealed class MobilePushService
         {
             using var cmd = db.CreateCommand();
             cmd.CommandText = "CREATE TABLE IF NOT EXISTS mobile_devices(owner TEXT NOT NULL, device_id TEXT NOT NULL, token TEXT NOT NULL, updated INTEGER NOT NULL, PRIMARY KEY(owner,device_id));";
-            await cmd.ExecuteNonQueryAsync(ct); initialized = true;
+            await cmd.ExecuteNonQueryAsync(ct);
+            await InitializeOutboxAsync(db, ct);
+            initialized = true;
         }
         return db;
     }
@@ -48,8 +50,9 @@ public sealed class MobilePushService
         {
             await using var db = await OpenAsync(ct);
             using var cmd = db.CreateCommand();
-            cmd.CommandText = "INSERT INTO mobile_devices VALUES($o,$d,$t,$u) ON CONFLICT(owner,device_id) DO UPDATE SET token=$t,updated=$u; DELETE FROM mobile_devices WHERE owner=$o AND device_id NOT IN(SELECT device_id FROM mobile_devices WHERE owner=$o ORDER BY updated DESC LIMIT 20);";
+            cmd.CommandText = "DELETE FROM mobile_devices WHERE token=$t AND (owner<>$o OR device_id<>$d); INSERT INTO mobile_devices(owner,device_id,token,updated,enabled_since,enrollment) VALUES($o,$d,$t,$u,$u,$enrollment) ON CONFLICT(owner,device_id) DO UPDATE SET token=$t,updated=$u,enabled_since=CASE WHEN mobile_devices.enrollment<>excluded.enrollment THEN excluded.enabled_since ELSE mobile_devices.enabled_since END,enrollment=excluded.enrollment; DELETE FROM mobile_devices WHERE owner=$o AND device_id NOT IN(SELECT device_id FROM mobile_devices WHERE owner=$o ORDER BY updated DESC LIMIT 20);";
             cmd.Parameters.AddWithValue("$o", owner); cmd.Parameters.AddWithValue("$d", input.DeviceId.ToString());
+            cmd.Parameters.AddWithValue("$enrollment", input.EnrollmentId?.ToString() ?? "");
             cmd.Parameters.AddWithValue("$t", input.Token); cmd.Parameters.AddWithValue("$u", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             await cmd.ExecuteNonQueryAsync(ct);
         }
@@ -66,19 +69,21 @@ public sealed class MobilePushService
         }
         finally { gate.Release(); }
     }
-    public async Task<MobilePushResult> SendAsync(string owner, string kind, string destination, CancellationToken ct)
+    public Task<MobilePushResult> SendAsync(string owner, string kind, string destination, CancellationToken ct) =>
+        SendCoreAsync(owner, kind, Guid.NewGuid().ToString(), "Test", null, ct);
+    private async Task<MobilePushResult> SendCoreAsync(string owner, string kind, string eventId, string eventKind, Guid? deviceId, CancellationToken ct)
     {
         // Deliberately generic notification content: private records are fetched
         // only after the user opens and unlocks the app.
         if (kind is not ("signal" or "test")) throw new ArgumentException("نوع اعلان معتبر نیست.");
-        destination = kind == "signal" ? "/phoenix" : "/";
+        var destination = kind == "signal" ? "/phoenix" : "/";
         if (!Configured) return new(0, 0, false);
         var tokens = new List<(Guid Id, string Token)>();
         await gate.WaitAsync(ct);
         try
         {
             await using var db = await OpenAsync(ct); using var cmd = db.CreateCommand();
-            cmd.CommandText = "SELECT device_id,token FROM mobile_devices WHERE owner=$o"; cmd.Parameters.AddWithValue("$o", owner);
+            cmd.CommandText = "SELECT device_id,token FROM mobile_devices WHERE owner=$o AND ($d IS NULL OR device_id=$d)"; cmd.Parameters.AddWithValue("$o", owner); cmd.Parameters.AddWithValue("$d", deviceId?.ToString() ?? (object)DBNull.Value);
             using var reader = await cmd.ExecuteReaderAsync(ct); while (await reader.ReadAsync(ct)) tokens.Add((Guid.Parse(reader.GetString(0)), reader.GetString(1)));
         }
         finally { gate.Release(); }
@@ -91,7 +96,7 @@ public sealed class MobilePushService
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"https://fcm.googleapis.com/v1/projects/{account.Project}/messages:send");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth);
-            request.Content = JsonContent.Create(new { message = new { token = item.Token, data = new { kind, destination, eventId = Guid.NewGuid().ToString() }, android = new { priority = "high", ttl = "300s" } } });
+            request.Content = JsonContent.Create(new { message = new { token = item.Token, data = new { kind, destination, eventId, eventKind }, android = new { priority = "high", ttl = "300s" } } });
             try
             {
                 using var response = await http.SendAsync(request, ct);
@@ -136,7 +141,7 @@ public sealed class MobilePushService
         finally { oauthGate.Release(); }
     }
 }
-public sealed record MobileRegistration(Guid DeviceId, string Token);
+public sealed record MobileRegistration(Guid DeviceId, string Token, Guid? EnrollmentId = null);
 public sealed record MobilePushResult(int Sent, int Failed, bool Configured);
 public static class MobileEndpoints
 {
@@ -148,7 +153,7 @@ public static class MobileEndpoints
             catch (ArgumentException e) { return Results.BadRequest(new { error = e.Message }); }
         });
         static string Owner(HttpRequest request) { PhoenixSessionAuth.TryGetIdentity(request, out var user); return user.Username; }
-        group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured }));
+        group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
         group.MapPost("/devices", async (MobileRegistration input, HttpRequest request, MobilePushService service, CancellationToken ct) => { await service.RegisterAsync(Owner(request), input, ct); return Results.Ok(new { registered = true }); });
         group.MapDelete("/devices/{id:guid}", async (Guid id, HttpRequest request, MobilePushService service, CancellationToken ct) => { await service.RemoveAsync(Owner(request), id, ct); return Results.NoContent(); });
         group.MapPost("/test", async (HttpRequest request, MobilePushService service, CancellationToken ct) => {

@@ -4,9 +4,10 @@ public sealed record OutcomeWindowEvidence(string Source, string Stage, int Hori
     int Targets, int Stops, int RiskFree, int Expired, int OtherExit,
     int NoRecordedResolution, int Unknown, int Immature)
 {
+    public int LegacyObservationCount { get; init; }
     public int MatureCount => Targets+Stops+RiskFree+Expired+OtherExit+NoRecordedResolution+Unknown;
-    public decimal? RecordedTargetShare => MatureCount<10 ? null : Math.Round(100m*Targets/MatureCount,1);
-    public decimal? RecordedStopShare => MatureCount<10 ? null : Math.Round(100m*Stops/MatureCount,1);
+    public decimal? RecordedTargetShare => MatureCount<10 || LegacyObservationCount>0 ? null : Math.Round(100m*Targets/MatureCount,1);
+    public decimal? RecordedStopShare => MatureCount<10 || LegacyObservationCount>0 ? null : Math.Round(100m*Stops/MatureCount,1);
 }
 
 internal static class OutcomeWindows
@@ -56,6 +57,7 @@ internal static class OutcomeWindows
         var output=new List<OutcomeWindowEvidence>();
         foreach(var source in new[]{"main","observation"})
         {
+            var legacyKeys=new HashSet<string>();
             var counts=new Dictionary<string,int>();var episodes=new Dictionary<string,List<string>>();
             foreach(var row in history.Where(x=>x.Source==source).OrderBy(x=>x.Item.Signal.CreatedAtUtc))
             {
@@ -75,6 +77,7 @@ internal static class OutcomeWindows
                 if(SignalSimilarityService.TechnicalSimilarity(candidate,reference,candidate.TechnicalFeatures,f)<.65)continue;
                 var key=FormattableString.Invariant($"{reference.Symbol.ToUpperInvariant()}|{reference.Direction}|{reference.Timeframe}|{reference.EntryPrice}|{reference.TakeProfit}|{reference.StopLoss}|{observed.Value.Ticks/TimeSpan.TicksPerMinute}");
                 var label=Classify(row.Item,observed.Value,observed.Value.AddMinutes(horizon.Value),asOf);
+                if(source=="observation" && s.ObservationPolicyVersion is null)legacyKeys.Add(key);
                 if(!episodes.TryGetValue(key,out var labels))episodes[key]=labels=[];
                 labels.Add(label);
             }
@@ -85,7 +88,7 @@ internal static class OutcomeWindows
             }
             int N(string name)=>counts.GetValueOrDefault(name);
             output.Add(new(source,stage,horizon.Value,N("Target"),N("StopLoss"),N("RiskFree"),N("Expired"),
-                N("OtherExit"),N("NoRecordedResolution"),N("Unknown"),N("Immature")));
+                N("OtherExit"),N("NoRecordedResolution"),N("Unknown"),N("Immature")) { LegacyObservationCount=legacyKeys.Count });
         }
         return output.ToArray();
     }

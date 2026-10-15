@@ -7,6 +7,8 @@ namespace Phoenix.Web;
 
 public sealed class ServerSignal
 {
+    // Null identifies legacy observations without risk-free tracking. Never relabel their history.
+    public int? ObservationPolicyVersion { get; set; }
     public List<SignalPriceSample> ExpiryPriceTrail { get; set; } = [];
     public Guid Id { get; set; }
     public string Symbol { get; set; } = string.Empty;

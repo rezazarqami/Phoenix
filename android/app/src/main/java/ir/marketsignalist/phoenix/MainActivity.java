@@ -27,7 +27,14 @@ public final class MainActivity extends FragmentActivity {
     private WebView browser;
     private FrameLayout root;
     private LinearLayout cover;
-    private TextView lockStatus;
+    private TextView lockStatus, pageStatus;
+    private LinearLayout pageCover;
+    private Button retry;
+    private final Handler ui=new Handler(Looper.getMainLooper());
+    private boolean pageLoading=false, pageFailed=false;
+    private long navigation=0;
+    private String lastUrl=HOME+"/";
+    private final Runnable loadTimeout=()->{if(pageLoading)pageError("زمان اتصال به سرور تمام شد. اینترنت یا VPN را بررسی کن و دوباره تلاش کن.");};
     private boolean unlocked=false, authenticating=false, initialLoaded=false;
     private String requestedRoute="/";
     private boolean openReminders=false;
@@ -42,9 +49,9 @@ public final class MainActivity extends FragmentActivity {
         root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(16,13,26));
         root.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(16,13,26));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makeCover();setContentView(root);readIntent(getIntent());
+        root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();makeCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.3");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.4");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onShowFileChooser(WebView web,android.webkit.ValueCallback<Uri[]> callback,FileChooserParams params){
@@ -59,7 +66,28 @@ public final class MainActivity extends FragmentActivity {
                 if(TrustedNavigation.trusted(request.getUrl().toString())&&"POST".equals(request.getMethod())&&(request.getUrl().getPath().equals("/api/auth/logout")||request.getUrl().getPath().equals("/api/analysis/auth/logout")))runOnUiThread(()->{try{resetDevice();}catch(Exception ignored){}});
                 return null;
             }
-            @Override public void onPageFinished(WebView view,String url){CookieManager.getInstance().flush();}
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){
+                if(TrustedNavigation.trusted(url)){lastUrl=url;beginLoading();}
+            }
+            @Override public void onPageFinished(WebView view,String url){
+                CookieManager.getInstance().flush();
+                if(!pageFailed&&TrustedNavigation.trusted(url)){
+                    // Wait until WebView can actually draw, rather than exposing an empty surface.
+                    final long frame=navigation;
+                    view.postVisualStateCallback(frame,new WebView.VisualStateCallback(){
+                        @Override public void onComplete(long id){if(frame==navigation&&!pageFailed){pageLoading=false;ui.removeCallbacks(loadTimeout);renderPageState();}}
+                    });
+                }
+            }
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
+                if(request.isForMainFrame())pageError("اتصال به سرور برقرار نشد ("+error.getErrorCode()+"). اینترنت یا VPN را بررسی کن.");
+            }
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                if(request.isForMainFrame())pageError("سرور پاسخ ناموفق داد (HTTP "+response.getStatusCode()+"). دوباره تلاش کن.");
+            }
+            @Override public void onReceivedSslError(WebView view,SslErrorHandler handler,android.net.http.SslError error){
+                handler.cancel();pageError("اتصال امن سرور تأیید نشد. تاریخ و ساعت گوشی و اتصال اینترنت را بررسی کن.");
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
                 String url=request.getUrl().toString();if(TrustedNavigation.trusted(url))return false;
                 if(request.isForMainFrame() && ("https".equals(request.getUrl().getScheme())||"http".equals(request.getUrl().getScheme())))try{startActivity(new Intent(Intent.ACTION_VIEW,request.getUrl()));}catch(ActivityNotFoundException ignored){}
@@ -76,6 +104,31 @@ public final class MainActivity extends FragmentActivity {
         showLock();
     }
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
+    private void makePageCover(){
+        pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(35,26,47));
+        TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
+        pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
+        retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
+        pageCover.setVisibility(View.GONE);root.addView(pageCover,new FrameLayout.LayoutParams(-1,-1));
+    }
+    private void renderPageState(){
+        if(!unlocked){pageCover.setVisibility(View.GONE);return;}
+        boolean covered=pageLoading||pageFailed;
+        pageCover.setVisibility(covered?View.VISIBLE:View.GONE);
+        // Keep the WebView visible behind the opaque cover so its compositor can produce a frame.
+        browser.setVisibility(View.VISIBLE);
+        retry.setVisibility(pageFailed?View.VISIBLE:View.GONE);
+    }
+    private void beginLoading(){
+        navigation++;pageLoading=true;pageFailed=false;pageStatus.setText("در حال اتصال و بازکردن برنامه…");
+        ui.removeCallbacks(loadTimeout);ui.postDelayed(loadTimeout,30000);renderPageState();
+    }
+    private void pageError(String text){pageLoading=false;pageFailed=true;pageStatus.setText(text);ui.removeCallbacks(loadTimeout);renderPageState();}
+    private void loadPage(String url){lastUrl=url;beginLoading();browser.loadUrl(url);}
+    private void verified(){
+        authenticating=false;
+        if(resumed)unlock();else credentialVerified=true;
+    }
     private void makeCover(){
         cover=new LinearLayout(this);cover.setOrientation(LinearLayout.VERTICAL);cover.setGravity(Gravity.CENTER);cover.setPadding(dp(34),dp(34),dp(34),dp(34));cover.setBackgroundColor(Color.rgb(16,13,26));
         TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);title.setGravity(Gravity.CENTER);cover.addView(title);
@@ -84,17 +137,17 @@ public final class MainActivity extends FragmentActivity {
         Button credential=new Button(this);credential.setText("استفاده از رمز / الگوی گوشی");credential.setOnClickListener(v->credential());cover.addView(credential);
         root.addView(cover,new FrameLayout.LayoutParams(-1,-1));
     }
-    private void showLock(){unlocked=false;cover.setVisibility(View.VISIBLE);browser.setVisibility(View.INVISIBLE);}
+    private void showLock(){unlocked=false;cover.setVisibility(View.VISIBLE);browser.setVisibility(View.INVISIBLE);pageCover.setVisibility(View.GONE);}
     private boolean deviceSecure(){return getSystemService(KeyguardManager.class).isDeviceSecure();}
     private void authenticate(){
-        if(authenticating||isFinishing())return;
+        if(authenticating||!resumed||isFinishing())return;
         if(!deviceSecure()){lockStatus.setText("ابتدا برای گوشی رمز، الگو یا اثر انگشت تنظیم کن؛ برنامه بدون قفل دستگاه باز نمی‌شود.");startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));return;}
         int strong=BiometricManager.Authenticators.BIOMETRIC_STRONG;
         int allowed=Build.VERSION.SDK_INT>=30?strong|BiometricManager.Authenticators.DEVICE_CREDENTIAL:strong;
         if(BiometricManager.from(this).canAuthenticate(allowed)!=BiometricManager.BIOMETRIC_SUCCESS){credential();return;}
         authenticating=true;
         biometric=new BiometricPrompt(this,androidx.core.content.ContextCompat.getMainExecutor(this),new BiometricPrompt.AuthenticationCallback(){
-            @Override public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result){authenticating=false;if(resumed)unlock();else showLock();}
+            @Override public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result){verified();}
             @Override public void onAuthenticationError(int code,@NonNull CharSequence text){authenticating=false;showLock();if(code==BiometricPrompt.ERROR_NEGATIVE_BUTTON||code==BiometricPrompt.ERROR_LOCKOUT||code==BiometricPrompt.ERROR_LOCKOUT_PERMANENT)credential();else lockStatus.setText("ورود تأیید نشد؛ دوباره تلاش کن یا رمز گوشی را بزن.");}
             @Override public void onAuthenticationFailed(){lockStatus.setText("اثر انگشت تأیید نشد؛ دوباره تلاش کن یا رمز گوشی را بزن.");}
         });
@@ -103,25 +156,26 @@ public final class MainActivity extends FragmentActivity {
         biometric.authenticate(builder.build());
     }
     private void credential(){
-        if(authenticating||isFinishing())return;
+        if(authenticating||!resumed||isFinishing())return;
         Intent intent=getSystemService(KeyguardManager.class).createConfirmDeviceCredentialIntent("مدار و فونیکس","رمز، الگو یا PIN گوشی را وارد کن");
         if(intent==null){lockStatus.setText("قفل امن گوشی فعال نیست.");startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));return;}
         authenticating=true;credentialActivity=true;startActivityForResult(intent,42);
     }
     private void unlock(){
         if(isFinishing())return;
-        unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);browser.onResume();
-        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?"/":requestedRoute;browser.loadUrl(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
+        unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);browser.onResume();browser.requestLayout();
+        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?"/":requestedRoute;loadPage(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
+        renderPageState();
         browser.evaluateJavascript("window.dispatchEvent(new Event('orbit-native-resume'))",null);
     }
     private void readIntent(Intent intent){if(intent==null)return;requestedRoute=TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);showLock();}
-    @Override protected void onResume(){super.onResume();resumed=true;if(credentialVerified){credentialVerified=false;unlock();return;}if(!unlocked&&!authenticating){showLock();new Handler(Looper.getMainLooper()).post(this::authenticate);}}
-    @Override protected void onPause(){resumed=false;CookieManager.getInstance().flush();showLock();browser.onPause();super.onPause();}
+    @Override protected void onResume(){super.onResume();resumed=true;browser.onResume();if(credentialVerified){credentialVerified=false;unlock();return;}if(!unlocked&&!authenticating){showLock();ui.post(this::authenticate);}}
+    @Override protected void onPause(){resumed=false;credentialVerified=false;CookieManager.getInstance().flush();showLock();browser.onPause();super.onPause();}
     @Override protected void onStop(){showLock();if(authenticating&&!credentialActivity&&biometric!=null)biometric.cancelAuthentication();super.onStop();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request==42){credentialActivity=false;authenticating=false;if(result==RESULT_OK){if(resumed)unlock();else credentialVerified=true;}else{showLock();lockStatus.setText("برای ورود باید قفل دستگاه تأیید شود.");}}
+        if(request==42){credentialActivity=false;authenticating=false;if(result==RESULT_OK){verified();}else{showLock();lockStatus.setText("برای ورود باید قفل دستگاه تأیید شود.");}}
         if(request==43&&files!=null){java.util.ArrayList<Uri> values=new java.util.ArrayList<>();if(result==RESULT_OK&&data!=null){if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)values.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)values.add(data.getData());}files.onReceiveValue(values.isEmpty()?null:values.toArray(new Uri[0]));files=null;}
     }
     private JSONObject status() throws JSONException {
@@ -170,5 +224,5 @@ public final class MainActivity extends FragmentActivity {
         }catch(Exception e){reply(proxy,id,null,e instanceof JSONException?"ساختار درخواست معتبر نیست.":e.getMessage());}
     }
     @Override public void onBackPressed(){if(!unlocked){finish();return;}if(browser.canGoBack())browser.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){if(files!=null)files.onReceiveValue(null);if(biometric!=null)biometric.cancelAuthentication();browser.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){ui.removeCallbacksAndMessages(null);if(files!=null)files.onReceiveValue(null);if(biometric!=null)biometric.cancelAuthentication();browser.destroy();super.onDestroy();}
 }

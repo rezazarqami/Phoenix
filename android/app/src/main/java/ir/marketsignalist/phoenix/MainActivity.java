@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.UUID;
 
 public final class MainActivity extends FragmentActivity {
-    private static final String HOME="https://marketsignalist.ir", PREVIEW="https://appassets.androidplatform.net/assets/preview/index.html";
+    private static final String HOME="https://marketsignalist.ir";
     private WebView browser;
     private FrameLayout root;
     private LinearLayout cover;
@@ -44,7 +44,7 @@ public final class MainActivity extends FragmentActivity {
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(16,13,26));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makeCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.2");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.3");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onShowFileChooser(WebView web,android.webkit.ValueCallback<Uri[]> callback,FileChooserParams params){
@@ -54,11 +54,10 @@ public final class MainActivity extends FragmentActivity {
                 try{startActivityForResult(choose,43);}catch(ActivityNotFoundException e){files.onReceiveValue(null);files=null;}return true;
             }
         });
-        final WebViewAssetLoader assets=new WebViewAssetLoader.Builder().addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
         browser.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
                 if(TrustedNavigation.trusted(request.getUrl().toString())&&"POST".equals(request.getMethod())&&(request.getUrl().getPath().equals("/api/auth/logout")||request.getUrl().getPath().equals("/api/analysis/auth/logout")))runOnUiThread(()->{try{resetDevice();}catch(Exception ignored){}});
-                return assets.shouldInterceptRequest(request.getUrl());
+                return null;
             }
             @Override public void onPageFinished(WebView view,String url){CookieManager.getInstance().flush();}
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
@@ -68,7 +67,7 @@ public final class MainActivity extends FragmentActivity {
             }
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
-            WebViewCompat.addWebMessageListener(browser,"OrbitNative",new java.util.HashSet<>(java.util.Arrays.asList(HOME,"https://appassets.androidplatform.net")),(view,message,origin,mainFrame,reply)->{
+            WebViewCompat.addWebMessageListener(browser,"OrbitNative",Collections.singleton(HOME),(view,message,origin,mainFrame,reply)->{
                 if(!unlocked||!mainFrame||!TrustedNavigation.trusted(origin.toString())||!TrustedNavigation.trusted(view.getUrl()))return;
                 handleMessage(message.getData(),reply);
             });
@@ -83,7 +82,6 @@ public final class MainActivity extends FragmentActivity {
         lockStatus=new TextView(this);lockStatus.setText("برای ورود، هویتت را با قفل امن گوشی تأیید کن.");lockStatus.setTextColor(Color.rgb(215,194,230));lockStatus.setTextSize(16);lockStatus.setGravity(Gravity.CENTER);lockStatus.setPadding(0,dp(21),0,dp(21));cover.addView(lockStatus);
         Button unlock=new Button(this);unlock.setText("بازکردن با اثر انگشت یا رمز گوشی");unlock.setTextColor(Color.rgb(38,28,48));unlock.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));unlock.setOnClickListener(v->authenticate());cover.addView(unlock);
         Button credential=new Button(this);credential.setText("استفاده از رمز / الگوی گوشی");credential.setOnClickListener(v->credential());cover.addView(credential);
-        Button preview=new Button(this);preview.setText("پیش‌نمایش نسخهٔ آمادهٔ انتشار (دادهٔ نمونه)");preview.setOnClickListener(v->{requestedRoute="preview";authenticate();});cover.addView(preview);
         root.addView(cover,new FrameLayout.LayoutParams(-1,-1));
     }
     private void showLock(){unlocked=false;cover.setVisibility(View.VISIBLE);browser.setVisibility(View.INVISIBLE);}
@@ -113,7 +111,7 @@ public final class MainActivity extends FragmentActivity {
     private void unlock(){
         if(isFinishing())return;
         unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);browser.onResume();
-        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?"/":requestedRoute;browser.loadUrl("preview".equals(route)?PREVIEW:HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
+        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?"/":requestedRoute;browser.loadUrl(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
         browser.evaluateJavascript("window.dispatchEvent(new Event('orbit-native-resume'))",null);
     }
     private void readIntent(Intent intent){if(intent==null)return;requestedRoute=TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
@@ -155,7 +153,6 @@ public final class MainActivity extends FragmentActivity {
             if(command.equals("cancel")){Reminders.cancel(this,input.getString("reminderId"));reply(proxy,id,status(),null);return;}
             if(command.equals("testNotification")){if(!OrbitNotifications.channelAllowed(this,OrbitNotifications.REMINDERS))throw new IllegalStateException("اجازهٔ اعلان و کانال یادآوری را فعال کن.");OrbitNotifications.show(this,OrbitNotifications.REMINDERS,UUID.randomUUID().toString(),"/");reply(proxy,id,new JSONObject().put("shown",true),null);return;}
             if(command.equals("enablePush")){
-                if(browser.getUrl()!=null&&browser.getUrl().startsWith("https://appassets.androidplatform.net/"))throw new IllegalStateException("اتصال سرور در پیش‌نمایش فعال نیست.");
                 if(FirebaseApp.getApps(this).isEmpty())throw new IllegalStateException("تنظیم سرویس Push هنوز در این نسخه انجام نشده است.");
                 if(!OrbitNotifications.channelAllowed(this,OrbitNotifications.SIGNALS))throw new IllegalStateException("اجازهٔ اعلان و کانال فونیکس را فعال کن.");
                 final String requestId=id;FirebaseMessaging.getInstance().setAutoInitEnabled(true);

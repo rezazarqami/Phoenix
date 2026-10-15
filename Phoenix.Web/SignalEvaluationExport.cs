@@ -23,20 +23,28 @@ internal static class SignalEvaluationExport
             source, s.Id, s.Symbol, s.Direction, s.Timeframe, s.ChartMode,
             s.CreatedAtUtc, s.EntryTriggeredAtUtc, s.FilledAtUtc, s.CompletedAtUtc,
             s.TargetReachedAtUtc, s.StopLossReachedAtUtc, s.RiskFreeReachedAtUtc,
-            s.RiskFreeClosedAtUtc, s.ExpiredAtUtc, s.Status, s.Outcome, s.ExpireReason,
+            s.RiskFreeClosedAtUtc, s.ExpiredAtUtc, s.Status, s.RecoveryOriginalStatus, s.Outcome, s.ExpireReason,
             s.EntryPrice, s.TakeProfit, s.StopLoss, s.StopLoss2, s.RiskFreePrice,
             s.Ceiling, s.Floor, s.AverageFillPrice,
             s.TargetSimilarityPercent, s.StopSimilarityPercent, s.SimilaritySampleCount,
-            s.TargetOutcomePercent, s.StopOutcomePercent, s.OutcomeValidationCount,
+            s.TargetOutcomePercent, s.StopOutcomePercent, s.OutcomeValidationCount, s.SimilarityEvidence,
             proposalEvidence = s.ProposalEvidence,
             entryFeatures = s.EntryTechnicalFeatures,
             latestFeatures = s.TechnicalFeatures,
             latestFeaturesAreFrozenProposal = false,
             predictionTimestampKnown = false,
             eligibleForEntryBinaryEvaluation = eligible,
+            recordedEntryWindow = Window(row, s.EntryTriggeredAtUtc, s.Timeframe),
+            recordedProposalWindow = Window(row, s.ProposalEvidence?.ObservedAtUtc, s.ProposalEvidence?.Timeframe),
             row.UpdatedAtUtc, row.RemovedAtUtc, row.HasImage
         };
     }
+
+    private static object? Window(SignalHistoryItem row, DateTime? observed, string? timeframe) =>
+        observed is { } start && OutcomeWindows.Horizon(timeframe) is { } minutes
+            ? new { horizonMinutes=minutes, observedAtUtc=start, deadlineUtc=start.AddMinutes(minutes),
+                label=OutcomeWindows.Classify(row,start,start.AddMinutes(minutes),DateTime.UtcNow),
+                interpretation="Recorded first event; not reconstructed market path or an automatic trading exit." } : null;
 
     internal static object Page(DateTime from, DateTime to,
         IReadOnlyList<(string Source, IReadOnlyList<SignalHistoryItem> Rows)> sources,

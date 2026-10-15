@@ -28,7 +28,14 @@ public sealed record TechnicalFeatureSnapshot(
     IReadOnlyList<MultiScaleLevelSnapshot>? MultiScaleLevels = null,
     decimal? StructureBreakScore = null,
     decimal? StructureRetestScore = null,
-    int SimilarityContextVersion = 0);
+    int SimilarityContextVersion = 0)
+{
+    // Exact distances at observation; absent in legacy records, never backfilled.
+    public TradeGeometrySnapshot? TradeGeometry { get; init; }
+}
+
+public sealed record TradeGeometrySnapshot(decimal AtrPrice, decimal StopDistanceAtr,
+    decimal TargetDistanceAtr, decimal RewardRisk, decimal EntryDistanceAtr);
 
 public static class TechnicalFeatureExtractor
 {
@@ -114,7 +121,15 @@ public static class TechnicalFeatureExtractor
             IchimokuStopPosition: CloudAt(candidate.StopLoss),
             IchimokuTargetPosition: CloudAt(candidate.TakeProfit),
             StructureBreakScore: events.Break,
-            StructureRetestScore: events.Retest);
+            StructureRetestScore: events.Retest)
+        {
+            TradeGeometry = atr > 0m && (candidate.EntryPrice-candidate.StopLoss)*direction > 0m &&
+                (candidate.TakeProfit-candidate.EntryPrice)*direction > 0m
+                ? new(atr, Math.Abs(candidate.EntryPrice-candidate.StopLoss)/atr,
+                    Math.Abs(candidate.TakeProfit-candidate.EntryPrice)/atr,
+                    Math.Abs((candidate.TakeProfit-candidate.EntryPrice)/(candidate.EntryPrice-candidate.StopLoss)),
+                    Math.Abs(candidate.EntryPrice-closes[^1])/atr) : null
+        };
     }
 
     private static decimal[] Swings(IReadOnlyList<BybitKline> candles, bool highs)

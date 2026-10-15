@@ -40,12 +40,25 @@ document.querySelector('#exportReviews').addEventListener('click', async () => {
 
 document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
 <details class="results-report" open><summary>داده‌های ارزیابی احتمال تارگت و استاپ</summary>
-<div class="results-body"><p class="results-note">می‌توانید داده‌ها را همین‌جا مشاهده و کپی کنید یا فایل ZIP بگیرید. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
+<div class="results-body"><p id="learningStatus" class="results-note" role="status">در حال بررسی اعتبار مدل احتمال…</p><p class="results-note">می‌توانید داده‌ها را همین‌جا مشاهده و کپی کنید یا فایل ZIP بگیرید. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
 <div class="results-filters"><label>از تاریخ<input id="evaluationFrom" type="date"></label><label>تا تاریخ<input id="evaluationTo" type="date"></label><button id="showEvaluation" type="button">نمایش داده‌ها بدون دانلود</button><button id="exportEvaluation" type="button">دانلود مستقیم ZIP</button></div>
 <p id="evaluationMessage" role="status" class="results-message"></p>
 <div id="evaluationOutput" hidden><p id="evaluationPageStatus"></p><textarea id="evaluationText" aria-label="داده‌های ارزیابی" readonly dir="ltr" style="width:100%;min-height:280px;box-sizing:border-box"></textarea>
 <div class="results-filters"><button id="copyEvaluation" type="button">کپی این صفحه</button><button id="nextEvaluation" type="button" hidden>صفحه بعد</button></div></div>
 </div></details>`);
+async function loadLearningStatus() {
+  const element = document.querySelector('#learningStatus');
+  try {
+    const response = await fetch('/api/analysis/learning', {cache:'no-store'});
+    if (!response.ok) throw new Error();
+    const state = await response.json();
+    if (!Number.isInteger(state.proposalSamples)) throw new Error();
+    element.textContent = `نمونهٔ معتبر زمان پیشنهاد: ${faMarket.format(state.proposalSamples)} · لحظه ورود: ${faMarket.format(state.entrySamples)}. ` +
+      (state.proposalModelValidated ? 'مدل زمان پیشنهاد آزمون زمانی را گذرانده است؛ برآورد فقط برای ورودهای منتهی به تارگت یا استاپ است.' :
+      'احتمال زمان پیشنهاد هنوز اعتبارسنجی نشده است. برای جست‌وجوی بدون فیلتر احتمال، حداقل را خودتان صفر کنید؛ شباهت فنی همچنان جداگانه نمایش داده می‌شود.');
+  } catch { element.textContent = 'وضعیت اعتبار مدل فعلاً قابل دریافت نیست؛ از درصد شباهت به‌عنوان احتمال استفاده نکنید.'; }
+}
+loadLearningStatus();
 const evaluationStart = new Date(); evaluationStart.setDate(evaluationStart.getDate()-365);
 document.querySelector('#evaluationFrom').value = reviewDate(evaluationStart);
 document.querySelector('#evaluationTo').value = reviewDate(new Date());

@@ -26,6 +26,7 @@ public sealed class ProfessionalSignalAnalysisService(
         IReadOnlyList<BybitKline> signalCandles, string signalInterval, CancellationToken token,
         DateTime? asOfUtc = null)
     {
+        var observedAtUtc = asOfUtc ?? DateTime.UtcNow;
         var symbolTasks = ContextIntervals.ToDictionary(x => x,
             x => x == signalInterval && signalCandles.Count >= 720
                 ? Task.FromResult(signalCandles) : GetCandlesAsync(candidate.Symbol, x, 1000, token));
@@ -39,7 +40,7 @@ public sealed class ProfessionalSignalAnalysisService(
             .Concat(extendedTasks.Values));
 
         IReadOnlyList<BybitKline> AtEntry(IReadOnlyList<BybitKline> candles, string interval) =>
-            asOfUtc is null ? candles : CandlesAvailableAt(candles, interval, asOfUtc.Value);
+            CandlesAvailableAt(candles, interval, observedAtUtc);
         signalCandles = AtEntry(signalCandles, signalInterval);
         var symbolHistory = symbolTasks.ToDictionary(x => x.Key, x => AtEntry(x.Value.Result, x.Key));
 
@@ -57,13 +58,15 @@ public sealed class ProfessionalSignalAnalysisService(
         var serverSignal = new ServerSignal
         {
             Symbol = candidate.Symbol, Direction = candidate.Direction, Timeframe = signalInterval,
+            EntryPrice = candidate.EntryPrice, TakeProfit = candidate.TakeProfit, StopLoss = candidate.StopLoss,
+            CreatedAtUtc = observedAtUtc,
             EntryTriggeredAtUtc = asOfUtc,
             ChartMode = "Professional", TechnicalFeatures = enriched
         };
         var prediction = await predictor.CalculateAsync(serverSignal, token);
         // Keep the technical fingerprint for comparison and learning without
         // generating generic positive/negative commentary for proposals.
-        return new(enriched, prediction, regime, [], []) { ObservedAtUtc = asOfUtc ?? DateTime.UtcNow };
+        return new(enriched, prediction, regime, [], []) { ObservedAtUtc = observedAtUtc };
     }
 
     // One versioned extraction path for live entry reviews and historical reconstruction.
@@ -89,7 +92,7 @@ public sealed class ProfessionalSignalAnalysisService(
             StructureBreakScore = Weighted(f => f.StructureBreakScore!.Value),
             StructureRetestScore = Weighted(f => f.StructureRetestScore!.Value),
             MultiScaleLevels = MultiScaleLevelExtractor.Calculate(histories, candidate),
-            SimilarityContextVersion = 2
+            SimilarityContextVersion = 3 // Both proposal and entry use only closed candles.
         };
     }
 

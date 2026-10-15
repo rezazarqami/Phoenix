@@ -147,9 +147,9 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
-    // Recovery is deliberately narrower than a history import. Replaying Pending,
-    // Submitting or Filled snapshots could submit an order twice or manage a stale position.
-    internal async Task<List<ServerSignal>> ReadInactiveQueueForRecoveryAsync(CancellationToken token)
+    // Active snapshots are visible but quarantined: they can never resume execution
+    // until their exchange state has been reconciled. The archive itself stays unchanged.
+    internal async Task<List<ServerSignal>> ReadQueueForRecoveryAsync(CancellationToken token)
     {
         await _gate.WaitAsync(token);
         try
@@ -169,8 +169,13 @@ public sealed class SignalHistoryStore
                     ?? throw new InvalidDataException("An archived queue snapshot is empty.");
                 if (signal.Id == Guid.Empty || signal.Id.ToString() != reader.GetString(0) || signal.Status != reader.GetString(1))
                     throw new InvalidDataException("An archived queue snapshot has inconsistent identity or status.");
-                if (signal.Status is not ("Completed" or "Cancelled" or "Expired" or "Error" or "Rejected" or "Deactivated"))
-                    throw new InvalidDataException("Queue recovery requires exchange reconciliation: history contains active orders. The original file was preserved.");
+                if (signal.Status is "Pending" or "Submitting" or "Submitted" or "Filled" or "Closing")
+                {
+                    signal.RecoveryOriginalStatus = signal.Status;
+                    signal.Status = "RecoveryRequired";
+                }
+                else if (signal.Status is not ("Completed" or "Cancelled" or "Expired" or "Error" or "Rejected" or "Deactivated" or "RecoveryRequired"))
+                    throw new InvalidDataException("Queue history contains an unknown status; the original file was preserved.");
                 result.Add(signal);
             }
             if (result.Count == 0)

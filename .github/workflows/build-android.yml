@@ -2,9 +2,9 @@ name: Build Phoenix Android
 
 on:
   push:
-    paths: ["android/**", "scripts/build-android-preview.py", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
   pull_request:
-    paths: ["android/**", "scripts/build-android-preview.py", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
   workflow_dispatch:
 
 permissions:
@@ -26,8 +26,6 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: orbit-debug-key-v1
-      - name: Build bundled branch preview
-        run: python3 scripts/build-android-preview.py
       - name: Add launcher logo
         run: |
           mkdir -p android/app/src/main/res/drawable
@@ -44,11 +42,11 @@ jobs:
         with:
           name: phoenix-android-test-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Publish installable personal-branch preview
+      - name: Publish installable integrated client
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/personal/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="personal-android-${GITHUB_SHA:0:8}"
-          cp android/app/build/outputs/apk/debug/app-debug.apk orbit-android-preview.apk
-          gh release create "$tag" orbit-android-preview.apk --target "$GITHUB_SHA" --prerelease --title "Orbit Android preview ${GITHUB_SHA:0:8}" --notes-file docs/android-install-preview.md
+          cp android/app/build/outputs/apk/debug/app-debug.apk orbit-android.apk
+          gh release create "$tag" orbit-android.apk --target "$GITHUB_SHA" --prerelease --title "Orbit Android ${GITHUB_SHA:0:8}" --notes-file docs/android-install-preview.md

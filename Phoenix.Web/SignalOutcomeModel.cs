@@ -6,50 +6,79 @@ internal sealed class SignalOutcomeModel
 {
     private readonly double[] means, scales, weights;
     private DateTime trainedThroughUtc;
-    internal int ValidationCount { get; }
-    internal double ValidationBrier { get; }
-    internal double BaselineBrier { get; }
-    private SignalOutcomeModel(double[] means, double[] scales, double[] weights,
-        int count = 0, double score = 0, double baseline = 0)
+    internal string EvidenceStage { get; private set; } = "entry";
+    private double calibrationSlope = 1d, calibrationIntercept;
+    internal int CalibrationCount { get; private set; }
+    internal double ValidationLogLoss { get; private set; }
+    internal double BaselineLogLoss { get; private set; }
+    internal IReadOnlyList<OutcomeReliabilityBin> Reliability { get; private set; } = [];
+    internal DateTime AvailableAfterUtc => trainedThroughUtc;
+    internal int ValidationCount { get; private set; }
+    internal double ValidationBrier { get; private set; }
+    internal double BaselineBrier { get; private set; }
+    private SignalOutcomeModel(double[] means, double[] scales, double[] weights)
     {
         this.means = means; this.scales = scales; this.weights = weights;
-        ValidationCount = count; ValidationBrier = score; BaselineBrier = baseline;
     }
 
     internal static SignalOutcomeModel? Train(IReadOnlyList<LearnedSignalPattern> source,
         CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+        if (source.Select(x => x.EvidenceStage).Distinct().Count() > 1) return null;
         // Unknown timestamps, open trades and duplicate records cannot train or validate.
-        var rows = source.Where(x => x.Outcome is "Target" or "StopLoss")
-            .Where(x => x.Signal.Id != Guid.Empty && x.Signal.EntryTriggeredAtUtc is not null &&
-                x.Signal.CompletedAtUtc > x.Signal.EntryTriggeredAtUtc)
-            .GroupBy(x => x.Signal.Id).Select(x => x.First())
-            .OrderBy(x => x.Signal.EntryTriggeredAtUtc).ToArray();
-        if (rows.Length < 60) return null;
-        var split = rows.Length * 4 / 5;
-        var cutoff = rows[split].Signal.EntryTriggeredAtUtc!.Value;
-        var training = rows.Take(split).Where(x => x.Signal.CompletedAtUtc < cutoff).ToArray();
-        var validation = rows.Skip(split).ToArray();
-        if (!Enough(training) || !Enough(validation)) return null;
+        var rows = SignalPatternIdentity.Unique(source.Where(x => x.Outcome is "Target" or "StopLoss")
+            .Where(x => x.Signal.Id != Guid.Empty && x.ObservedAtUtc is not null &&
+                x.Signal.CompletedAtUtc > x.ObservedAtUtc))
+            .OrderBy(x => x.ObservedAtUtc).ToArray();
+        if (rows.Length < 100 || rows.Select(x => x.EvidenceStage).Distinct().Count() != 1) return null;
+        // Three chronological blocks: fit / calibration / untouched audit.
+        // Purge labels that would still be unknown at the following boundary.
+        var calibrationStart = rows[rows.Length * 3 / 5].ObservedAtUtc!.Value;
+        var auditStart = rows[rows.Length * 4 / 5].ObservedAtUtc!.Value;
+        var training = rows.Where(x => x.ObservedAtUtc < calibrationStart &&
+            x.Signal.CompletedAtUtc < calibrationStart).ToArray();
+        var calibration = rows.Where(x => x.ObservedAtUtc >= calibrationStart &&
+            x.ObservedAtUtc < auditStart && x.Signal.CompletedAtUtc < auditStart).ToArray();
+        var validation = rows.Where(x => x.ObservedAtUtc >= auditStart).ToArray();
+        if (!Enough(training) || !Enough(calibration) || !Enough(validation) ||
+            calibration.Length < 20 || validation.Length < 20) return null;
         var fitted = Fit(training, token);
-        var prior = training.Count(x => x.Outcome == "Target") / (double)training.Length;
-        double brier = 0, baseline = 0;
+        var calibrationScores = calibration.Select(x => fitted.RawScore(x.Signal, x.Features)).ToArray();
+        if (calibrationScores.Any(x => x is null)) return null;
+        (fitted.calibrationSlope, fitted.calibrationIntercept) = OutcomeCalibration.Fit(
+            calibrationScores.Select(x => x!.Value).ToArray(),
+            calibration.Select(x => x.Outcome == "Target").ToArray(), token);
+        var prior = training.Concat(calibration).Count(x => x.Outcome == "Target") /
+            (double)(training.Length + calibration.Length);
+        var predictions = new List<(double Probability, bool Target)>();
         foreach (var row in validation)
         {
             token.ThrowIfCancellationRequested();
-            var prediction = fitted.Predict(row.Signal, row.Features);
-            if (prediction is null) return null;
-            var y = row.Outcome == "Target" ? 1d : 0d;
-            brier += Math.Pow((double)prediction.Value / 100d - y, 2);
-            baseline += Math.Pow(prior - y, 2);
+            var score = fitted.RawScore(row.Signal, row.Features);
+            if (score is null) return null;
+            predictions.Add((Logistic(fitted.calibrationSlope * score.Value +
+                fitted.calibrationIntercept), row.Outcome == "Target"));
         }
-        brier /= validation.Length; baseline /= validation.Length;
-        // Do not manufacture a decisive probability if the learned distinction
-        // does not improve on simply using the previous outcome frequency.
-        if (brier >= baseline * 0.95d) return null;
-        // Keep the validated model fixed; do not refit using its holdout labels.
-        return new(fitted.means, fitted.scales, fitted.weights, validation.Length, brier, baseline)
-        { trainedThroughUtc = rows.Max(x => x.Signal.CompletedAtUtc!.Value) };
+        double Brier((double Probability, bool Target) x) => Math.Pow(x.Probability - (x.Target ? 1d : 0d), 2);
+        double BaseBrier((double Probability, bool Target) x) => Math.Pow(prior - (x.Target ? 1d : 0d), 2);
+        var brier = predictions.Average(Brier);
+        var baseline = predictions.Average(BaseBrier);
+        var logLoss = predictions.Average(x => OutcomeCalibration.LogLoss(x.Probability, x.Target));
+        var baselineLogLoss = predictions.Average(x => OutcomeCalibration.LogLoss(prior, x.Target));
+        // Score unrounded probabilities; one lucky older half must not hide recent failure.
+        var recent = predictions.Skip(predictions.Count / 2).ToArray();
+        if (brier >= baseline * 0.95d || logLoss >= baselineLogLoss ||
+            recent.Average(Brier) >= recent.Average(BaseBrier)) return null;
+        // Never refit on the audit labels or use them to choose the calibrator.
+        fitted.EvidenceStage = rows[0].EvidenceStage;
+        fitted.CalibrationCount = calibration.Length;
+        fitted.ValidationCount = validation.Length;
+        fitted.ValidationBrier = brier; fitted.BaselineBrier = baseline;
+        fitted.ValidationLogLoss = logLoss; fitted.BaselineLogLoss = baselineLogLoss;
+        fitted.Reliability = OutcomeCalibration.Bins(predictions);
+        fitted.trainedThroughUtc = rows.Max(x => x.Signal.CompletedAtUtc!.Value);
+        return fitted;
     }
 
     private static bool Enough(LearnedSignalPattern[] rows) =>
@@ -71,6 +100,9 @@ internal sealed class SignalOutcomeModel
         }
         var activeIndices = Enumerable.Range(0, length).Where(j => scales[j] > 0d).ToArray();
         var x = raw.Select(v => Standardize(v, means, scales)).ToArray();
+        // Bound the Hessian trace so correlated multi-timeframe fields cannot
+        // make a fixed learning rate oscillate as the feature count grows.
+        var step = Math.Min(0.08d, 1d / (0.25d * x.Average(v => 1d + v.Sum(z => z * z)) + 0.08d));
         var weights = new double[length + 1];
         var prior = rows.Count(r => r.Outcome == "Target") / (double)rows.Length;
         weights[length] = Math.Log(prior / (1d - prior));
@@ -85,21 +117,31 @@ internal sealed class SignalOutcomeModel
                 gradient[length] += error;
             }
             for (var j = 0; j < weights.Length; j++)
-                weights[j] -= 0.08d * (gradient[j] / rows.Length + (j < length ? 0.08d * weights[j] : 0d));
+                weights[j] -= step * (gradient[j] / rows.Length + (j < length ? 0.08d * weights[j] : 0d));
         }
         return new(means, scales, weights);
     }
 
-    internal decimal? Predict(ServerSignal signal, TechnicalFeatureSnapshot features)
+    internal decimal? Predict(ServerSignal signal, TechnicalFeatureSnapshot features,
+        string evidenceStage = "entry", DateTime? observedAtUtc = null)
     {
-        if (signal.EntryTriggeredAtUtc is { } entry && entry < trainedThroughUtc) return null;
+        if (evidenceStage != EvidenceStage) return null;
+        var evidenceTime = observedAtUtc ?? signal.EntryTriggeredAtUtc ??
+            (signal.CreatedAtUtc == default ? DateTime.UtcNow : signal.CreatedAtUtc);
+        if (evidenceTime <= trainedThroughUtc) return null;
+        var score = RawScore(signal, features);
+        return score is null ? null : Math.Round((decimal)(100d * Logistic(
+            calibrationSlope * score.Value + calibrationIntercept)), 0);
+    }
+
+    private double? RawScore(ServerSignal signal, TechnicalFeatureSnapshot features)
+    {
         var values = Values(signal, features);
         var active = scales.Count(x => x > 0d);
         var observed = Enumerable.Range(0, scales.Length).Count(j => scales[j] > 0d && values[j].HasValue);
         if (active == 0 || observed < Math.Max(1, (int)Math.Ceiling(active * 0.7d))) return null;
         // Missing fields use the training mean, contributing zero evidence.
-        var probability = Logistic(Dot(Standardize(values, means, scales), weights));
-        return Math.Round((decimal)(probability * 100d), 0);
+        return Dot(Standardize(values, means, scales), weights);
     }
 
     private static double[] Standardize(double?[] values, double[] means, double[] scales) =>

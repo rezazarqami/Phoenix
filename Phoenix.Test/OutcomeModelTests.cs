@@ -24,6 +24,10 @@ internal static class OutcomeModelTests
         Check(model is not null, "Repeatable held-out distinction should validate");
         Check(model!.ValidationCount == 20 && model.ValidationBrier < model.BaselineBrier,
             "Only newer untouched outcomes validate the fitted model");
+        Check(model.CalibrationCount == 20 && model.ValidationLogLoss < model.BaselineLogLoss,
+            "A separate calibration block and proper scoring rules are required");
+        Check(model.Reliability.Sum(x => x.Count) == 20,
+            "Reliability bins must account for all held-out predictions");
         var signal = new ServerSignal { Direction = "Long" };
         var target = model.Predict(signal, history[0].Features);
         var stop = model.Predict(signal, history[1].Features);
@@ -34,6 +38,8 @@ internal static class OutcomeModelTests
         Check(model.Predict(signal, Basic) is null, "Missing learned evidence must not masquerade as confidence");
         Check(model.Predict(history[0].Signal, history[0].Features) is null,
             "A current model must not predict an earlier trade using future training outcomes");
+        Check(model.Predict(new ServerSignal { Direction = "Long", CreatedAtUtc = new DateTime(2026, 1, 1) },
+            history[0].Features) is null, "Historical proposals also require past-only evidence");
     }
 
     public static void RejectsUnvalidatedAndLeakedEvidence()
@@ -57,5 +63,54 @@ internal static class OutcomeModelTests
         using var cts = new CancellationTokenSource(); cts.Cancel();
         try { SignalOutcomeModel.Train(History(), cts.Token); throw new Exception("Cancellation ignored"); }
         catch (OperationCanceledException) { }
+    }
+
+    public static void CalibrationAndAuditIsolation()
+    {
+        var scores = Enumerable.Range(0, 200).Select(i => i < 100 ? 6d : -6d).ToArray();
+        var outcomes = Enumerable.Range(0, 200).Select(i => i < 100 ? i % 10 < 7 : i % 10 < 3).ToArray();
+        var (slope, intercept) = OutcomeCalibration.Fit(scores, outcomes);
+        var p = 1d / (1d + Math.Exp(-(slope * 6d + intercept)));
+        Check(p > 0.65d && p < 0.8d,
+            "Overconfident scores should be calibrated toward observed 70 percent outcomes");
+        var reversed = OutcomeCalibration.Fit(scores, outcomes.Select(x => !x).ToArray());
+        Check(reversed.Slope >= 0d, "Calibration cannot reverse ranking to rescue a failed classifier");
+
+        var original = History();
+        var changed = original.Select((row, i) => i is 82 or 83
+            ? row with { Outcome = row.Outcome == "Target" ? "StopLoss" : "Target" } : row).ToArray();
+        var a = SignalOutcomeModel.Train(original);
+        var b = SignalOutcomeModel.Train(changed);
+        Check(a is not null && b is not null, "Both audits retain a strong signal");
+        var candidate = new ServerSignal { Direction = "Long" };
+        Check(a!.Predict(candidate, original[0].Features) == b!.Predict(candidate, original[0].Features),
+            "Changing audit labels may affect acceptance, never the fitted probabilities");
+        Check(a.ValidationBrier != b.ValidationBrier, "Audit scores must still reflect changed labels");
+
+        var delayed = History();
+        foreach (var row in delayed.Skip(60).Take(20))
+            row.Signal.CompletedAtUtc = new DateTime(2027, 1, 1);
+        Check(SignalOutcomeModel.Train(delayed) is null,
+            "Calibration outcomes unavailable at audit time cannot leak into calibration");
+        var recentDrift = History().Select((row, i) => i >= 90
+            ? row with { Outcome = row.Outcome == "Target" ? "StopLoss" : "Target" } : row).ToArray();
+        Check(SignalOutcomeModel.Train(recentDrift) is null, "Recent reversed outcomes must block publication");
+    }
+
+    public static void SeparatesEvidenceStages()
+    {
+        var entry = History();
+        var proposal = entry.Select(p => p with { EvidenceStage = "proposal", ObservedAtUtc = p.ObservedAtUtc!.Value.AddHours(-1) }).ToArray();
+        var entryModel = SignalOutcomeModel.Train(entry)!;
+        var proposalModel = SignalOutcomeModel.Train(proposal)!;
+        var candidate = new ServerSignal { Direction="Long" };
+        Check(entryModel.Predict(candidate,entry[0].Features,"proposal") is null,
+            "An entry model cannot predict proposal-time evidence.");
+        Check(proposalModel.Predict(candidate,proposal[0].Features,"entry") is null,
+            "A proposal model cannot predict entry-time evidence.");
+        Check(proposalModel.Predict(candidate,proposal[0].Features,"proposal") is not null,
+            "A separately validated proposal model should retain its own prediction.");
+        Check(SignalOutcomeModel.Train(entry.Concat(proposal).ToArray()) is null,
+            "Evidence from different observation stages must never be pooled.");
     }
 }

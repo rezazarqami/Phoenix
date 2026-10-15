@@ -22,9 +22,14 @@ with tempfile.TemporaryDirectory() as tmp:
   assert request(anon,'/api/personal/entries')[0]==401
   assert request(anon,'/api/personal/mobile/status')[0]==401
   assert request(anon,'/fonts/Vazirmatn-variable.woff2')[0]==200
+  assert request(anon,'/')[2].endswith('/login')
   owner=client();assert request(owner,'/api/auth/login',{'username':'owner','password':password})[0]==200
   assert b'data-personal-workspace="2"' in request(owner,'/')[1]
   assert b'PHOENIX' in request(owner,'/phoenix')[1]
+  assert b'href="/phoenix"' in request(owner,'/')[1]
+  assert b'href="/"' in request(owner,'/phoenix')[1]
+  assert json.loads(request(owner,'/api/analysis/auth/me')[1])['isAdmin'] is True
+  assert json.loads(request(owner,'/api/auth/me')[1])['username']=='owner'
   assert request(owner,'/')[3].get('Cache-Control')=='no-store'
   assert json.loads(request(owner,'/api/personal/mobile/status')[1])['pushConfigured'] is False
   import uuid,sqlite3
@@ -80,6 +85,9 @@ with tempfile.TemporaryDirectory() as tmp:
    c=client();request(c,'/api/auth/login',{'username':role,'password':password})
    for path,method,data in [('/api/personal/trash','GET',None),('/api/personal/backup','GET',None),('/api/personal/reports?from=2026-10-13&to=2026-10-14','GET',None),('/api/personal/entries/'+parent_id+'/history','GET',None),('/api/personal/entries/'+parent_id,'PUT',edit),('/api/personal/import','POST',{}),('/api/personal/attachments/'+parent_id,'POST',{})]:assert request(c,path,data,method)[0]==403
   assert request(owner,'/api/auth/logout',method='POST')[0]==200
+  assert request(owner,'/api/personal/entries')[0]==401
+  assert request(owner,'/api/auth/login',{'username':'owner','password':password})[0]==200
+  assert request(owner,'/api/analysis/auth/logout',method='POST')[0]==200
   assert request(owner,'/api/personal/entries')[0]==401
   for _ in range(12):
    code,*_=request(anon,'/api/auth/login',{'username':'owner','password':'invalid'})

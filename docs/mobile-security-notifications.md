@@ -2,7 +2,7 @@
 
 ## Release boundary
 
-Prepared on `personal/life-workspace`. Production deployment remains restricted to `master`. The Android workflow builds a separately installed debug APK, runs native navigation tests, and creates a commit-specific GitHub prerelease for personal-branch pushes. It contains an explicitly labelled, generated, sample-data branch preview. The online client still connects to `https://marketsignalist.ir`; GitHub publication does not update that server.
+Prepared on `personal/life-workspace`. Production deployment remains restricted to `master`. The Android workflow builds a separately installed debug APK, runs native navigation tests, and creates a commit-specific GitHub prerelease for personal-branch pushes. The installable integrated client contains no sample-data preview. The online client still connects to `https://marketsignalist.ir`; GitHub publication does not update that server.
 
 ## Login and device lock
 
@@ -12,7 +12,7 @@ Cookies carry Secure when the effective request is HTTPS. Forwarded headers are 
 
 Android uses AndroidX BiometricPrompt with strong biometrics and device credentials on Android 11+, and a system credential activity fallback on older devices. A phone without a secure lock cannot open the client. The web content is covered and hidden synchronously on pause; no unlocked state or web snapshot is restored after process death. Screenshot/recents protection uses FLAG_SECURE. Cancellation leaves the cover in place. This is an app-local device lock, not server-side WebAuthn/2FA, and does not lock a separate browser session.
 
-The Android bridge uses WebViewCompat.addWebMessageListener, two explicit HTTPS origins (production and packaged appassets), and a main-frame check. File access and mixed content are disabled; unknown links open outside the app only for http/https. Notification routes are allowlisted. No addJavascriptInterface is used. Preview cannot enable server Push. Packaged preview state is sample-only; native reminders created by a user there are real local reminders.
+The Android bridge uses WebViewCompat.addWebMessageListener, one explicit production HTTPS origin, and a main-frame check. File access and mixed content are disabled; unknown links open outside the app only for http/https. Notification routes are allowlisted. No addJavascriptInterface is used. Packaged/foreign origins cannot invoke native capabilities.
 
 ## Local reminders
 
@@ -31,7 +31,7 @@ Android build variables (public Firebase identifiers, no service-account secrets
 - `PHOENIX_FIREBASE_PROJECT_ID`
 - `PHOENIX_FIREBASE_SENDER_ID`
 
-Register the APK's actual package ID in Firebase (`ir.marketsignalist.phoenix.orbit` for this debug preview). The default Firebase app is initialized from these options. Messaging auto-init stays off until the owner opts in. New tokens are persisted locally and registered again with the authenticated server on resume. Disabling or logout invalidates the token even if server cleanup fails.
+Register the APK's actual package ID in Firebase (`ir.marketsignalist.phoenix.orbit` for this test client). The default Firebase app is initialized from these options. Messaging auto-init stays off until the owner opts in. New tokens are persisted locally and registered again with the authenticated server on resume. Disabling or logout invalidates the token even if server cleanup fails.
 
 Server variable `PHOENIX_FIREBASE_SERVICE_ACCOUNT` points to an external private JSON service-account file with FCM permission. Do not commit it or upload it to the client. OAuth is signed locally with RSA, short-lived access tokens are reused in memory, and destination hosts are fixed Google endpoints. Device registrations live in a separate SQLite file beside personal data (`personal.db.mobile.db`); include it in private server backups. All endpoints require the owner cookie. An explicit test sends only a generic notification to registered owner devices. Unregistered FCM tokens are pruned on the explicit UNREGISTERED response; transient errors retain registrations. Current implementation reports send failures; it is not a durable notification outbox.
 

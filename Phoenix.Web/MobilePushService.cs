@@ -50,8 +50,9 @@ public sealed partial class MobilePushService
         {
             await using var db = await OpenAsync(ct);
             using var cmd = db.CreateCommand();
-            cmd.CommandText = "DELETE FROM mobile_devices WHERE token=$t AND (owner<>$o OR device_id<>$d); INSERT INTO mobile_devices(owner,device_id,token,updated,enabled_since) VALUES($o,$d,$t,$u,$u) ON CONFLICT(owner,device_id) DO UPDATE SET token=$t,updated=$u; DELETE FROM mobile_devices WHERE owner=$o AND device_id NOT IN(SELECT device_id FROM mobile_devices WHERE owner=$o ORDER BY updated DESC LIMIT 20);";
+            cmd.CommandText = "DELETE FROM mobile_devices WHERE token=$t AND (owner<>$o OR device_id<>$d); INSERT INTO mobile_devices(owner,device_id,token,updated,enabled_since,enrollment) VALUES($o,$d,$t,$u,$u,$enrollment) ON CONFLICT(owner,device_id) DO UPDATE SET token=$t,updated=$u,enabled_since=CASE WHEN mobile_devices.enrollment<>excluded.enrollment THEN excluded.enabled_since ELSE mobile_devices.enabled_since END,enrollment=excluded.enrollment; DELETE FROM mobile_devices WHERE owner=$o AND device_id NOT IN(SELECT device_id FROM mobile_devices WHERE owner=$o ORDER BY updated DESC LIMIT 20);";
             cmd.Parameters.AddWithValue("$o", owner); cmd.Parameters.AddWithValue("$d", input.DeviceId.ToString());
+            cmd.Parameters.AddWithValue("$enrollment", input.EnrollmentId?.ToString() ?? "");
             cmd.Parameters.AddWithValue("$t", input.Token); cmd.Parameters.AddWithValue("$u", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             await cmd.ExecuteNonQueryAsync(ct);
         }
@@ -140,7 +141,7 @@ public sealed partial class MobilePushService
         finally { oauthGate.Release(); }
     }
 }
-public sealed record MobileRegistration(Guid DeviceId, string Token);
+public sealed record MobileRegistration(Guid DeviceId, string Token, Guid? EnrollmentId = null);
 public sealed record MobilePushResult(int Sent, int Failed, bool Configured);
 public static class MobileEndpoints
 {

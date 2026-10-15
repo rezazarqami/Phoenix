@@ -3,18 +3,20 @@ const {JSDOM,VirtualConsole}=require('./ui/node_modules/jsdom');
 const assets=path.join(__dirname,'../Phoenix.Web/wwwroot');
 const pause=()=>new Promise(r=>setTimeout(r,10));
 async function settle(check){for(let i=0;i<100;i++){if(check())return;await pause();}throw Error('UI did not settle');}
-function boot(native){
+function boot(native,configured=false){
  const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
  const dom=new JSDOM(fs.readFileSync(path.join(assets,'index.html'),'utf8'),{url:'https://marketsignalist.ir/',runScripts:'outside-only',virtualConsole:vc});
  const w=dom.window,calls=[],posts=[];
  let state={deviceId:'f2bba862-1d0e-466a-81b8-e49d98e3ede2',deviceLock:true,notifications:false,reminderChannel:false,signalChannel:false,exactAlarms:false,pushConfigured:false,pushEnabled:false,reminders:[]};
- w.fetch=async(url,options={})=>{posts.push({url,options});return{ok:true,json:async()=>({pushConfigured:false})};};
+ w.fetch=async(url,options={})=>{posts.push({url,options});return{ok:true,json:async()=>({pushConfigured:configured,clientConfig:configured?{appId:"fixture",apiKey:"fixture",projectId:"fixture",senderId:"123"}:null})};};
  if(native)w.OrbitNative={postMessage(raw){const req=JSON.parse(raw);calls.push(req);
   setTimeout(()=>{let value=state,error;
    if(req.command==='schedule'){
     if(!state.notifications||!state.exactAlarms)error='ابتدا مجوزها را فعال کن.';
     else{state.reminders.push({id:req.reminderId,title:req.title,at:req.at,delivered:false});value={saved:true};}
    }
+   if(req.command==='configurePush')state.pushConfigured=true;
+   if(req.command==='enablePush'){if(!state.notifications)error='اجازهٔ اعلان لازم است.';else Object.assign(state,{pushEnabled:true,token:'fixture-token-1234567890123456',enrollmentId:'cbd632a1-40fa-45cd-a1cf-6f137f976689'});}
    if(req.command==='cancel')state.reminders=state.reminders.filter(r=>r.id!==req.reminderId);
    if(req.command==='logout')state.reminders=[];
    if(req.command==='disablePush')state.pushEnabled=false;
@@ -37,5 +39,10 @@ function boot(native){
  $('#mobileReminderList button').click();await settle(()=>!$('#mobileReminderList strong'));assert.equal(x.state().reminders.length,0);
  await x.w.OrbitMobile.prepareLogout();assert(x.calls.some(c=>c.command==='logout'));assert(x.calls.some(c=>c.command==='disablePush'));
  assert.deepEqual(x.errors,[]);x.dom.window.close();
+ x=boot(true,true);await settle(()=>x.calls.some(c=>c.command==='configurePush'));await settle(()=>!x.w.document.querySelector('#mobileEnablePush').disabled);
+ x.w.document.querySelector('#mobileEnablePush').click();await settle(()=>x.w.document.querySelector('#mobileMessage').classList.contains('error'));assert.equal(x.state().pushEnabled,false);
+ x.allow();x.w.document.querySelector('#mobileEnablePush').click();await settle(()=>x.posts.some(p=>p.url.endsWith('/devices')));
+ const registration=JSON.parse(x.posts.find(p=>p.url.endsWith('/devices')).options.body);assert.equal(registration.enrollmentId,x.state().enrollmentId);assert.equal(registration.token,x.state().token);
+ await x.w.OrbitMobile.prepareLogout();assert(x.posts.some(p=>p.options.method==='DELETE'));x.dom.window.close();
  console.log('PASS mobile UI: browser fallback, denied permissions, native scheduling/cancel, safe reminder text, explicit disabled Push, and logout cleanup.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

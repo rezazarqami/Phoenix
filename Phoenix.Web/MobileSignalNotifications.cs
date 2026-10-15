@@ -18,15 +18,15 @@ public sealed partial class MobilePushService
 {
     private static async Task InitializeOutboxAsync(SqliteConnection db, CancellationToken ct)
     {
-        bool migrated = false;
+        bool migrated = false, enrolled = false;
         using (var schema = db.CreateCommand())
         {
             schema.CommandText = "PRAGMA table_info(mobile_devices)";
             using var reader = await schema.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct)) migrated |= reader.GetString(1) == "enabled_since";
+            while (await reader.ReadAsync(ct)) { migrated |= reader.GetString(1) == "enabled_since"; enrolled |= reader.GetString(1) == "enrollment"; }
         }
         using var cmd = db.CreateCommand();
-        cmd.CommandText = (migrated ? "" : "ALTER TABLE mobile_devices ADD COLUMN enabled_since INTEGER NOT NULL DEFAULT 0; UPDATE mobile_devices SET enabled_since=updated;") + """
+        cmd.CommandText = (migrated ? "" : "ALTER TABLE mobile_devices ADD COLUMN enabled_since INTEGER NOT NULL DEFAULT 0; UPDATE mobile_devices SET enabled_since=updated;") + (enrolled ? "" : "ALTER TABLE mobile_devices ADD COLUMN enrollment TEXT NOT NULL DEFAULT '';") + """
             CREATE TABLE IF NOT EXISTS mobile_delivery(owner TEXT NOT NULL, device_id TEXT NOT NULL, event_id TEXT NOT NULL,
                 event_at INTEGER NOT NULL, kind TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
                 next_attempt INTEGER NOT NULL DEFAULT 0, sent INTEGER NOT NULL DEFAULT 0,

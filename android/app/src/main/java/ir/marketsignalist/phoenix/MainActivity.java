@@ -211,12 +211,12 @@ public final class MainActivity extends FragmentActivity {
     private JSONObject status() throws JSONException {
         OrbitNotifications.channels(this);
         String id=getPreferences().getString("device-id",null);if(id==null){id=UUID.randomUUID().toString();getPreferences().edit().putString("device-id",id).apply();}
-        return new JSONObject().put("deviceId",id).put("deviceLock",deviceSecure()).put("notifications",OrbitNotifications.allowed(this)).put("reminderChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.REMINDERS)).put("signalChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.SIGNALS)).put("exactAlarms",Reminders.exactAllowed(this)).put("pushConfigured",!FirebaseApp.getApps(this).isEmpty()).put("pushEnabled",getPreferences().getBoolean("push-enabled",false)).put("token",getPreferences().getBoolean("push-enabled",false)?getPreferences().getString("push-token",null):JSONObject.NULL).put("reminders",Reminders.list(this));
+        return new JSONObject().put("deviceId",id).put("deviceLock",deviceSecure()).put("notifications",OrbitNotifications.allowed(this)).put("reminderChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.REMINDERS)).put("signalChannel",OrbitNotifications.channelAllowed(this,OrbitNotifications.SIGNALS)).put("exactAlarms",Reminders.exactAllowed(this)).put("pushConfigured",!FirebaseApp.getApps(this).isEmpty()).put("enrollmentId",getPreferences().getString("push-enrollment",null)).put("pushEnabled",getPreferences().getBoolean("push-enabled",false)).put("token",getPreferences().getBoolean("push-enabled",false)?getPreferences().getString("push-token",null):JSONObject.NULL).put("reminders",Reminders.list(this));
     }
     private android.content.SharedPreferences getPreferences(){return getSharedPreferences("orbit-device",MODE_PRIVATE);}
     private void reply(JavaScriptReplyProxy proxy,String id,JSONObject value,String error){try{JSONObject out=new JSONObject().put("id",id).put("ok",error==null);if(value!=null)out.put("value",value);if(error!=null)out.put("error",error);proxy.postMessage(out.toString());}catch(Exception ignored){}}
     private void resetDevice() throws JSONException {
-        getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").apply();
+        getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").remove("push-enrollment").apply();
         androidx.work.WorkManager.getInstance(this).cancelUniqueWork("orbit-push-registration");
         if(!FirebaseApp.getApps(this).isEmpty()){FirebaseMessaging.getInstance().setAutoInitEnabled(false);FirebaseMessaging.getInstance().deleteToken();}
         Reminders.clear(this);
@@ -243,10 +243,10 @@ public final class MainActivity extends FragmentActivity {
                 if(!OrbitNotifications.channelAllowed(this,OrbitNotifications.SIGNALS))throw new IllegalStateException("اجازهٔ اعلان و کانال فونیکس را فعال کن.");
                 final String requestId=id;FirebaseMessaging.getInstance().setAutoInitEnabled(true);
                 FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task->{if(!task.isSuccessful()){reply(proxy,requestId,null,"دریافت توکن Push انجام نشد؛ اتصال را بررسی کن.");return;}
-                    try{if(!unlocked||!TrustedNavigation.trusted(browser.getUrl())){reply(proxy,requestId,null,"برنامه قفل شده؛ دوباره امتحان کن.");return;}getPreferences().edit().putBoolean("push-enabled",true).putString("push-token",task.getResult()).apply();reply(proxy,requestId,status().put("token",task.getResult()),null);}catch(Exception e){reply(proxy,requestId,null,"فعال‌سازی اعلان انجام نشد.");}});return;
+                    try{if(!unlocked||!TrustedNavigation.trusted(browser.getUrl())){reply(proxy,requestId,null,"برنامه قفل شده؛ دوباره امتحان کن.");return;}String enrollment=getPreferences().getString("push-enrollment",null);if(enrollment==null)enrollment=UUID.randomUUID().toString();getPreferences().edit().putString("push-enrollment",enrollment).putBoolean("push-enabled",true).putString("push-token",task.getResult()).apply();reply(proxy,requestId,status().put("token",task.getResult()),null);}catch(Exception e){reply(proxy,requestId,null,"فعال‌سازی اعلان انجام نشد.");}});return;
             }
             if(command.equals("disablePush")||command.equals("logout")){
-                getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").apply();
+                getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").remove("push-enrollment").apply();
         androidx.work.WorkManager.getInstance(this).cancelUniqueWork("orbit-push-registration");
                 if(!FirebaseApp.getApps(this).isEmpty()){FirebaseMessaging.getInstance().setAutoInitEnabled(false);FirebaseMessaging.getInstance().deleteToken();}
                 if(command.equals("logout"))resetDevice();

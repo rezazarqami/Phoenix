@@ -30,7 +30,7 @@ public final class PushRegistrationWorker extends Worker {
             connection=(HttpsURLConnection)new URL("https://marketsignalist.ir/api/personal/mobile/devices").openConnection();
             connection.setConnectTimeout(15000);connection.setReadTimeout(15000);connection.setInstanceFollowRedirects(false);connection.setRequestMethod("POST");connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type","application/json");connection.setRequestProperty("Cookie",cookie);
-            byte[] body=new JSONObject().put("deviceId",device).put("token",token).toString().getBytes(StandardCharsets.UTF_8);
+            byte[] body=new JSONObject().put("deviceId",device).put("token",token).put("enrollmentId",preferences.getString("push-enrollment",null)).toString().getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(body.length);try(java.io.OutputStream output=connection.getOutputStream()){output.write(body);}
             int code=connection.getResponseCode();
             if(code>=200&&code<300)return Result.success();

@@ -52,7 +52,7 @@ public static class MobilePushTests
             var e=new MobileSignalEvent(Guid.NewGuid()+":Created","Created",at);
             service.QueueAsync("someone-else",new[]{e},now,default).GetAwaiter().GetResult();
             service.DeliverPendingAsync(now,default).GetAwaiter().GetResult();Check(calls.Count==0,"Owner isolation failed.");
-            service.QueueAsync("owner",new[]{e,e with{Id="old-event",At=at.AddHours(-1)}},now,default).GetAwaiter().GetResult();
+            service.QueueAsync("owner",new[]{e,e with{Id="old-event",At=at.AddHours(-1)},e with{Id="pre-enrollment",At=at.AddMinutes(-1)}},now,default).GetAwaiter().GetResult();
             service.QueueAsync("owner",new[]{e},now,default).GetAwaiter().GetResult();
             service.DeliverPendingAsync(now,default).GetAwaiter().GetResult();Check(calls.Count==2,"Each enrolled device must have one initial delivery.");
             service.DeliverPendingAsync(now.AddSeconds(1),default).GetAwaiter().GetResult();Check(calls.Count==2,"Backoff or sent-device dedup failed.");

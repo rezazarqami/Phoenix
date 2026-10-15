@@ -7,14 +7,15 @@ function boot(native,configured=false){
  const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
  const dom=new JSDOM(fs.readFileSync(path.join(assets,'index.html'),'utf8'),{url:'https://marketsignalist.ir/',runScripts:'outside-only',virtualConsole:vc});
  const w=dom.window,calls=[],posts=[];
- let state={deviceId:'f2bba862-1d0e-466a-81b8-e49d98e3ede2',deviceLock:true,notifications:false,reminderChannel:false,signalChannel:false,exactAlarms:false,pushConfigured:false,pushEnabled:false,reminders:[]};
+ let state={reminderVersion:2,deviceId:'f2bba862-1d0e-466a-81b8-e49d98e3ede2',deviceLock:true,notifications:false,reminderChannel:false,signalChannel:false,exactAlarms:false,pushConfigured:false,pushEnabled:false,reminders:[]};
  w.fetch=async(url,options={})=>{posts.push({url,options});return{ok:true,json:async()=>({pushConfigured:configured,clientConfig:configured?{appId:"fixture",apiKey:"fixture",projectId:"fixture",senderId:"123"}:null})};};
  if(native)w.OrbitNative={postMessage(raw){const req=JSON.parse(raw);calls.push(req);
   setTimeout(()=>{let value=state,error;
    if(req.command==='schedule'){
     if(!state.notifications||!state.exactAlarms)error='ابتدا مجوزها را فعال کن.';
-    else{state.reminders.push({id:req.reminderId,title:req.title,at:req.at,delivered:false});value={saved:true};}
+    else{state.reminders=state.reminders.filter(r=>r.id!==req.reminderId);state.reminders.push({id:req.reminderId,title:req.title,at:req.at,delivered:false,repeat:req.repeat,days:req.days,entryId:req.entryId,entryKind:req.entryKind});value={saved:true};}
    }
+   if(req.command==='snooze'){state.reminders.find(r=>r.id===req.reminderId).snoozeAt=Date.now()+req.minutes*60000;}
    if(req.command==='configurePush')state.pushConfigured=true;
    if(req.command==='enablePush'){if(!state.notifications)error='اجازهٔ اعلان لازم است.';else Object.assign(state,{pushEnabled:true,token:'fixture-token-1234567890123456',enrollmentId:'cbd632a1-40fa-45cd-a1cf-6f137f976689'});}
    if(req.command==='cancel')state.reminders=state.reminders.filter(r=>r.id!==req.reminderId);
@@ -37,6 +38,23 @@ function boot(native,configured=false){
  assert.equal($('#mobileReminderList img'),null,'Reminder title became HTML');assert.equal($('#mobileReminderList strong').textContent,'<img src=x onerror=alert(1)>');
  assert.equal(x.calls.filter(c=>c.command==='schedule').length,2);assert.equal(typeof x.calls.find(c=>c.command==='schedule').at,'number');
  $('#mobileReminderList button').click();await settle(()=>!$('#mobileReminderList strong'));assert.equal(x.state().reminders.length,0);
+
+ // Linked habits default to daily; edit preserves the stable reminder ID and relation.
+ const entry={id:'67112a8e-3640-41f7-976c-882852fc244a',kind:'habit',title:'تمرین روزانه',details:{}};
+ let opened=null;x.w.OrbitRecords={settings:async()=>{},available:id=>id===entry.id,open:async id=>{opened=id;}};
+ await x.w.OrbitMobile.openForEntry(entry);assert.equal($('#mobileReminderRepeat').value,'daily');
+ $('#mobileReminderRepeat').value='weekly';$('#mobileReminderRepeat').dispatchEvent(new x.w.Event('change'));assert.equal($('#mobileReminderDays').hidden,false);
+ $('#mobileReminderForm').dispatchEvent(new x.w.Event('submit',{cancelable:true,bubbles:true}));await settle(()=>$('#mobileMessage').textContent.includes('حداقل'));assert.equal(x.state().reminders.length,0);
+ $('#mobileReminderDays input[value="6"]').checked=true;
+ $('#mobileReminderForm').dispatchEvent(new x.w.Event('submit',{cancelable:true,bubbles:true}));await settle(()=>x.state().reminders.length===1);await settle(()=>$('#mobileReminderList strong'));
+ const saved=x.state().reminders[0];assert.equal(saved.entryId,entry.id);assert.equal(saved.repeat,'weekly');assert.deepEqual(saved.days,[6]);
+ Array.from($('#mobileReminderList').querySelectorAll('button')).find(b=>b.textContent==='ویرایش').click();await settle(()=>$('#mobileReminderSave').textContent.includes('تغییرات'));
+ $('#mobileReminderTitle').value='تمرین جدید';$('#mobileReminderForm').dispatchEvent(new x.w.Event('submit',{cancelable:true,bubbles:true}));await settle(()=>x.state().reminders[0].title==='تمرین جدید');assert.equal(x.state().reminders.length,1);assert.equal(x.state().reminders[0].id,saved.id);
+ x.state().reminders[0].lastDeliveredAt=Date.now();x.w.dispatchEvent(new x.w.Event('orbit-native-resume'));await settle(()=>Array.from($('#mobileReminderList').querySelectorAll('button')).some(b=>b.textContent.includes('تعویق')));
+ Array.from($('#mobileReminderList').querySelectorAll('button')).find(b=>b.textContent.includes('۱۰ دقیقه')).click();await settle(()=>x.calls.some(c=>c.command==='snooze'));await settle(()=>$('#mobileReminderList').textContent.includes('تعویق تا'));
+ assert.equal(x.state().reminders[0].repeat,'weekly','Snooze changed recurrence');
+ Array.from($('#mobileReminderList').querySelectorAll('button')).find(b=>b.textContent==='بازکردن ثبت مرتبط').click();await settle(()=>opened===entry.id);
+ await x.w.OrbitMobile.cancelForEntry(entry.id);assert.equal(x.state().reminders.length,0);
  await x.w.OrbitMobile.prepareLogout();assert(x.calls.some(c=>c.command==='logout'));assert(x.calls.some(c=>c.command==='disablePush'));
  assert.deepEqual(x.errors,[]);x.dom.window.close();
  x=boot(true,true);await settle(()=>x.calls.some(c=>c.command==='configurePush'));await settle(()=>!x.w.document.querySelector('#mobileEnablePush').disabled);

@@ -302,6 +302,8 @@
       throw Error("برای این روز سه کار مهم انتخاب کرده‌ای. یکی را تغییر بده.");
     const entry = await S.save(values, existing);
     await loadLocal();
+    if (["done","cancelled","archived"].includes(C.details(entry).status))
+      await cancelLinkedReminder(entry.id);
     notify("ثبت روی این گوشی ذخیره شد.");
     synchronize();
     return entry;
@@ -329,9 +331,17 @@
   async function deleteRecord(entry) {
     if (!confirm("این ثبت به حذف‌شده‌ها منتقل شود؟")) return;
     await S.remove(entry);
+    await cancelLinkedReminder(entry.id);
     await loadLocal();
     notify("ثبت حذف شد. پس از همگام‌سازی از تنظیمات قابل بازیابی است.");
     synchronize();
+  }
+  async function cancelLinkedReminder(id) {
+    try { await window.OrbitMobile?.cancelForEntry(id); }
+    catch(error) { notify("ثبت ذخیره شد، اما لغو یادآور انجام نشد؛ از تنظیمات یادآور را حذف کن.", true); }
+  }
+  function reminderButton(entry) {
+    return button("یادآور", () => window.OrbitMobile.openForEntry(entry).catch(fail), "small-button");
   }
   function recordCard(entry, options = {}) {
     const d = C.details(entry),
@@ -384,6 +394,8 @@
       button("جزئیات", () => openDetail(entry)),
       button("ویرایش", () => openEditor(entry.kind, entry)),
     );
+    if (window.OrbitMobile?.available() && !["done","cancelled","archived"].includes(d.status))
+      actions.append(reminderButton(entry));
     if (entry.kind === "decision")
       actions.append(
         button("مرور نتیجه", () =>
@@ -457,6 +469,7 @@
       info,
       button("ویرایش", () => openEditor("task", entry), "small-button"),
     );
+    if (window.OrbitMobile?.available() && !["done","cancelled"].includes(d.status)) row.append(reminderButton(entry));
     return row;
   }
   function habitRow(habit) {
@@ -507,6 +520,7 @@
       "small-button",
     );
     row.append(text, b);
+    if (window.OrbitMobile?.available()) row.append(reminderButton(habit));
     const bar = el("progress", undefined, "habit-progress");
     bar.max = progress.target;
     bar.value = progress.count;
@@ -1781,6 +1795,16 @@
     $("#captureDialog").showModal();
   });
   $("#capturePrompt").addEventListener("click", () => $("#quickButton").click());
+  window.OrbitRecords = {
+    available: id => entries.some(e => e.id === id && !["done","cancelled","archived"].includes(C.details(e).status)),
+    settings: () => openSettings(),
+    async open(id) {
+      const entry = entries.find(e => e.id === id);
+      if (!entry) throw Error("ثبت مرتبط روی این دستگاه پیدا نشد؛ همگام‌سازی را بررسی کن.");
+      $("#settingsDialog").close();
+      await openDetail(entry);
+    }
+  };
   $("#profileButton").addEventListener("click", () => openSettings().catch(fail));
   $("#craftShortcut").addEventListener("click", () => {
     experienceKind = "craft";

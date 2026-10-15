@@ -42,7 +42,7 @@ final class Reminders {
         ZonedDateTime local=Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault());
         JSONObject row=new JSONObject().put("id",id).put("title",title.trim()).put("at",at).put("startAt",at).put("hour",local.getHour()).put("minute",local.getMinute()).put("repeat",repeat).put("days",repeat.equals("weekly")?input.optJSONArray("days"):new JSONArray()).put("entryId",entryId).put("entryKind",entryKind).put("delivered",false);
         if(repeat.equals("weekly")&&days(row).isEmpty())throw new IllegalArgumentException("حداقل یک روز هفته را انتخاب کن.");
-        if(!repeat.equals("none"))row.put("at",next(row,now+14999));
+        if(repeat.equals("weekly")&&!days(row).contains(local.getDayOfWeek().getValue()))row.put("at",next(row,now+14999));
         JSONArray rows=list(c),updated=new JSONArray();JSONObject previous=null;
         for(int i=0;i<rows.length();i++){JSONObject old=rows.getJSONObject(i);if(old.getString("id").equals(id))previous=old;else updated.put(old);}
         if(updated.length()>=100)throw new IllegalArgumentException("ابتدا چند یادآوری قبلی را حذف کن.");
@@ -51,9 +51,9 @@ final class Reminders {
         c.getSystemService(NotificationManager.class).cancel(id,1);return row;
     }
     static synchronized void cancel(Context c,String id) throws JSONException {
-        UUID.fromString(id);disarm(c,id);JSONArray rows=list(c),updated=new JSONArray();
+        UUID.fromString(id);JSONArray rows=list(c),updated=new JSONArray();
         for(int i=0;i<rows.length();i++)if(!rows.getJSONObject(i).getString("id").equals(id))updated.put(rows.getJSONObject(i));
-        SecureStore.put(c,"reminders",updated.toString());c.getSystemService(NotificationManager.class).cancel(id,1);
+        SecureStore.put(c,"reminders",updated.toString());disarm(c,id);c.getSystemService(NotificationManager.class).cancel(id,1);
     }
     static synchronized void snooze(Context c,String id,int minutes) throws JSONException {
         UUID.fromString(id);if(minutes!=10&&minutes!=30&&minutes!=60)throw new IllegalArgumentException("زمان تعویق معتبر نیست.");permissions(c);

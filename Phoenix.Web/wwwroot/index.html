@@ -6,26 +6,29 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0d1928" />
+    <meta name="theme-color" content="#100622" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/phoenix-192.png" />
-    <link rel="stylesheet" href="/personal.css?v=2" />
+    <link rel="stylesheet" href="/personal.css?v=4" />
     <title>فضای شخصی رضا</title>
   </head>
   <body data-personal-workspace="2">
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="wordmark" href="/"
-          >R<span>•</span><small>PERSONAL WORKSPACE</small></a
-        >
+        <a class="wordmark" href="/" aria-label="فضای شخصی رضا">
+          <span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="brand-type">مدار<small>REZA / PERSONAL SPACE</small></span>
+        </a>
+        <div class="nav-caption">فضای تو</div>
         <nav id="mainNav" aria-label="بخش‌های برنامه">
           <button data-page="today" aria-current="page">
-            <span>◷</span> امروز من</button
-          ><button data-page="records"><span>▤</span> ثبت‌ها</button
-          ><button data-page="path"><span>◎</span> مسیر من</button
-          ><button data-page="experience"><span>◇</span> تجربه و تصمیم</button
-          ><button data-page="review"><span>↗</span> مرور و گزارش</button>
+            <span class="nav-icon icon-today" aria-hidden="true"></span><span class="nav-label">امروز من</span></button
+          ><button data-page="records"><span class="nav-icon icon-records" aria-hidden="true"></span><span class="nav-label">ثبت‌ها</span></button
+          ><button data-page="path"><span class="nav-icon icon-path" aria-hidden="true"></span><span class="nav-label">مسیر من</span></button
+          ><button data-page="experience"><span class="nav-icon icon-experience" aria-hidden="true"></span><span class="nav-label">تجربه‌ها</span></button
+          ><button data-page="review"><span class="nav-icon icon-review" aria-hidden="true"></span><span class="nav-label">مرور</span></button>
         </nav>
+        <div class="sidebar-note"><span class="tiny-star" aria-hidden="true">✦</span><p>هر روز، یک قدم<br><strong>نزدیک‌تر به خودت.</strong></p><span>MAKE ROOM FOR YOU</span></div>
         <div class="sidebar-bottom">
           <a class="phoenix-link" href="/phoenix"
             ><span>PHOENIX</span> ورود به فونیکس ↗</a
@@ -35,10 +38,11 @@
       <div class="app-content">
         <header class="topbar">
           <div>
-            <span class="eyebrow">LIFE IN FOCUS</span
+            <span class="eyebrow">YOUR OWN ORBIT</span
             ><span id="todayDate"></span>
           </div>
           <div class="top-actions">
+            <button id="profileButton" class="profile-button" aria-label="تنظیمات فضای شخصی">ر</button>
             <button id="syncButton" class="sync-button" aria-label="همگام‌سازی">
               <i id="syncDot"></i
               ><span id="syncLabel">در حال اتصال</span></button
@@ -58,20 +62,30 @@
         </div>
         <main id="mainContent">
           <section id="page-today" class="page">
-            <div class="page-heading">
-              <div>
-                <span class="eyebrow">A LITTLE BETTER, EVERY DAY</span>
-                <h1>فضای شخصی من</h1>
-                <p>روزت را روشن شروع کن؛ تجربه‌ات را نگه دار.</p>
+            <div class="welcome-line"><span>سلام رضا <span aria-hidden="true">✦</span></span><span class="chapter-label">فصلِ امروز / ۰۱</span></div>
+            <section class="orbit-hero" aria-labelledby="heroTitle">
+              <div class="hero-copy">
+                <span class="eyebrow">A LIFE, INTENTIONALLY MADE.</span>
+                <h1 id="heroTitle">ریتمِ زندگی،<br><span>به انتخاب تو.</span></h1>
+                <p id="heroSummary">جا برای کارهای مهم، لحظه‌های کوچک و ایده‌های تازه.</p>
+                <button class="hero-action" data-new="task">امروز را بساز <span aria-hidden="true">↖</span></button>
               </div>
-              <a class="phoenix-mini" href="/phoenix">فونیکس ↗</a>
-            </div>
+              <div class="orbit-scene" aria-label="پیشرفت کارهای مهم امروز">
+                <div class="orbit-track track-one" aria-hidden="true"></div><div class="orbit-track track-two" aria-hidden="true"></div><div class="orbit-track track-three" aria-hidden="true"></div>
+                <div class="orbit-core"><span>مدارِ امروز</span><strong id="orbitProgress">۰ / ۰</strong><small>کار مهم انجام‌شده</small></div>
+                <span class="orbit-pearl pearl-one" aria-hidden="true"></span><span class="orbit-pearl pearl-two" aria-hidden="true"></span><span class="orbit-pearl pearl-three" aria-hidden="true"></span>
+                <span class="orbit-caption" aria-hidden="true">SMALL STEPS. YOUR UNIVERSE.</span>
+              </div>
+            </section>
+            <div class="day-strip-heading"><span>روزهایت را مرور کن</span><small>۷ روز اخیر</small></div>
+            <div id="dayStrip" class="day-strip" aria-label="مرور ثبت‌های هفت روز اخیر"></div>
+            <button id="capturePrompt" class="capture-prompt"><span class="capture-plus" aria-hidden="true">＋</span><span><strong>چیزی در ذهنت هست؟</strong><small>یک فکر، یک هزینه، یک لحظه…</small></span><span class="capture-hint">ثبت سریع <span aria-hidden="true">↖</span></span></button>
             <div id="todayMetrics" class="metrics"></div>
-            <div class="two-columns">
-              <section class="panel">
+            <div class="two-columns today-columns">
+              <section class="panel priorities-panel">
                 <div class="section-heading">
                   <div>
-                    <h2>سه کار مهم امروز</h2>
+                    <span class="section-kicker">01 / FOCUS</span><h2>مهم‌ترین‌های امروز</h2>
                     <small>تمرکز روی کارهایی که خودت انتخاب می‌کنی</small>
                   </div>
                   <button class="quiet" data-new="task">＋ کار</button>
@@ -88,9 +102,9 @@
                   <div id="overdueTasks"></div>
                 </details>
               </section>
-              <section class="panel">
+              <section class="panel wellbeing-panel">
                 <div class="section-heading">
-                  <h2>یک دقیقه برای خودت</h2>
+                  <div><span class="section-kicker">02 / CHECK IN</span><h2>یک دقیقه برای خودت</h2></div>
                   <button id="checkinButton" class="quiet">ثبت وضعیت</button>
                 </div>
                 <div id="todayCheckin"></div>
@@ -101,18 +115,22 @@
                 <div id="todayHabits"></div>
               </section>
             </div>
-            <section class="panel">
+            <section class="panel focus-panel">
               <div class="section-heading">
                 <div>
-                  <h2>وقتت را کجا گذاشتی؟</h2>
+                  <span class="section-kicker">03 / DEEP WORK</span><h2>به وقتِ تمرکز</h2>
                   <small>زمان‌سنج یا ثبت دستی، متصل به هدف و پروژه</small>
                 </div>
                 <button class="quiet" data-new="time">ثبت دستی</button>
               </div>
               <div id="timerHost"></div>
             </section>
-            <section class="panel">
-              <div class="section-heading"><h2>تصمیم‌های آمادهٔ مرور</h2></div>
+            <div class="discovery-row">
+              <button id="craftShortcut" class="discovery-card craft-discovery"><span class="discovery-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="section-kicker">THE MAKER'S NOTEBOOK</span><strong>از دست‌های تو،<br>به دفتر تجربه‌ها.</strong><span>تجربه‌های ساخت ساز <b aria-hidden="true">↖</b></span></button>
+              <button id="reviewShortcut" class="discovery-card review-discovery"><span class="review-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="section-kicker">PAUSE & REFLECT</span><strong>گاهی مکث کن.<br>مسیرت را ببین.</strong><span>مرور این هفته <b aria-hidden="true">↖</b></span></button>
+            </div>
+            <section class="panel decisions-panel">
+              <div class="section-heading"><div><span class="section-kicker">04 / REFLECTION</span><h2>تصمیم‌های آمادهٔ مرور</h2></div></div>
               <div id="dueDecisions"></div>
             </section>
           </section>
@@ -280,7 +298,7 @@
             </section>
           </section>
         </main>
-        <footer>خصوصی، برای خودت • ثبت کوتاه، مرور دقیق</footer>
+        <footer><span class="footer-mark">مدار</span> فضای شخصی تو <span aria-hidden="true">·</span> یک زندگی، به ریتم خودت.</footer>
       </div>
     </div>
     <dialog id="editorDialog" class="editor-dialog">
@@ -441,6 +459,6 @@
     </dialog>
     <script src="/personal-core.js?v=2"></script>
     <script src="/personal-storage.js?v=2"></script>
-    <script src="/personal.js?v=2"></script>
+    <script src="/personal.js?v=4"></script>
   </body>
 </html>

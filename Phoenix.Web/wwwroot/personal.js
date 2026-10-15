@@ -220,7 +220,10 @@
       else n.removeAttribute("aria-current");
     });
     render();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.body.dataset.page = page;
+    const heading = $("#page-" + page + " h1");
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+    window.scrollTo({ top: 0, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }
   async function loadLocal() {
     entries = await S.read("records");
@@ -333,6 +336,7 @@
       n = el("article", undefined, "record"),
       heading = el("div", undefined, "record-heading"),
       title = el("div");
+    n.dataset.kind = entry.kind;
     title.append(el("h3", entry.title));
     const meta = el("div", undefined, "record-meta");
     meta.append(
@@ -508,6 +512,24 @@
     n.append(row, bar);
     return n;
   }
+  function renderDayStrip() {
+    const today = C.iso();
+    $("#dayStrip").replaceChildren(...Array.from({ length: 7 }, (_, index) => {
+      const day = C.shift(today, index - 6), date = new Date(day + "T12:00:00");
+      const count = entries.filter(e => e.date === day).length;
+      const b = button("", () => {
+        $("#recordFrom").value = day; $("#recordTo").value = day;
+        $("#recordSearch").value = ""; $("#recordKind").value = "all";
+        visibleCount = 30; showPage("records");
+      }, "day-cell" + (day === today ? " is-today" : ""));
+      b.append(el("small", new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(date)),
+        el("strong", new Intl.DateTimeFormat("fa-IR", { day: "numeric" }).format(date)),
+        el("span", count ? "•" : "·", "day-dot"));
+      b.setAttribute("aria-label", dateLabel(day) + "، " + nf.format(count) + " ثبت؛ نمایش ثبت‌ها");
+      if (day === today) b.setAttribute("aria-current", "date");
+      return b;
+    }));
+  }
   function renderToday() {
     const today = C.iso(),
       tasks = entries.filter(
@@ -517,6 +539,12 @@
           C.details(e).status !== "cancelled",
       ),
       important = tasks.filter((e) => C.details(e).important);
+    const completedImportant = important.filter(e => C.details(e).status === "done").length;
+    $("#orbitProgress").textContent = nf.format(completedImportant) + " / " + nf.format(important.length);
+    $("#heroSummary").textContent = important.length
+      ? (completedImportant === important.length ? "کارهای مهم امروزت انجام شد؛ برای خودت هم وقت بگذار." : nf.format(important.length - completedImportant) + " کار مهم مانده؛ قدم بعدی را خودت انتخاب کن.")
+      : "جا برای کارهای مهم، لحظه‌های کوچک و ایده‌های تازه.";
+    renderDayStrip();
     $("#importantTasks").replaceChildren(
       ...(important.length
         ? important.map(taskRow)
@@ -1048,8 +1076,8 @@
       return;
     }
     const width = Math.max(280, host.clientWidth || 400),
-      height = 225,
-      pad = { left: 46, right: 12, top: 18, bottom: 42 },
+      height = Math.round(width / 1.61803398875),
+      pad = { left: 55, right: 21, top: 21, bottom: 55 },
       w = width - pad.left - pad.right,
       h = height - pad.top - pad.bottom,
       max = Math.max(
@@ -1750,6 +1778,14 @@
     $("#captureStatus").textContent = "";
     $("#captureDialog").showModal();
   });
+  $("#capturePrompt").addEventListener("click", () => $("#quickButton").click());
+  $("#profileButton").addEventListener("click", () => openSettings().catch(fail));
+  $("#craftShortcut").addEventListener("click", () => {
+    experienceKind = "craft";
+    all("#experienceTabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.kind === experienceKind)));
+    showPage("experience");
+  });
+  $("#reviewShortcut").addEventListener("click", () => { $("#reportRange").value = "week"; setupReportRange(); showPage("review"); });
   $("#checkinButton").addEventListener("click", () =>
     openEditor(
       "checkin",

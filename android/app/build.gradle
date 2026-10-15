@@ -16,6 +16,8 @@ android {
             buildConfigField 'String', 'FIREBASE_' + key, '"' + value + '"'
         }
     }
+    // Keep the test signing key at the exact location persisted by CI.
+    signingConfigs { debug { storeFile file(System.getProperty('user.home') + '/.android/debug.keystore') } }
     buildTypes { debug { applicationIdSuffix '.orbit'; versionNameSuffix '-test' } }
     buildFeatures { buildConfig true }
     testOptions { unitTests.includeAndroidResources = true }

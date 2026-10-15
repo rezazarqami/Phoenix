@@ -20,7 +20,9 @@ import static org.junit.Assert.*;
 public class StartupTest {
     private static Object get(Object app,String name)throws Exception{Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(app);}
     private static void call(Object app,String name)throws Exception{Method m=MainActivity.class.getDeclaredMethod(name);m.setAccessible(true);m.invoke(app);}
-    @Test public void realWebViewRevealsLoadedPageAfterUnlock()throws Exception{
+    @Test public void realWebViewRevealsLoadedPageAfterUnlock()throws Exception{exercise(false);}
+    @Test public void slowImageDoesNotTrapUserBehindLoadingCover()throws Exception{exercise(true);}
+    private void exercise(boolean slowImage)throws Exception{
         Instrumentation instrument=InstrumentationRegistry.getInstrumentation();
         Instrumentation.ActivityMonitor monitor=instrument.addMonitor(new IntentFilter(Settings.ACTION_SECURITY_SETTINGS),null,true);
         AtomicReference<Throwable> failure=new AtomicReference<>();
@@ -29,7 +31,12 @@ public class StartupTest {
                 WebView web=(WebView)get(app,"browser");WebViewClient client=web.getWebViewClient();
                 web.setWebViewClient(new WebViewClient(){
                     @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
-                        return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream("<!doctype html><html><body style='background:white;color:black'><h1 id='ready'>Orbit ready</h1></body></html>".getBytes(StandardCharsets.UTF_8)));
+                        if(request.getUrl().getPath().equals("/slow-image")){
+                            try{Thread.sleep(8000);}catch(InterruptedException e){Thread.currentThread().interrupt();}
+                            return new WebResourceResponse("image/png",null,new ByteArrayInputStream(new byte[0]));
+                        }
+                        String html="<!doctype html><html><body style='background:white;color:black'><h1 id='ready'>Orbit ready</h1>"+(slowImage?"<img src='/slow-image'>":"")+"</body></html>";
+                        return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8)));
                     }
                     @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){client.onPageStarted(v,url,icon);}
                     @Override public void onPageFinished(WebView v,String url){client.onPageFinished(v,url);}
@@ -38,7 +45,7 @@ public class StartupTest {
                 call(app,"verified");
             }catch(Throwable e){failure.set(e);}});
             // Poll the actual compositor/UI state, not a mocked completion callback.
-            long deadline=System.currentTimeMillis()+12000;
+            long deadline=System.currentTimeMillis()+5000;
             AtomicReference<Boolean> shown=new AtomicReference<>(false);
             while(System.currentTimeMillis()<deadline&&!shown.get()&&failure.get()==null){
                 scenario.onActivity(app->{try{shown.set(!(Boolean)get(app,"pageLoading")&&!(Boolean)get(app,"pageFailed")&&((View)get(app,"pageCover")).getVisibility()==View.GONE&&((View)get(app,"browser")).getVisibility()==View.VISIBLE);}catch(Throwable e){failure.set(e);}});

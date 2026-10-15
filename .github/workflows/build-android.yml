@@ -44,6 +44,28 @@ jobs:
           PHOENIX_FIREBASE_PROJECT_ID: ${{ vars.PHOENIX_FIREBASE_PROJECT_ID }}
           PHOENIX_FIREBASE_SENDER_ID: ${{ vars.PHOENIX_FIREBASE_SENDER_ID }}
         run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise startup in a real Android WebView
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon
+      - name: Save Android test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-android-test-reports
+          path: |
+            android/app/build/reports/androidTests
+            android/app/build/reports/tests
+            android/app/build/outputs/androidTest-results
       - uses: actions/upload-artifact@v4
         with:
           name: phoenix-android-test-apk

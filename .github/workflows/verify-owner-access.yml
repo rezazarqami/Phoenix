@@ -1,0 +1,33 @@
+name: Verify Phoenix exclusive owner access
+on:
+  push:
+    branches: [ops/verify-owner-access]
+    paths: ['.github/workflows/verify-owner-access.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify service and non-secret owner-access status
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: 91.216.104.210
+          username: phoenix-deploy
+          key: ${{ secrets.PHOENIX_DEPLOY_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            set -eu
+            systemctl is-active --quiet phoenix.service
+            python3 - <<'PY'
+            import json, datetime
+            from pathlib import Path
+            status=json.loads(Path('/var/lib/phoenix/users.json.owner-only.json').read_text())
+            assert status['enabled'] is True
+            assert status['owner'].casefold()=='rezazarqami'
+            assert status['additionalUsers']==0
+            checked=datetime.datetime.fromisoformat(status['checkedAtUtc'].replace('Z','+00:00'))
+            assert (datetime.datetime.now(datetime.timezone.utc)-checked).total_seconds()<600
+            print(json.dumps({'service':'active','owner':status['owner'],'additionalUsers':status['additionalUsers'],'removedOnStartup':status['removedOnStartup'],'ownerOnly':True}))
+            PY

@@ -23,7 +23,16 @@ jobs:
             python3 - <<'PY'
             import json, datetime
             from pathlib import Path
-            status=json.loads(Path('/var/lib/phoenix/users.json.owner-only.json').read_text())
+            import glob, subprocess, re
+            print(subprocess.check_output(['systemctl','show','phoenix.service','--property=ExecMainStartTimestamp','--property=WorkingDirectory'],text=True).strip())
+            command=subprocess.check_output(['systemctl','show','phoenix.service','--property=ExecStart'],text=True)
+            print('application_paths='+json.dumps(re.findall(r'/[A-Za-z0-9_./-]+\.(?:dll|csproj)',command)))
+            candidates=[]
+            for base in ['/var/lib/phoenix','/opt/Phoenix']:
+                candidates.extend(glob.glob(base+'/**/*.owner-only.json',recursive=True))
+            print('status_files_found='+str(len(candidates)))
+            assert len(candidates)==1, 'Expected one operational report'
+            status=json.loads(Path(candidates[0]).read_text())
             assert status['enabled'] is True
             assert status['owner'].casefold()=='rezazarqami'
             assert status['additionalUsers']==0

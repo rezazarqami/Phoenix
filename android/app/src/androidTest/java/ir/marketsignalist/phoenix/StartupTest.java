@@ -76,7 +76,7 @@ public class StartupTest {
             }
             if(failure.get()!=null)throw new AssertionError(failure.get());
             assertTrue("Loaded HTML remained behind the native loading cover",shown.get());
-            scenario.onActivity(app->{try{call(app,"showLock");assertEquals(View.INVISIBLE,((View)get(app,"browser")).getVisibility());assertEquals(View.VISIBLE,((View)get(app,"cover")).getVisibility());}catch(Throwable e){failure.set(e);}});
+            scenario.onActivity(app->{try{call(app,"showLock");assertEquals(BuildConfig.PHOENIX_ONLY?View.VISIBLE:View.INVISIBLE,((View)get(app,"browser")).getVisibility());assertEquals(BuildConfig.PHOENIX_ONLY?View.GONE:View.VISIBLE,((View)get(app,"cover")).getVisibility());}catch(Throwable e){failure.set(e);}});
             if(failure.get()!=null)throw new AssertionError(failure.get());
         }finally{instrument.removeMonitor(monitor);}
     }

@@ -24,13 +24,41 @@ public class MainActivityTest {
     @Test public void verifiedUnlockStartsRealPageBehindLoadingCover()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
         set(app,"resumed",true);call(app,"verified");
-        assertEquals("https://marketsignalist.ir/",shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
+        assertEquals(("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")),shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
         assertEquals(View.GONE,((View)get(app,"cover")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
-        assertEquals(View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
+        assertEquals(BuildConfig.PHOENIX_ONLY?View.GONE:View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
         assertEquals(View.GONE,((View)get(app,"retry")).getVisibility());
     }
+    @Test public void standaloneStartsAndResumesWithoutDeviceAuthentication()throws Exception{
+        org.junit.Assume.assumeTrue(BuildConfig.PHOENIX_ONLY);
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create().start().resume();
+        MainActivity app=controller.get();WebView web=(WebView)get(app,"browser");
+        assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"authenticating"));
+        assertEquals("https://marketsignalist.ir/phoenix",shadowOf(web).getLastLoadedUrl());
+        assertEquals(View.GONE,((View)get(app,"cover")).getVisibility());
+        assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
+        controller.pause().stop().start().resume();
+        assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"authenticating"));
+        assertNull(shadowOf(app).getNextStartedActivity());
+    }
+    @Test public void adminLoginDestinationStaysInsideStandaloneClient()throws Exception{
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
+        set(app,"resumed",true);call(app,"verified");
+        WebView web=(WebView)get(app,"browser");
+        android.webkit.WebResourceRequest request=new android.webkit.WebResourceRequest(){
+            public android.net.Uri getUrl(){return android.net.Uri.parse("https://marketsignalist.ir/");}
+            public boolean isForMainFrame(){return true;}
+            public boolean isRedirect(){return true;}
+            public boolean hasGesture(){return false;}
+            public String getMethod(){return "GET";}
+            public java.util.Map<String,String> getRequestHeaders(){return java.util.Collections.emptyMap();}
+        };
+        assertEquals(BuildConfig.PHOENIX_ONLY,web.getWebViewClient().shouldOverrideUrlLoading(web,request));
+        assertEquals("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"),shadowOf(web).getLastLoadedUrl());
+    }
     @Test public void authResultBeforeResumeIsAppliedOnResume()throws Exception{
+        org.junit.Assume.assumeFalse(BuildConfig.PHOENIX_ONLY);
         ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();MainActivity app=controller.get();
         call(app,"verified");assertFalse((Boolean)get(app,"unlocked"));assertTrue((Boolean)get(app,"credentialVerified"));
         controller.start().resume();assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"credentialVerified"));
@@ -39,20 +67,20 @@ public class MainActivityTest {
     }
     @Test public void finishedDocumentDoesNotWaitForVisualCallback()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
         ((Runnable)get(app,"loadTimeout")).run();assertFalse((Boolean)get(app,"pageFailed"));
     }
     @Test public void committedDocumentIsShownBeforeAllResourcesFinish()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
     }
     @Test public void failureCannotBeOverwrittenByFinishCallback()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
         Method error=MainActivity.class.getDeclaredMethod("pageError",String.class);error.setAccessible(true);error.invoke(app,"HTTP 403");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
-        web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
+        web.getWebViewClient().onPageCommitVisible(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
     }
     @Test public void timeoutIsVisibleAndRetryLoadsAgainWithoutRemovingLock()throws Exception{
@@ -62,6 +90,7 @@ public class MainActivityTest {
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
         assertTrue(((TextView)get(app,"pageStatus")).getText().toString().contains("باز شدن صفحه"));
         ((Button)get(app,"retry")).performClick();assertFalse((Boolean)get(app,"pageFailed"));assertTrue((Boolean)get(app,"pageLoading"));
+        if(BuildConfig.PHOENIX_ONLY)return;
         call(app,"showLock");((Button)get(app,"retry")).performClick();assertFalse((Boolean)get(app,"unlocked"));
         assertEquals(View.INVISIBLE,((View)get(app,"browser")).getVisibility());
     }

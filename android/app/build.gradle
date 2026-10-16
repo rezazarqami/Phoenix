@@ -8,7 +8,7 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 8
+        versionCode 9
         versionName '1.7-orbit'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
@@ -30,7 +30,7 @@ android {
         phoenix {
             dimension 'client'
             applicationIdSuffix '.standalone'
-            versionName '1.0-phoenix'
+            versionName '1.1-phoenix'
             manifestPlaceholders = [clientLabel: 'Phoenix', clientIcon: '@drawable/phoenix_standalone_logo']
             buildConfigField 'boolean', 'PHOENIX_ONLY', 'true'
         }

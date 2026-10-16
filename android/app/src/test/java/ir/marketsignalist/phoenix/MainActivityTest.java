@@ -27,8 +27,20 @@ public class MainActivityTest {
         assertEquals(("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")),shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
         assertEquals(View.GONE,((View)get(app,"cover")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
-        assertEquals(View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
+        assertEquals(BuildConfig.PHOENIX_ONLY?View.GONE:View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
         assertEquals(View.GONE,((View)get(app,"retry")).getVisibility());
+    }
+    @Test public void standaloneStartsAndResumesWithoutDeviceAuthentication()throws Exception{
+        org.junit.Assume.assumeTrue(BuildConfig.PHOENIX_ONLY);
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create().start().resume();
+        MainActivity app=controller.get();WebView web=(WebView)get(app,"browser");
+        assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"authenticating"));
+        assertEquals("https://marketsignalist.ir/phoenix",shadowOf(web).getLastLoadedUrl());
+        assertEquals(View.GONE,((View)get(app,"cover")).getVisibility());
+        assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
+        controller.pause().stop().start().resume();
+        assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"authenticating"));
+        assertNull(shadowOf(app).getNextStartedActivity());
     }
     @Test public void adminLoginDestinationStaysInsideStandaloneClient()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
@@ -46,6 +58,7 @@ public class MainActivityTest {
         assertEquals("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"),shadowOf(web).getLastLoadedUrl());
     }
     @Test public void authResultBeforeResumeIsAppliedOnResume()throws Exception{
+        org.junit.Assume.assumeFalse(BuildConfig.PHOENIX_ONLY);
         ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();MainActivity app=controller.get();
         call(app,"verified");assertFalse((Boolean)get(app,"unlocked"));assertTrue((Boolean)get(app,"credentialVerified"));
         controller.start().resume();assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"credentialVerified"));
@@ -77,6 +90,7 @@ public class MainActivityTest {
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
         assertTrue(((TextView)get(app,"pageStatus")).getText().toString().contains("باز شدن صفحه"));
         ((Button)get(app,"retry")).performClick();assertFalse((Boolean)get(app,"pageFailed"));assertTrue((Boolean)get(app,"pageLoading"));
+        if(BuildConfig.PHOENIX_ONLY)return;
         call(app,"showLock");((Button)get(app,"retry")).performClick();assertFalse((Boolean)get(app,"unlocked"));
         assertEquals(View.INVISIBLE,((View)get(app,"browser")).getVisibility());
     }

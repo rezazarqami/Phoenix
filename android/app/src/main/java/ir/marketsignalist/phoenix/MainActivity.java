@@ -122,7 +122,7 @@ public final class MainActivity extends FragmentActivity {
     }
     private void renderPageState(){
         if(!unlocked){pageCover.setVisibility(View.GONE);return;}
-        boolean covered=pageLoading||pageFailed;
+        boolean covered=pageFailed||(!BuildConfig.PHOENIX_ONLY&&pageLoading);
         pageCover.setVisibility(covered?View.VISIBLE:View.GONE);
         // Keep the WebView visible behind the opaque cover so its compositor can produce a frame.
         browser.setVisibility(View.VISIBLE);
@@ -176,7 +176,7 @@ public final class MainActivity extends FragmentActivity {
         Button credential=new Button(this);credential.setText("استفاده از رمز / الگوی گوشی");credential.setOnClickListener(v->credential());cover.addView(credential);
         root.addView(cover,new FrameLayout.LayoutParams(-1,-1));
     }
-    private void showLock(){unlocked=false;cover.setVisibility(View.VISIBLE);browser.setVisibility(View.INVISIBLE);pageCover.setVisibility(View.GONE);}
+    private void showLock(){if(BuildConfig.PHOENIX_ONLY){unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);return;}unlocked=false;cover.setVisibility(View.VISIBLE);browser.setVisibility(View.INVISIBLE);pageCover.setVisibility(View.GONE);}
     private boolean deviceSecure(){return getSystemService(KeyguardManager.class).isDeviceSecure();}
     private void authenticate(){
         if(authenticating||!resumed||isFinishing())return;
@@ -209,7 +209,7 @@ public final class MainActivity extends FragmentActivity {
     }
     private void readIntent(Intent intent){if(intent==null)return;requestedRoute=BuildConfig.PHOENIX_ONLY?START_ROUTE:TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);showLock();}
-    @Override protected void onResume(){super.onResume();resumed=true;browser.onResume();if(credentialVerified){credentialVerified=false;unlock();return;}if(!unlocked&&!authenticating){showLock();ui.post(this::authenticate);}}
+    @Override protected void onResume(){super.onResume();resumed=true;browser.onResume();if(BuildConfig.PHOENIX_ONLY){unlock();return;}if(credentialVerified){credentialVerified=false;unlock();return;}if(!unlocked&&!authenticating){showLock();ui.post(this::authenticate);}}
     @Override protected void onPause(){resumed=false;credentialVerified=false;CookieManager.getInstance().flush();showLock();browser.onPause();super.onPause();}
     @Override protected void onStop(){showLock();if(authenticating&&!credentialActivity&&biometric!=null)biometric.cancelAuthentication();super.onStop();}
     @Override protected void onActivityResult(int request,int result,Intent data){

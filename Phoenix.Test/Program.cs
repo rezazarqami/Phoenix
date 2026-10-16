@@ -9,6 +9,9 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Scan performance preserves order and bounds overlapping candle requests", ScanPerformanceTests.OrderedFetch);
+Run("Scan performance deduplicates analysis candles and isolates cancelled waiters", ScanPerformanceTests.AnalysisFetchDeduplication);
+
 Run("Mobile signal events isolate owner/public routes and cover the lifecycle", MobilePushTests.SignalEvents);
 Run("Mobile push persists per-device retries without duplicate or historic delivery", MobilePushTests.DurableDelivery);
 

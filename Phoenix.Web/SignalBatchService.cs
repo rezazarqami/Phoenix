@@ -240,9 +240,15 @@ public sealed class SignalBatchService(
 
                     var rules = await bybit.GetInstrumentRulesAsync(asset.Symbol, token);
                     var options = new List<RankedCandidate>();
-                    foreach (var interval in Intervals(timeframeFilter))
+                    // Fetch independent timeframes concurrently, but evaluate them in
+                    // the original order so tie-breaking and proposal priority stay unchanged.
+                    var intervals = Intervals(timeframeFilter);
+                    var histories = await OrderedConcurrentFetch.RunAsync(intervals,
+                        interval => bybit.GetKlinesAsync(asset.Symbol, interval, 1000, token), 3, token);
+                    for (var intervalIndex = 0; intervalIndex < intervals.Length; intervalIndex++)
                     {
-                        var candles = await bybit.GetKlinesAsync(asset.Symbol, interval, 1000, token);
+                        var interval = intervals[intervalIndex];
+                        var candles = histories[intervalIndex];
                         var chartModes = chartFilter switch
                         {
                             "Candles" => new[] { false }, "Line" => new[] { true }, _ => new[] { false, true }

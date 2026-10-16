@@ -23,46 +23,46 @@ public class MainActivityTest {
     private void call(MainActivity app,String name)throws Exception{Method m=MainActivity.class.getDeclaredMethod(name);m.setAccessible(true);m.invoke(app);}
     @Test public void verifiedUnlockStartsRealPageBehindLoadingCover()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
-        set(app,"resumed",true);call(app,"verified");
+        set(app,"resumed",true);call(app,"unlock");
         assertEquals("https://marketsignalist.ir/",shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
-        assertEquals(View.GONE,((View)get(app,"cover")).getVisibility());
+        assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
         assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
         assertEquals(View.GONE,((View)get(app,"retry")).getVisibility());
     }
-    @Test public void authResultBeforeResumeIsAppliedOnResume()throws Exception{
-        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();MainActivity app=controller.get();
-        call(app,"verified");assertFalse((Boolean)get(app,"unlocked"));assertTrue((Boolean)get(app,"credentialVerified"));
-        controller.start().resume();assertTrue((Boolean)get(app,"unlocked"));assertFalse((Boolean)get(app,"credentialVerified"));
-        controller.pause();assertFalse((Boolean)get(app,"unlocked"));assertEquals(View.VISIBLE,((View)get(app,"cover")).getVisibility());
-        assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
+    @Test public void backgroundAndReopenNeverRequireBiometrics()throws Exception{
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create().start().resume();MainActivity app=controller.get();
+        assertTrue((Boolean)get(app,"unlocked"));
+        controller.pause().stop().restart().start().resume();
+        assertTrue((Boolean)get(app,"unlocked"));assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
+        assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
     @Test public void finishedDocumentDoesNotWaitForVisualCallback()throws Exception{
-        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
         WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
         ((Runnable)get(app,"loadTimeout")).run();assertFalse((Boolean)get(app,"pageFailed"));
     }
     @Test public void committedDocumentIsShownBeforeAllResourcesFinish()throws Exception{
-        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
         WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
     }
     @Test public void failureCannotBeOverwrittenByFinishCallback()throws Exception{
-        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
         Method error=MainActivity.class.getDeclaredMethod("pageError",String.class);error.setAccessible(true);error.invoke(app,"HTTP 403");
         WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
         web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
     }
     @Test public void timeoutIsVisibleAndRetryLoadsAgainWithoutRemovingLock()throws Exception{
-        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
         set(app,"checkingConnection",true); // Keep the timeout test independent of external networking.
         ((Runnable)get(app,"loadTimeout")).run();
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
         assertTrue(((TextView)get(app,"pageStatus")).getText().toString().contains("باز شدن صفحه"));
         ((Button)get(app,"retry")).performClick();assertFalse((Boolean)get(app,"pageFailed"));assertTrue((Boolean)get(app,"pageLoading"));
-        call(app,"showLock");((Button)get(app,"retry")).performClick();assertFalse((Boolean)get(app,"unlocked"));
-        assertEquals(View.INVISIBLE,((View)get(app,"browser")).getVisibility());
+        assertTrue((Boolean)get(app,"unlocked"));
+        assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
     }
 }

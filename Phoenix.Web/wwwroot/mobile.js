@@ -26,9 +26,9 @@
     if(!response.ok)throw new Error(data?.error||'این قابلیت سرور هنوز در دسترس نیست؛ نسخهٔ جدید باید روی سرور منتشر شود.');
     return data;
   }
-  const controls=['mobileLock','mobileNotifyPermission','mobileExactPermission','mobileTest','mobileEnablePush','mobileDisablePush','mobilePushTest','mobileReminderSave'];
+  const controls=['mobileNotifyPermission','mobileExactPermission','mobileTest','mobileEnablePush','mobileDisablePush','mobilePushTest','mobileReminderSave'];
   if(!native){
-    $('mobileSecurityStatus').textContent='در نسخهٔ وب، قفل اثر انگشت گوشی و یادآوری زمان‌دار پس‌زمینه در دسترس نیست. برای این دو قابلیت نسخهٔ اندروید را نصب کن.';
+    $('mobileSecurityStatus').textContent='در نسخهٔ وب، دریافت پیامک و یادآوری زمان‌دار پس‌زمینه در دسترس نیست. برای این قابلیت‌ها نسخهٔ اندروید را نصب کن.';
     $('mobilePushStatus').textContent='اعلان‌های سرور در نسخهٔ اندروید مدیریت می‌شوند.';
     for(const id of controls)$(id).disabled=true;
     $('mobileReminderForm').hidden=true;
@@ -72,7 +72,7 @@
     if(!native||refreshing)return;refreshing=true;
     try{
       state=await command('status');
-      $('mobileSecurityStatus').textContent='قفل دستگاه: '+(state.deviceLock?'فعال':'غیرفعال')+' · اعلان: '+(state.notifications&&state.reminderChannel?'مجاز':'نیاز به اجازه')+' · آلارم دقیق: '+(state.exactAlarms?'مجاز':'نیاز به اجازه');
+      $('mobileSecurityStatus').textContent='اعلان: '+(state.notifications&&state.reminderChannel?'مجاز':'نیاز به اجازه')+' · آلارم دقیق: '+(state.exactAlarms?'مجاز':'نیاز به اجازه');
       const advanced=state.reminderVersion>=2;$('mobileReminderRepeat').disabled=!advanced;
       drawReminders();
       try{const server=await api('status');serverConfigured=server.pushConfigured;if(!state.pushConfigured&&server.clientConfig)state=await command('configurePush',{config:server.clientConfig});if(serverConfigured&&state.pushEnabled&&state.token)await api('devices',{method:'POST',body:JSON.stringify({deviceId:state.deviceId,token:state.token,enrollmentId:state.enrollmentId})});}catch{serverConfigured=false;}
@@ -82,7 +82,7 @@
     }catch(error){note(error.message,true);}finally{refreshing=false;}
   }
   async function run(button,action){button.disabled=true;try{note('');await action();}catch(error){note(error.message,true);}finally{button.disabled=false;}}
-  for(const [id,action] of Object.entries({mobileLock:'lock',mobileNotifyPermission:'requestNotifications',mobileExactPermission:'requestExactAlarms',mobileTest:'testNotification'}))$(id).addEventListener('click',event=>run(event.currentTarget,async()=>{await command(action);if(action==='testNotification')note('اعلان آزمایشی به اندروید تحویل داده شد.');}));
+  for(const [id,action] of Object.entries({mobileNotifyPermission:'requestNotifications',mobileExactPermission:'requestExactAlarms',mobileTest:'testNotification'}))$(id).addEventListener('click',event=>run(event.currentTarget,async()=>{await command(action);if(action==='testNotification')note('اعلان آزمایشی به اندروید تحویل داده شد.');}));
   $('mobileEnablePush').addEventListener('click',event=>run(event.currentTarget,async()=>{
     if(window.OrbitPreview)throw new Error('اتصال سرور در پیش‌نمایش فعال نیست.');
     const device=await command('enablePush');
@@ -112,7 +112,7 @@
       resetForm();note('یادآوری روی همین گوشی ثبت شد.');await refresh();
     });}finally{reminderBusy=false;}
   });
-  window.OrbitMobile={
+  window.OrbitMobile={readSms:(requestPermission=false)=>command("readSms",{requestPermission}),
     available:()=>native,
     async openForEntry(entry){
       if(!native)throw new Error('برای یادآور زمان‌دار، نسخهٔ اندروید را باز کن.');

@@ -98,8 +98,23 @@ async function boot() {
   w.fetch = mockFetch;
   w.Response = Response;
   w.confirm = () => true;
-  w.reminderLinks=[];w.reminderCancellations=[];
-  w.OrbitMobile={available:()=>true,openForEntry:async entry=>w.reminderLinks.push(entry.id),cancelForEntry:async id=>w.reminderCancellations.push(id)};
+  w.reminderLinks = [];
+  w.reminderCancellations = [];
+  w.OrbitMobile = {
+    readSms: async () => ({
+      granted: true,
+      messages: [
+        {
+          id: "bank1",
+          at: 1792188000000,
+          body: "برداشت: ۷۰۰٬۰۰۰ ریال\nمانده ۹۰۰۰۰۰۰ ریال",
+        },
+      ],
+    }),
+    available: () => true,
+    openForEntry: async (entry) => w.reminderLinks.push(entry.id),
+    cancelForEntry: async (id) => w.reminderCancellations.push(id),
+  };
   w.scrollTo = () => {};
   w.print = () => {};
   w.URL.createObjectURL = () => "blob:fixture";
@@ -113,10 +128,15 @@ async function boot() {
     this.removeAttribute("open");
     this.dispatchEvent(new w.Event("close"));
   };
-  for (const name of ["personal-core.js", "personal-storage.js", "personal.js"])
+  for (const name of [
+    "orbit-simple.js",
+    "personal-core.js",
+    "personal-storage.js",
+    "personal.js",
+  ])
     w.eval(fs.readFileSync(path.join(assets, name), "utf8"));
   await waitFor(
-    () => w.document.querySelector("#importantTasks").children.length,
+    () => w.document.querySelector("#monthGrid").children.length,
     "Initial UI did not render.",
   );
   return { dom, w, errors };
@@ -157,43 +177,109 @@ async function openNew(w, kind) {
 async function run() {
   let { dom, w, errors } = await boot();
   const $ = (selector) => w.document.querySelector(selector);
-  for (const page of ["records", "path", "experience", "review", "today"]) {
+  for (const page of ["records", "path", "tasks", "review", "today"]) {
     $(`[data-page="${page}"]`).click();
     assert.equal($("#page-" + page).hidden, false);
   }
-  // New navigation must reach the existing flows, with keyboard focus restored.
-  assert.equal(w.document.querySelectorAll("#dayStrip button").length, 7);
-  $("#recordSearch").value = "stale search";
-  $("#recordKind").value = "finance";
-  $("#dayStrip button").click();
-  assert.equal($("#page-records").hidden, false);
-  assert.equal($("#recordSearch").value, "");
-  assert.equal($("#recordKind").value, "all");
-  assert.equal($("#recordFrom").value, C.shift(C.iso(), -6));
-  assert.equal($("#recordTo").value, $("#recordFrom").value);
-  assert.equal(w.document.activeElement, $("#page-records h1"));
-  $("#recordFrom").value = ""; $("#recordTo").value = "";
-  $("#craftShortcut").click();
-  assert.equal($("#page-experience").hidden, false);
-  assert.equal($('#experienceTabs [data-kind="craft"]').getAttribute("aria-pressed"), "true");
-  $('#experienceTabs [data-kind="decision"]').click();
-  $("#reviewShortcut").click();
-  assert.equal($("#page-review").hidden, false);
-  assert.equal($("#reportRange").value, "week");
+  assert.equal(w.document.querySelectorAll("#dayStrip button").length, 91);
+  assert($("#monthGrid [aria-current=date]"));
+  assert($("#gregorianMonth").textContent.length > 8);
+  assert.equal($("#page-experience"), null);
+  $("#nextMonth").click();
+  assert.equal($("#monthGrid [aria-current=date]"), null);
+  $("#goToday").click();
+  assert($("#monthGrid [aria-current=date]"));
+  const tomorrow = C.shift(C.iso(), 1);
+  $("#dayStrip [data-date='" + tomorrow + "']").click();
+  $("#addSelectedTask").click();
+  await waitFor(() => $("#editorDialog").open);
+  assert.equal($("#editorForm [name=date]").value, tomorrow);
+  $("#editorDialog").close();
+  $("#goToday").click();
+  $('[data-page="records"]').click();
+  await waitFor(() => $("#financeDrafts .record"));
+  assert($("#draftCount").textContent.includes("۱"));
+  $("#readSms").click();
+  await pause();
+  assert.equal(
+    (await w.PersonalStorage.read("records")).filter(w.OrbitSimple.isDraft)
+      .length,
+    1,
+  );
+  assert(!$("#financeMetrics").textContent.includes("۷۰٬۰۰۰"));
+  $("#financeCategories").click();
+  const categoryForm = $("#categoryForm");
+  categoryForm.elements.title.value = "خودرو";
+  categoryForm.dispatchEvent(
+    new w.Event("submit", { cancelable: true, bubbles: true }),
+  );
+  await waitFor(() =>
+    [...rows.values()].some(
+      (e) => e.kind === "category" && e.title === "خودرو",
+    ),
+  );
+  const rootCategory = [...rows.values()].find((e) => e.kind === "category");
+  await waitFor(() =>
+    [...categoryForm.elements.parent.options].some(
+      (option) => option.value === rootCategory.id,
+    ),
+  );
+  categoryForm.elements.parent.value = rootCategory.id;
+  categoryForm.elements.title.value = "تعمیرگاه";
+  categoryForm.dispatchEvent(
+    new w.Event("submit", { cancelable: true, bubbles: true }),
+  );
+  await waitFor(() =>
+    [...rows.values()].some((e) => e.title === "خودرو / تعمیرگاه"),
+  );
+  $("#categoryDialog").close();
+  $("#financeDrafts .primary").click();
+  await waitFor(() => $("#editorDialog").open);
+  field(w, "category", "خودرو / تعمیرگاه");
+  await submit(w);
+  await waitFor(() => !$("#financeDrafts .record"));
+  assert($("#financeMetrics").textContent.includes("۷۰٬۰۰۰"));
+  [...$("#recordList .record").querySelectorAll("button")]
+    .find((b) => b.textContent === "حذف")
+    .click();
+  await waitFor(() => !$("#recordList .record"));
+  $("#readSms").click();
+  await waitFor(() => $("#smsStatus").textContent.includes("۰ پیش‌نویس جدید"));
+  assert.equal(
+    (await w.PersonalStorage.read("records")).filter(w.OrbitSimple.isDraft)
+      .length,
+    0,
+  );
+
+  $('[data-page="today"]').click();
   $("#profileButton").click();
   await waitFor(() => $("#settingsDialog").open);
   $("#settingsDialog").close();
   $('[data-page="today"]').click();
-  $("#capturePrompt").click();
+  $("#quickButton").click();
   assert.equal($("#captureDialog").open, true);
   $("#captureDialog").close();
   await openNew(w, "task");
   field(w, "title", "کار مهم برای بررسی مدار");
-  field(w, "d.important", true);
   await submit(w);
-  await waitFor(() => $("#orbitProgress").textContent === "۰ / ۱");
-  $("#importantTasks .check-button").click();
-  await waitFor(() => $("#orbitProgress").textContent === "۱ / ۱");
+  await waitFor(() => $("#selectedDayTasks .check-button"));
+  $("#selectedDayTasks .check-button").click();
+  await waitFor(() => $("#selectedDayTasks .check-button").textContent === "✓");
+  $('[data-page="tasks"]').click();
+  assert.equal($("#taskGroups .task-row"), null);
+  $("#showDoneTasks").checked = true;
+  $("#showDoneTasks").dispatchEvent(new w.Event("change"));
+  assert.equal(
+    $("#taskGroups .check-button").getAttribute("aria-checked"),
+    "true",
+  );
+  $("#taskGroups .check-button").click();
+  await waitFor(
+    () =>
+      $("#taskGroups .check-button").getAttribute("aria-checked") === "false",
+  );
+  $('[data-page="today"]').click();
+
   await openNew(w, "goal");
   field(w, "title", "هدف آزمایشی");
   field(w, "d.expectedOutcome", "معیار موفقیت");
@@ -205,24 +291,25 @@ async function run() {
   field(w, "d.goalId", goal.id);
   await submit(w);
   await waitFor(() => [...rows.values()].some((e) => e.kind === "project"));
-  await openNew(w, "task");field(w,"title","کار متصل به یادآور");await submit(w);
-  await waitFor(()=>[...rows.values()].some(e=>e.title==="کار متصل به یادآور"));
-  const linkedTask=[...rows.values()].find(e=>e.title==="کار متصل به یادآور");
-  const linkedRow=[...$("#todayTasks").children].find(e=>e.textContent.includes(linkedTask.title));
-  assert(linkedRow,"Linked task missing");[...linkedRow.querySelectorAll("button")].find(b=>b.textContent==="یادآور").click();
-  await waitFor(()=>w.reminderLinks.includes(linkedTask.id));linkedRow.querySelector(".check-button").click();
-  await waitFor(()=>w.reminderCancellations.includes(linkedTask.id));
-  await openNew(w, "checkin");
-  field(w, "title", "وضعیت روز");
-  field(w, "d.energy", "4");
-  field(w, "d.focus", "3");
-  field(w, "d.activities", "پیاده‌روی، کارگاه");
+  await openNew(w, "task");
+  field(w, "title", "کار متصل به یادآور");
   await submit(w);
-  await waitFor(() => [...rows.values()].some((e) => e.kind === "checkin"));
-  const checkin = [...rows.values()].find((e) => e.kind === "checkin");
-  assert.equal(typeof checkin.details.energy, "number");
-  assert.equal(checkin.details.energy, 4);
-  assert.deepEqual(checkin.details.activities, ["پیاده‌روی", "کارگاه"]);
+  await waitFor(() =>
+    [...rows.values()].some((e) => e.title === "کار متصل به یادآور"),
+  );
+  const linkedTask = [...rows.values()].find(
+    (e) => e.title === "کار متصل به یادآور",
+  );
+  const linkedRow = [...$("#selectedDayTasks").children].find((e) =>
+    e.textContent.includes(linkedTask.title),
+  );
+  assert(linkedRow, "Linked task missing");
+  [...linkedRow.querySelectorAll("button")]
+    .find((b) => b.textContent === "یادآور")
+    .click();
+  await waitFor(() => w.reminderLinks.includes(linkedTask.id));
+  linkedRow.querySelector(".check-button").click();
+  await waitFor(() => w.reminderCancellations.includes(linkedTask.id));
   $("#quickButton").click();
   $("#captureText").value =
     "روغن ماشین کیلومتر ۸۴۵۰۰ بود و یک میلیون و هشتصد هزار تومان شد";
@@ -232,48 +319,6 @@ async function run() {
   assert.equal($('#editorForm [name="odometer"]').value, "84500");
   await submit(w);
   await waitFor(() => [...rows.values()].some((e) => e.kind === "vehicle"));
-  $("#newExperience").click();
-  await waitFor(() => $("#editorDialog").open);
-  field(w, "title", "تصمیم نمونه");
-  field(w, "d.hypothesis", "دلیل اولیه");
-  field(w, "d.expectedOutcome", "انتظار اولیه");
-  field(w, "d.reviewDate", C.iso());
-  await submit(w);
-  await waitFor(() => [...rows.values()].some((e) => e.kind === "decision"));
-  $('[data-page="experience"]').click();
-  const decisionCard = $("#experienceList .record");
-  [...decisionCard.querySelectorAll("button")]
-    .find((b) => b.textContent === "مرور نتیجه")
-    .click();
-  await waitFor(() => $("#editorDialog").open);
-  assert.equal($('#editorForm [name="d.hypothesis"]').disabled, true);
-  field(w, "d.actualOutcome", "نتیجهٔ واقعی");
-  await submit(w);
-  await waitFor(
-    () =>
-      [...rows.values()].find((e) => e.kind === "decision").details
-        .actualOutcome === "نتیجهٔ واقعی",
-  );
-  assert.equal(
-    [...rows.values()].find((e) => e.kind === "decision").details.hypothesis,
-    "دلیل اولیه",
-  );
-  $('[data-kind="craft"]').click();
-  $("#newExperience").click();
-  await waitFor(() => $("#editorDialog").open);
-  field(w, "title", "تجربهٔ ساخت");
-  field(w, "d.method", "روش ساخت آزمایشی");
-  field(w, "d.goalId", goal.id);
-  await submit(w);
-  await waitFor(() => [...rows.values()].some((e) => e.kind === "craft"));
-  $('[data-kind="experiment"]').click();
-  $("#newExperience").click();
-  await waitFor(() => $("#editorDialog").open);
-  field(w, "title", "آزمایش تمرکز");
-  field(w, "d.hypothesis", "شروع کار بدون پیام‌ها");
-  await submit(w);
-  await waitFor(() => [...rows.values()].some((e) => e.kind === "experiment"));
-  assert($("#experienceList").textContent.includes("دادهٔ مقایسه کم است"));
   $('[data-page="review"]').click();
   assert($("#reportMetrics").textContent.includes("۱٬۸۰۰٬۰۰۰"));
   $("#weeklyReview").click();
@@ -283,7 +328,10 @@ async function run() {
   await waitFor(() => [...rows.values()].some((e) => e.kind === "review"));
   // Persist offline, close the app, reopen on the same device, then synchronize exactly once.
   offline = true;
-  await openNew(w, "journal");
+  $("#quickButton").click();
+  $("#captureText").value = "یادداشت آفلاین";
+  $("#parseCapture").click();
+  await waitFor(() => $("#editorDialog").open);
   field(w, "title", "یادداشت آفلاین");
   field(w, "notes", "با قطع اینترنت محفوظ می‌ماند");
   await submit(w);
@@ -366,7 +414,7 @@ async function run() {
   await w.PersonalStorage.clear();
   dom.window.close();
   console.log(
-    "PASS personal UI: every page, linked goal/project, numeric check-ins, reviewed capture, decision provenance, craft, experiments, weekly review, offline restart and in-flight edit/delete preservation.",
+    "PASS personal UI: calendar, navigation, SMS deduplication, draft approval, nested categories, linked goal/project, reviewed capture, weekly review, offline restart and in-flight edit/delete preservation.",
   );
 }
 run().catch((error) => {

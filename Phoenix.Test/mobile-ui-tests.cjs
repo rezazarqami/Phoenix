@@ -28,7 +28,7 @@ function boot(native,configured=false){
  return {dom,w,errors,calls,posts,allow(){Object.assign(state,{notifications:true,reminderChannel:true,signalChannel:true,exactAlarms:true});},state:()=>state};
 }
 (async()=>{
- let x=boot(false);assert(x.w.document.querySelector('#mobileReminderForm').hidden);assert(x.w.document.querySelector('#mobileLock').disabled);assert.equal(x.posts.length,0);x.dom.window.close();
+ let x=boot(false);assert(x.w.document.querySelector('#mobileReminderForm').hidden);assert(!x.w.document.querySelector('#mobileLock'));assert.equal(x.posts.length,0);x.dom.window.close();
  x=boot(true);const $=s=>x.w.document.querySelector(s);await settle(()=>$('#mobileSecurityStatus').textContent.includes('نیاز'));
  assert($('#mobileEnablePush').disabled);assert($('#mobilePushTest').disabled);
  $('#mobileReminderTitle').value='<img src=x onerror=alert(1)>';

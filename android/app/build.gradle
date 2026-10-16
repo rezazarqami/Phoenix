@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 8
-        versionName '1.7-orbit'
+        versionCode 9
+        versionName '1.8-orbit'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
             def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''
@@ -31,7 +31,6 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.14.1'
     implementation 'androidx.work:work-runtime:2.10.0'
-    implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'androidx.webkit:webkit:1.12.1'
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-messaging'

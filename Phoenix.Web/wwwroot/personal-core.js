@@ -21,6 +21,7 @@
   const titles = {
     finance: "حساب‌وکتاب",
     vehicle: "سابقهٔ خودرو",
+    category: "دسته‌بندی",
     journal: "یادداشت",
     task: "کار روزانه",
     checkin: "وضعیت روز",
@@ -223,6 +224,7 @@
     };
   }
   function report(entries, from, to) {
+    entries = entries.filter(e=>!(e.kind === "finance" && e.details?.sourceId && ["waiting","cancelled"].includes(e.details.status)));
     const selected = entries.filter((e) => e.date >= from && e.date <= to),
       length = days(from, to),
       previousFrom = shift(from, -length),

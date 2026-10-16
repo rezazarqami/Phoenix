@@ -1,5 +1,7 @@
 # Personal life workspace (separate branch, not a production release)
 
+Current navigation and calendar/accounting/task behavior supersede the initial flows below; see [Orbit simplification](orbit-simplification.md). The storage/access guarantees remain applicable.
+
 Implemented choices: proposals **1–8 and 12**. No conversational AI over private
 records (9), generic asset dossiers (10), or people/contact management (11) were
 added. The original vehicle-service and finance screens remain available.

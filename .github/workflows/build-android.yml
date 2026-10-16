@@ -2,9 +2,9 @@ name: Build Phoenix Android
 
 on:
   push:
-    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/orbit-simple.js", "docs/android-install-preview.md", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
   pull_request:
-    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/orbit-simple.js", "docs/android-install-preview.md", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
   workflow_dispatch:
 
 permissions:

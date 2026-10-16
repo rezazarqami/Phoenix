@@ -24,11 +24,26 @@ public class MainActivityTest {
     @Test public void verifiedUnlockStartsRealPageBehindLoadingCover()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
         set(app,"resumed",true);call(app,"verified");
-        assertEquals("https://marketsignalist.ir/",shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
+        assertEquals(("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")),shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
         assertEquals(View.GONE,((View)get(app,"cover")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
         assertEquals(View.GONE,((View)get(app,"retry")).getVisibility());
+    }
+    @Test public void adminLoginDestinationStaysInsideStandaloneClient()throws Exception{
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
+        set(app,"resumed",true);call(app,"verified");
+        WebView web=(WebView)get(app,"browser");
+        android.webkit.WebResourceRequest request=new android.webkit.WebResourceRequest(){
+            public android.net.Uri getUrl(){return android.net.Uri.parse("https://marketsignalist.ir/");}
+            public boolean isForMainFrame(){return true;}
+            public boolean isRedirect(){return true;}
+            public boolean hasGesture(){return false;}
+            public String getMethod(){return "GET";}
+            public java.util.Map<String,String> getRequestHeaders(){return java.util.Collections.emptyMap();}
+        };
+        assertEquals(BuildConfig.PHOENIX_ONLY,web.getWebViewClient().shouldOverrideUrlLoading(web,request));
+        assertEquals("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"),shadowOf(web).getLastLoadedUrl());
     }
     @Test public void authResultBeforeResumeIsAppliedOnResume()throws Exception{
         ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create();MainActivity app=controller.get();
@@ -39,20 +54,20 @@ public class MainActivityTest {
     }
     @Test public void finishedDocumentDoesNotWaitForVisualCallback()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
         ((Runnable)get(app,"loadTimeout")).run();assertFalse((Boolean)get(app,"pageFailed"));
     }
     @Test public void committedDocumentIsShownBeforeAllResourcesFinish()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
     }
     @Test public void failureCannotBeOverwrittenByFinishCallback()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"verified");
         Method error=MainActivity.class.getDeclaredMethod("pageError",String.class);error.setAccessible(true);error.invoke(app,"HTTP 403");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
-        web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
+        web.getWebViewClient().onPageCommitVisible(web,("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/")));
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
     }
     @Test public void timeoutIsVisibleAndRetryLoadsAgainWithoutRemovingLock()throws Exception{

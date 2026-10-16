@@ -19,7 +19,23 @@ android {
     }
     // Keep the test signing key at the exact location persisted by CI.
     signingConfigs { debug { storeFile file(System.getProperty('user.home') + '/.android/debug.keystore') } }
-    buildTypes { debug { applicationIdSuffix '.orbit'; versionNameSuffix '-test' } }
+    flavorDimensions 'client'
+    productFlavors {
+        orbit {
+            dimension 'client'
+            applicationIdSuffix '.orbit'
+            manifestPlaceholders = [clientLabel: 'مدار و فونیکس', clientIcon: '@drawable/phoenix_logo']
+            buildConfigField 'boolean', 'PHOENIX_ONLY', 'false'
+        }
+        phoenix {
+            dimension 'client'
+            applicationIdSuffix '.standalone'
+            versionName '1.0-phoenix'
+            manifestPlaceholders = [clientLabel: 'Phoenix', clientIcon: '@drawable/phoenix_standalone_logo']
+            buildConfigField 'boolean', 'PHOENIX_ONLY', 'true'
+        }
+    }
+    buildTypes { debug { versionNameSuffix '-test' } }
     buildFeatures { buildConfig true }
     testOptions { unitTests.includeAndroidResources = true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

@@ -23,6 +23,8 @@ import java.util.Collections;
 import java.util.UUID;
 
 public final class MainActivity extends FragmentActivity {
+    private static final String START_ROUTE=BuildConfig.PHOENIX_ONLY?"/phoenix":"/";
+    private static final String CLIENT_NAME=BuildConfig.PHOENIX_ONLY?"فونیکس":"مدار و فونیکس";
     private static final String HOME="https://marketsignalist.ir";
     private WebView browser;
     private FrameLayout root;
@@ -37,10 +39,10 @@ public final class MainActivity extends FragmentActivity {
     private final Handler ui=new Handler(Looper.getMainLooper());
     private boolean pageLoading=false, pageFailed=false;
     private long navigation=0;
-    private String lastUrl=HOME+"/";
+    private String lastUrl=HOME+START_ROUTE;
     private final Runnable loadTimeout=()->{if(pageLoading){pageError("باز شدن صفحه کامل نشد. مرحله: "+loadStage+"؛ پیشرفت: "+loadProgress+"٪. در حال بررسی مستقل اتصال گوشی…");checkConnection();}};
     private boolean unlocked=false, authenticating=false, initialLoaded=false;
-    private String requestedRoute="/";
+    private String requestedRoute=START_ROUTE;
     private boolean openReminders=false;
     private BiometricPrompt biometric;
     private boolean credentialActivity=false, resumed=false, credentialVerified=false;
@@ -88,7 +90,14 @@ public final class MainActivity extends FragmentActivity {
                 handler.cancel();pageError("اتصال امن سرور تأیید نشد. تاریخ و ساعت گوشی و اتصال اینترنت را بررسی کن.");
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
-                String url=request.getUrl().toString();if(TrustedNavigation.trusted(url))return false;
+                String url=request.getUrl().toString();
+                // Admin login redirects to Orbit. Keep this separate client on Phoenix,
+                // while using the same server authentication and session cookies.
+                if(request.isForMainFrame()&&BuildConfig.PHOENIX_ONLY&&TrustedNavigation.trusted(url)&&
+                    ("/".equals(request.getUrl().getPath())||"/index.html".equals(request.getUrl().getPath()))){
+                    loadPage(HOME+START_ROUTE);return true;
+                }
+                if(TrustedNavigation.trusted(url))return false;
                 if(request.isForMainFrame() && ("https".equals(request.getUrl().getScheme())||"http".equals(request.getUrl().getScheme())))try{startActivity(new Intent(Intent.ACTION_VIEW,request.getUrl()));}catch(ActivityNotFoundException ignored){}
                 return true;
             }
@@ -105,7 +114,7 @@ public final class MainActivity extends FragmentActivity {
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private void makePageCover(){
         pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(35,26,47));
-        TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
+        TextView title=new TextView(this);title.setText(CLIENT_NAME);title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
         pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
         retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
         connectionCheck=new Button(this);connectionCheck.setText("بررسی اتصال همین گوشی");connectionCheck.setOnClickListener(v->{if(unlocked&&pageFailed)checkConnection();});pageCover.addView(connectionCheck);
@@ -161,7 +170,7 @@ public final class MainActivity extends FragmentActivity {
     }
     private void makeCover(){
         cover=new LinearLayout(this);cover.setOrientation(LinearLayout.VERTICAL);cover.setGravity(Gravity.CENTER);cover.setPadding(dp(34),dp(34),dp(34),dp(34));cover.setBackgroundColor(Color.rgb(16,13,26));
-        TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);title.setGravity(Gravity.CENTER);cover.addView(title);
+        TextView title=new TextView(this);title.setText(CLIENT_NAME);title.setTextColor(Color.WHITE);title.setTextSize(30);title.setGravity(Gravity.CENTER);cover.addView(title);
         lockStatus=new TextView(this);lockStatus.setText("برای ورود، هویتت را با قفل امن گوشی تأیید کن.");lockStatus.setTextColor(Color.rgb(215,194,230));lockStatus.setTextSize(16);lockStatus.setGravity(Gravity.CENTER);lockStatus.setPadding(0,dp(21),0,dp(21));cover.addView(lockStatus);
         Button unlock=new Button(this);unlock.setText("بازکردن با اثر انگشت یا رمز گوشی");unlock.setTextColor(Color.rgb(38,28,48));unlock.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));unlock.setOnClickListener(v->authenticate());cover.addView(unlock);
         Button credential=new Button(this);credential.setText("استفاده از رمز / الگوی گوشی");credential.setOnClickListener(v->credential());cover.addView(credential);
@@ -181,24 +190,24 @@ public final class MainActivity extends FragmentActivity {
             @Override public void onAuthenticationError(int code,@NonNull CharSequence text){authenticating=false;showLock();if(code==BiometricPrompt.ERROR_NEGATIVE_BUTTON||code==BiometricPrompt.ERROR_LOCKOUT||code==BiometricPrompt.ERROR_LOCKOUT_PERMANENT)credential();else lockStatus.setText("ورود تأیید نشد؛ دوباره تلاش کن یا رمز گوشی را بزن.");}
             @Override public void onAuthenticationFailed(){lockStatus.setText("اثر انگشت تأیید نشد؛ دوباره تلاش کن یا رمز گوشی را بزن.");}
         });
-        BiometricPrompt.PromptInfo.Builder builder=new BiometricPrompt.PromptInfo.Builder().setTitle("بازکردن مدار و فونیکس").setSubtitle("تأیید هویت با امنیت خود گوشی").setAllowedAuthenticators(allowed);
+        BiometricPrompt.PromptInfo.Builder builder=new BiometricPrompt.PromptInfo.Builder().setTitle("بازکردن "+CLIENT_NAME).setSubtitle("تأیید هویت با امنیت خود گوشی").setAllowedAuthenticators(allowed);
         if(Build.VERSION.SDK_INT<30)builder.setNegativeButtonText("رمز گوشی");
         biometric.authenticate(builder.build());
     }
     private void credential(){
         if(authenticating||!resumed||isFinishing())return;
-        Intent intent=getSystemService(KeyguardManager.class).createConfirmDeviceCredentialIntent("مدار و فونیکس","رمز، الگو یا PIN گوشی را وارد کن");
+        Intent intent=getSystemService(KeyguardManager.class).createConfirmDeviceCredentialIntent(CLIENT_NAME,"رمز، الگو یا PIN گوشی را وارد کن");
         if(intent==null){lockStatus.setText("قفل امن گوشی فعال نیست.");startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));return;}
         authenticating=true;credentialActivity=true;startActivityForResult(intent,42);
     }
     private void unlock(){
         if(isFinishing())return;
         unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);browser.onResume();browser.requestLayout();
-        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?"/":requestedRoute;loadPage(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
+        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?START_ROUTE:requestedRoute;loadPage(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
         renderPageState();
         browser.evaluateJavascript("window.dispatchEvent(new Event('orbit-native-resume'))",null);
     }
-    private void readIntent(Intent intent){if(intent==null)return;requestedRoute=TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
+    private void readIntent(Intent intent){if(intent==null)return;requestedRoute=BuildConfig.PHOENIX_ONLY?START_ROUTE:TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);showLock();}
     @Override protected void onResume(){super.onResume();resumed=true;browser.onResume();if(credentialVerified){credentialVerified=false;unlock();return;}if(!unlocked&&!authenticating){showLock();ui.post(this::authenticate);}}
     @Override protected void onPause(){resumed=false;credentialVerified=false;CookieManager.getInstance().flush();showLock();browser.onPause();super.onPause();}

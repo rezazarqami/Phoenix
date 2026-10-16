@@ -25,9 +25,9 @@ internal static class TechnicalCohortTests
         Check(!TechnicalCohorts.SimilarGeometry(candidate,new ServerSignal()),"Unknown geometry must not match");
         var future=Row(-1);var all=Enumerable.Range(1,12).Select(i=>Row(i)).Append(future).ToArray();
         var result=SignalSimilarityService.CalculateFromPatterns(candidate,all);
-        Check(result.Evidence?.TechnicalCohort?.Count==12,"Future labels must not enter technical support");
+        Check(result.Evidence?.SameTimeframeNearbyCount==12,"Future labels must not enter technical support");
         var json=JsonSerializer.Serialize(result.Evidence);
-        Check(JsonSerializer.Deserialize<SimilarityEvidence>(json)?.TechnicalCohort?.Count==12,"Expanded support must survive persistence");
+        Check(JsonSerializer.Deserialize<SimilarityEvidence>(json)?.SameTimeframeNearbyCount==12,"Expanded support must survive persistence");
     }
     public static void ExactAtrGeometry()
     {

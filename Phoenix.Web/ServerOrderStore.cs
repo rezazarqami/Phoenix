@@ -346,6 +346,9 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
+    internal Task<IReadOnlyList<SignalHistoryItem>> GetLearningHistoryAsync(CancellationToken token = default) =>
+        _history.GetLearningAsync(token);
+
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
         CancellationToken token = default) => _history.GetAsync(days, limit, token);
 

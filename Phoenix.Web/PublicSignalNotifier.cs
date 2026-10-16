@@ -115,9 +115,7 @@ public sealed class PublicSignalNotifier
 
             (‌1%- از کل سرمایه)
             """;
-        var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + (signal.TargetSimilarityPercent.HasValue
-            ? $"\n\n🟢 شباهت به تارگت‌ها: {Format(signal.TargetSimilarityPercent.Value)}٪\n🔴 شباهت به استاپ‌ها: {Format(signal.StopSimilarityPercent ?? 0m)}٪"
-            : string.Empty);
+        var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + SignalReviewText.Support(signal.SimilarityEvidence);
         if (image is not null)
             return IsDedicatedSignal(signal)
                 ? await SendDedicatedSignalPhotoAsync(text + scores, image, signal.Id, token)
@@ -210,9 +208,7 @@ public sealed class PublicSignalNotifier
     private Task<int?> ReplyResultAsync(ServerSignal signal, string headline, byte[]? image,
         CancellationToken token)
     {
-        var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + (signal.TargetSimilarityPercent.HasValue
-            ? $"\n\n🟢 <b>شباهت به تارگت‌ها در زمان صدور: {Format(signal.TargetSimilarityPercent.Value)}٪</b>\n🔴 <b>شباهت به استاپ‌ها در زمان صدور: {Format(signal.StopSimilarityPercent ?? 0m)}٪</b>"
-            : "\n\n📊 درصد زمان صدور: دادهٔ کافی نبود");
+        var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + SignalReviewText.Support(signal.SimilarityEvidence);
         var failure = signal.Outcome == "StopLoss" && !string.IsNullOrWhiteSpace(signal.FailureReason)
             ? $"\nعلت فنی محتمل: {signal.FailureReason}" : string.Empty;
         var text = headline + scores + failure;
@@ -297,7 +293,8 @@ public sealed class PublicSignalNotifier
 
     public Task<int?> SendCurrentReviewAsync(ServerSignal signal, byte[] image, CancellationToken token)
     {
-        var caption = $"📸 شرایط فعلی {signal.Symbol}\n🟢 شباهت به تارگت‌ها: {Format(signal.TargetSimilarityPercent ?? 0m)}٪\n🔴 شباهت به استاپ‌ها: {Format(signal.StopSimilarityPercent ?? 0m)}٪\n\nدر صورت نامناسب‌بودن شرایط، سیگنال را لغو کنید.";
+        var caption = $"📸 شرایط فعلی {signal.Symbol}" + SignalReviewText.Outcome(signal.TargetOutcomePercent,
+            signal.StopOutcomePercent, signal.OutcomeValidationCount) + SignalReviewText.Support(signal.SimilarityEvidence);
         return IsDedicatedSignal(signal)
             ? SendDedicatedSignalPhotoAsync(caption, image, signal.Id, token)
             : SendSignalPhotoAsync(_options, caption, image, signal.Id,

@@ -155,7 +155,7 @@ internal sealed class SignalOutcomeModel
     }
     private static double Logistic(double value) => 1d / (1d + Math.Exp(-Math.Clamp(value, -30d, 30d)));
 
-    // Explicit allowlist: no RSI, volume, BTC alignment or reward/risk features.
+    // Explicit technical allowlist; no RSI, volume or BTC alignment.
     internal static double?[] PrimaryValues(ServerSignal s, TechnicalFeatureSnapshot f)
     {
         var sign = s.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
@@ -189,6 +189,12 @@ internal sealed class SignalOutcomeModel
                 D(level.CloudEntry * sign), D(level.CloudStop * sign),
                 D(level.CloudTarget * sign), D(level.CloudBias * sign)]);
         }
-        return primary.Concat(multi).ToArray();
+        // Distances describe the proposed trade, not its eventual duration. Never
+        // synthesize missing legacy ATR geometry from a later market price.
+        var g = f.TradeGeometry;
+        double?[] geometry = g is null ? new double?[5] :
+            [D(g.StopDistanceAtr), D(g.TargetDistanceAtr), D(g.RewardRisk),
+             D(g.EntryDistanceAtr), D((sign > 0 ? f.ResistanceDistanceAtr : f.SupportDistanceAtr) - g.TargetDistanceAtr)];
+        return primary.Concat(multi).Concat(geometry).ToArray();
     }
 }

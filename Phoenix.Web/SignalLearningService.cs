@@ -52,11 +52,11 @@ public sealed class SignalLearningService(
         await _refreshGate.WaitAsync(token);
         try
         {
-            var outcomeHistory = (await store.GetHistoryAsync(3650, 5000, token)).Select(x=>(Source:"main",Item:x))
-                .Concat((await shadow.Store.GetHistoryAsync(3650, 5000, token)).Select(x=>(Source:"observation",Item:x))).ToArray();
+            var outcomeHistory = (await store.GetLearningHistoryAsync(token)).Select(x=>(Source:"main",Item:x))
+                .Concat((await shadow.Store.GetLearningHistoryAsync(token)).Select(x=>(Source:"observation",Item:x))).ToArray();
             var history=outcomeHistory.Select(x=>x.Item);
             var completed = history.Select(x => x.Signal)
-                .Where(x => x.Outcome is "Target" or "StopLoss")
+                .Where(x => x.Outcome is "Target" or "StopLoss" or "RiskFree")
                 .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
                 .GroupBy(x => x.Id).Select(x => x.First()).ToArray();
             var patterns = new List<LearnedSignalPattern>(completed.Length);

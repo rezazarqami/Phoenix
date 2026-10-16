@@ -147,6 +147,32 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
+    internal async Task<IReadOnlyList<SignalHistoryItem>> GetLearningAsync(CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
+                FROM signals ORDER BY created_at_utc DESC;
+                """;
+            var result = new List<SignalHistoryItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
+                if (signal is null) continue;
+                result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
+                    reader.GetBoolean(3)));
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
     // Active snapshots are visible but quarantined: they can never resume execution
     // until their exchange state has been reconciled. The archive itself stays unchanged.
     internal async Task<List<ServerSignal>> ReadQueueForRecoveryAsync(CancellationToken token)

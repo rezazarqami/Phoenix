@@ -17,6 +17,17 @@ internal static class OutcomeModelTests
     private static void Check(bool condition, string message)
     { if (!condition) throw new Exception(message); }
 
+    public static void PlannedLevelGeometry()
+    {
+        var signal = new ServerSignal { Direction = "Long" };
+        var a = Basic with { TradeGeometry = new(1m, 1m, 2m, 2m, 5m) };
+        var b = Basic with { TradeGeometry = new(1m, 3m, 1m, 1m/3m, 5m) };
+        Check(!SignalOutcomeModel.Values(signal, a).SequenceEqual(SignalOutcomeModel.Values(signal, b)),
+            "Identical indicators with different target/stop placement must have different model inputs");
+        Check(SignalOutcomeModel.Values(signal, Basic).TakeLast(5).All(x => x is null),
+            "Missing historical geometry must remain missing, not fabricated");
+    }
+
     public static void LearnsOutcomesAndValidates()
     {
         var history = History();

@@ -25,6 +25,7 @@ jobs:
           node-version: "22"
       - name: Verify personal domain and offline UI behavior
         run: |
+          node Phoenix.Test/orbit-simple-tests.cjs
           node Phoenix.Test/personal-core-tests.cjs
           node Phoenix.Test/personal-worker-tests.cjs
           npm ci --prefix Phoenix.Test/ui --ignore-scripts --no-audit --no-fund

@@ -9,26 +9,44 @@
     <meta name="theme-color" content="#100d1a" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/phoenix-192.png" />
-    <link rel="stylesheet" href="/personal.css?v=7" />
+    <link rel="stylesheet" href="/personal.css?v=8" />
     <title>فضای شخصی رضا</title>
   </head>
   <body data-personal-workspace="2">
     <div class="app-shell">
       <aside class="sidebar">
         <a class="wordmark" href="/" aria-label="فضای شخصی رضا">
-          <span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="brand-type">مدار<small>REZA / PERSONAL SPACE</small></span>
+          <span class="brand-symbol" aria-hidden="true"
+            ><i></i><i></i><i></i
+          ></span>
+          <span class="brand-type"
+            >مدار<small>REZA / PERSONAL SPACE</small></span
+          >
         </a>
         <div class="nav-caption">فضای تو</div>
         <nav id="mainNav" aria-label="بخش‌های برنامه">
           <button data-page="today" aria-current="page">
-            <span class="nav-icon icon-today" aria-hidden="true"></span><span class="nav-label">امروز من</span></button
-          ><button data-page="records"><span class="nav-icon icon-records" aria-hidden="true"></span><span class="nav-label">ثبت‌ها</span></button
-          ><button data-page="path"><span class="nav-icon icon-path" aria-hidden="true"></span><span class="nav-label">مسیر من</span></button
-          ><button data-page="experience"><span class="nav-icon icon-experience" aria-hidden="true"></span><span class="nav-label">تجربه‌ها</span></button
-          ><button data-page="review"><span class="nav-icon icon-review" aria-hidden="true"></span><span class="nav-label">مرور</span></button>
+            <span class="nav-icon icon-today" aria-hidden="true"></span
+            ><span class="nav-label">امروز من</span></button
+          ><button data-page="records">
+            <span class="nav-icon icon-records" aria-hidden="true"></span
+            ><span class="nav-label">حسابداری</span></button
+          ><button data-page="path">
+            <span class="nav-icon icon-path" aria-hidden="true"></span
+            ><span class="nav-label">مسیر من</span></button
+          ><button data-page="tasks">
+            <span class="nav-icon icon-experience" aria-hidden="true"></span
+            ><span class="nav-label">کارهای من</span></button
+          ><button data-page="review">
+            <span class="nav-icon icon-review" aria-hidden="true"></span
+            ><span class="nav-label">مرور</span>
+          </button>
         </nav>
-        <div class="sidebar-note"><span class="tiny-star" aria-hidden="true">✦</span><p>هر روز، یک قدم<br><strong>نزدیک‌تر به خودت.</strong></p><span>MAKE ROOM FOR YOU</span></div>
+        <div class="sidebar-note">
+          <span class="tiny-star" aria-hidden="true">✦</span>
+          <p>هر روز، یک قدم<br /><strong>نزدیک‌تر به خودت.</strong></p>
+          <span>MAKE ROOM FOR YOU</span>
+        </div>
         <div class="sidebar-bottom">
           <a class="phoenix-link" href="/phoenix"
             ><span>PHOENIX</span> ورود به فونیکس ↗</a
@@ -43,7 +61,13 @@
           </div>
           <div class="top-actions">
             <a class="phoenix-entry" href="/phoenix">ورود به فونیکس ↗</a>
-            <button id="profileButton" class="profile-button" aria-label="تنظیمات فضای شخصی">ر</button>
+            <button
+              id="profileButton"
+              class="profile-button"
+              aria-label="تنظیمات فضای شخصی"
+            >
+              ر
+            </button>
             <button id="syncButton" class="sync-button" aria-label="همگام‌سازی">
               <i id="syncDot"></i
               ><span id="syncLabel">در حال اتصال</span></button
@@ -63,114 +87,93 @@
         </div>
         <main id="mainContent">
           <section id="page-today" class="page">
-            <div class="welcome-line"><span>سلام رضا <span aria-hidden="true">✦</span></span><span class="chapter-label">فصلِ امروز / ۰۱</span></div>
-            <section class="orbit-hero" aria-labelledby="heroTitle">
-              <div class="hero-copy">
-                <span class="eyebrow">A LIFE, INTENTIONALLY MADE.</span>
-                <h1 id="heroTitle">ریتمِ زندگی،<br><span>به انتخاب تو.</span></h1>
-                <p id="heroSummary">جا برای کارهای مهم، لحظه‌های کوچک و ایده‌های تازه.</p>
-                <button class="hero-action" data-new="task">امروز را بساز <span aria-hidden="true">↖</span></button>
+            <div class="page-heading">
+              <div>
+                <h1>امروز من</h1>
+                <p>روزها و کارهایی که پیش رو داری</p>
               </div>
-              <div class="orbit-scene" aria-label="پیشرفت کارهای مهم امروز">
-                <div class="orbit-track track-one" aria-hidden="true"></div><div class="orbit-track track-two" aria-hidden="true"></div><div class="orbit-track track-three" aria-hidden="true"></div>
-                <div class="orbit-core"><span>مدارِ امروز</span><strong id="orbitProgress">۰ / ۰</strong><small>کار مهم انجام‌شده</small></div>
-                <span class="orbit-pearl pearl-one" aria-hidden="true"></span><span class="orbit-pearl pearl-two" aria-hidden="true"></span><span class="orbit-pearl pearl-three" aria-hidden="true"></span>
-                <span class="orbit-caption" aria-hidden="true">SMALL STEPS. YOUR UNIVERSE.</span>
-              </div>
-            </section>
-            <div class="day-strip-heading"><span>روزهایت را مرور کن</span><small>۷ روز اخیر</small></div>
-            <div id="dayStrip" class="day-strip" aria-label="مرور ثبت‌های هفت روز اخیر"></div>
-            <button id="capturePrompt" class="capture-prompt"><span class="capture-plus" aria-hidden="true">＋</span><span><strong>چیزی در ذهنت هست؟</strong><small>یک فکر، یک هزینه، یک لحظه…</small></span><span class="capture-hint">ثبت سریع <span aria-hidden="true">↖</span></span></button>
-            <div id="todayMetrics" class="metrics"></div>
-            <div class="two-columns today-columns">
-              <section class="panel priorities-panel">
-                <div class="section-heading">
-                  <div>
-                    <span class="section-kicker">01 / FOCUS</span><h2>مهم‌ترین‌های امروز</h2>
-                    <small>تمرکز روی کارهایی که خودت انتخاب می‌کنی</small>
-                  </div>
-                  <button class="quiet" data-new="task">＋ کار</button>
-                </div>
-                <div id="importantTasks"></div>
-                <div class="section-heading minor">
-                  <h3>قرارها و کارهای امروز</h3>
-                </div>
-                <div id="todayTasks"></div>
-                <details class="disclosure">
-                  <summary>
-                    کارهای ناتمام روزهای قبل <span id="overdueCount"></span>
-                  </summary>
-                  <div id="overdueTasks"></div>
-                </details>
-              </section>
-              <section class="panel wellbeing-panel">
-                <div class="section-heading">
-                  <div><span class="section-kicker">02 / CHECK IN</span><h2>یک دقیقه برای خودت</h2></div>
-                  <button id="checkinButton" class="quiet">ثبت وضعیت</button>
-                </div>
-                <div id="todayCheckin"></div>
-                <div class="section-heading minor">
-                  <h3>عادت‌های این دوره</h3>
-                  <button class="quiet" data-new="habit">＋ عادت</button>
-                </div>
-                <div id="todayHabits"></div>
-              </section>
+              <button class="primary" data-new="task">＋ کار جدید</button>
             </div>
-            <section class="panel focus-panel">
+            <section class="calendar-panel panel">
               <div class="section-heading">
+                <button id="previousMonth" class="quiet" aria-label="ماه قبل">
+                  ماه قبل →
+                </button>
                 <div>
-                  <span class="section-kicker">03 / DEEP WORK</span><h2>به وقتِ تمرکز</h2>
-                  <small>زمان‌سنج یا ثبت دستی، متصل به هدف و پروژه</small>
+                  <h2 id="calendarMonth"></h2>
+                  <small id="gregorianMonth" dir="ltr"></small>
                 </div>
-                <button class="quiet" data-new="time">ثبت دستی</button>
+                <button id="nextMonth" class="quiet" aria-label="ماه بعد">
+                  ← ماه بعد
+                </button>
               </div>
-              <div id="timerHost"></div>
+              <div class="calendar-weekdays">
+                <span>شنبه</span><span>یکشنبه</span><span>دوشنبه</span
+                ><span>سه‌شنبه</span><span>چهارشنبه</span><span>پنجشنبه</span
+                ><span>جمعه</span>
+              </div>
+              <div id="monthGrid" class="month-grid"></div>
             </section>
-            <div class="discovery-row">
-              <button id="craftShortcut" class="discovery-card craft-discovery"><span class="discovery-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="section-kicker">THE MAKER'S NOTEBOOK</span><strong>از دست‌های تو،<br>به دفتر تجربه‌ها.</strong><span>تجربه‌های ساخت ساز <b aria-hidden="true">↖</b></span></button>
-              <button id="reviewShortcut" class="discovery-card review-discovery"><span class="review-art" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="section-kicker">PAUSE & REFLECT</span><strong>گاهی مکث کن.<br>مسیرت را ببین.</strong><span>مرور این هفته <b aria-hidden="true">↖</b></span></button>
+            <div class="section-heading">
+              <h2>روزهای پیش رو</h2>
+              <button id="goToday" class="quiet">برگشت به امروز</button>
             </div>
-            <section class="panel decisions-panel">
-              <div class="section-heading"><div><span class="section-kicker">04 / REFLECTION</span><h2>تصمیم‌های آمادهٔ مرور</h2></div></div>
-              <div id="dueDecisions"></div>
+            <p class="calendar-help">به چپ بکش: آینده · به راست بکش: گذشته</p>
+            <div
+              id="dayStrip"
+              class="day-strip"
+              aria-label="روزهای گذشته و آینده"
+              tabindex="0"
+            ></div>
+            <section class="panel">
+              <div class="section-heading">
+                <h2 id="selectedDayTitle"></h2>
+                <button id="addSelectedTask" class="quiet">
+                  ＋ کار این روز
+                </button>
+              </div>
+              <div id="selectedDayTasks"></div>
             </section>
           </section>
           <section id="page-records" class="page" hidden>
             <div class="page-heading">
               <div>
-                <span class="eyebrow">YOUR PERSONAL TIMELINE</span>
-                <h1>ثبت‌ها و خاطره‌ها</h1>
-                <p>اتفاق، هزینه و تجربه؛ با جزئیات و پیوست.</p>
+                <h1>حسابداری</h1>
+                <p>هزینه‌ها و درآمدها، با دسته‌های خودت</p>
               </div>
-              <button class="primary" data-new="journal">＋ یادداشت</button>
+              <button class="primary" data-new="finance">＋ تراکنش</button>
             </div>
+            <div class="button-row">
+              <button id="financeCategories" class="quiet">
+                دسته‌های هزینه و درآمد</button
+              ><button id="readSms" class="quiet">
+                دریافت پیامک‌های بانکی
+              </button>
+            </div>
+            <p id="smsStatus" role="status">
+              دریافت پیامک با اجازهٔ تو در نسخهٔ اندروید فعال می‌شود.
+            </p>
+            <section class="panel">
+              <h2 id="draftCount">پیش‌نویس‌های منتظر دسته‌بندی</h2>
+              <div id="financeDrafts"></div>
+            </section>
+            <div id="financeMetrics" class="metrics"></div>
             <div class="filters">
               <label
                 >جست‌وجو<input
                   id="recordSearch"
                   type="search"
-                  placeholder="عنوان، توضیح یا دسته‌بندی" /></label
+                  placeholder="عنوان یا دسته" /></label
               ><label
-                >نوع ثبت<select id="recordKind">
-                  <option value="all">همهٔ ثبت‌ها</option>
-                  <option value="finance">حساب‌وکتاب</option>
-                  <option value="vehicle">سوابق خودرو</option>
-                  <option value="journal">یادداشت‌ها</option>
-                  <option value="checkin">وضعیت روزانه</option>
-                  <option value="task">کارها</option>
-                  <option value="time">زمان فعالیت</option>
+                >نوع<select id="recordKind">
+                  <option value="all">همه</option>
+                  <option value="expense">هزینه</option>
+                  <option value="income">درآمد</option>
                 </select></label
               ><label>از تاریخ<input id="recordFrom" type="date" /></label
               ><label>تا تاریخ<input id="recordTo" type="date" /></label>
             </div>
-            <div class="section-heading">
-              <span id="recordCount"></span>
-              <div class="button-row">
-                <button data-new="finance" class="quiet">＋ تراکنش</button
-                ><button data-new="vehicle" class="quiet">＋ خودرو</button
-                ><button data-new="checkin" class="quiet">＋ وضعیت روز</button>
-              </div>
-            </div>
+            <div class="section-heading"><span id="recordCount"></span></div>
             <div id="recordList"></div>
             <button id="moreRecords" class="quiet" hidden>نمایش بیشتر</button>
           </section>
@@ -202,33 +205,23 @@
             </div>
             <div id="habitList" class="cards-grid"></div>
           </section>
-          <section id="page-experience" class="page" hidden>
+          <section id="page-tasks" class="page" hidden>
             <div class="page-heading">
               <div>
-                <span class="eyebrow">TURN EXPERIENCE INTO KNOWLEDGE</span>
-                <h1>تجربه و تصمیم</h1>
-                <p>دلیل تصمیم‌ها، آزمایش‌های ساز و تغییرهای زندگی.</p>
+                <h1>کارهای من</h1>
+                <p>کارها را دسته‌بندی کن و پس از انجام تیک بزن.</p>
               </div>
+              <button class="primary" data-new="task">＋ کار</button>
             </div>
-            <div id="experienceTabs" class="subnav" aria-label="انواع تجربه">
-              <button data-kind="decision" aria-pressed="true">
-                دفتر تصمیم‌ها</button
-              ><button data-kind="craft" aria-pressed="false">
-                تجربه‌های ساخت ساز</button
-              ><button data-kind="experiment" aria-pressed="false">
-                آزمایش تغییرها
-              </button>
+            <div class="button-row">
+              <button id="taskCategories" class="quiet">دسته‌های کارها</button
+              ><label>جست‌وجو<input id="taskSearch" type="search" /></label
+              ><label
+                ><input id="showDoneTasks" type="checkbox" /> نمایش
+                انجام‌شده‌ها</label
+              >
             </div>
-            <div class="filters compact">
-              <label
-                >جست‌وجو<input
-                  id="experienceSearch"
-                  type="search"
-                  placeholder="تجربه یا روش قبلی را پیدا کن" /></label
-              ><button id="newExperience" class="primary">＋ تصمیم</button>
-            </div>
-            <div id="experienceHint" class="note"></div>
-            <div id="experienceList"></div>
+            <div id="taskGroups"></div>
           </section>
           <section id="page-review" class="page" hidden>
             <div class="page-heading">
@@ -299,7 +292,6 @@
             </section>
           </section>
         </main>
-        <footer><span class="footer-mark">مدار</span> فضای شخصی تو <span aria-hidden="true">·</span> یک زندگی، به ریتم خودت.</footer>
       </div>
     </div>
     <dialog id="editorDialog" class="editor-dialog">
@@ -415,21 +407,86 @@
         </button>
       </div>
       <section class="settings-section mobile-security">
-        <span class="section-kicker">DEVICE / SECURITY</span><h3>امنیت و اعلان‌های گوشی</h3>
-        <p id="mobileSecurityStatus" role="status">در حال بررسی قابلیت‌های دستگاه…</p>
-        <div class="button-row"><button id="mobileLock" class="quiet" type="button">قفل‌کردن برنامه</button><button id="mobileNotifyPermission" class="quiet" type="button">اجازهٔ اعلان</button><button id="mobileExactPermission" class="quiet" type="button">اجازهٔ آلارم دقیق</button><button id="mobileTest" class="quiet" type="button">اعلان آزمایشی گوشی</button></div>
-        <p id="mobilePushStatus" role="status"></p><div class="button-row"><button id="mobileEnablePush" class="quiet" type="button">فعال‌سازی اعلان‌های سرور</button><button id="mobileDisablePush" class="quiet" type="button">خاموش‌کردن اعلان‌های سرور</button><button id="mobilePushTest" class="quiet" type="button">آزمایش اتصال سرور</button></div>
-        <h3>یادآوری روی این گوشی</h3><p>یادآوری حتی بیرون برنامه اجرا می‌شود؛ پس از ثبت نیازی به اینترنت ندارد.</p>
+        <span class="section-kicker">DEVICE / SECURITY</span>
+        <h3>اعلان و یادآوری گوشی</h3>
+        <p id="mobileSecurityStatus" role="status">
+          در حال بررسی قابلیت‌های دستگاه…
+        </p>
+        <div class="button-row">
+          <button id="mobileNotifyPermission" class="quiet" type="button">
+            اجازهٔ اعلان
+          </button>
+          <button id="mobileExactPermission" class="quiet" type="button">
+            اجازهٔ آلارم دقیق
+          </button>
+          <button id="mobileTest" class="quiet" type="button">
+            اعلان آزمایشی گوشی
+          </button>
+        </div>
+        <p id="mobilePushStatus" role="status"></p>
+        <div class="button-row">
+          <button id="mobileEnablePush" class="quiet" type="button">
+            فعال‌سازی اعلان‌های سرور</button
+          ><button id="mobileDisablePush" class="quiet" type="button">
+            خاموش‌کردن اعلان‌های سرور</button
+          ><button id="mobilePushTest" class="quiet" type="button">
+            آزمایش اتصال سرور
+          </button>
+        </div>
+        <h3>یادآوری روی این گوشی</h3>
+        <p>
+          یادآوری حتی بیرون برنامه اجرا می‌شود؛ پس از ثبت نیازی به اینترنت
+          ندارد.
+        </p>
         <form id="mobileReminderForm" class="form-grid">
-          <label>عنوان<input id="mobileReminderTitle" maxlength="200" required placeholder="مثلاً زمان مصرف دارو"></label>
-          <label>شروع از تاریخ و ساعت<input id="mobileReminderTime" type="datetime-local" required></label>
-          <label>تکرار<select id="mobileReminderRepeat"><option value="none">یک‌بار</option><option value="daily">هر روز</option><option value="weekly">روزهای منتخب هفته</option></select></label>
-          <fieldset id="mobileReminderDays" hidden><legend>روزهای تکرار</legend><div class="reminder-days"><label><input type="checkbox" value="6">شنبه</label><label><input type="checkbox" value="7">یکشنبه</label><label><input type="checkbox" value="1">دوشنبه</label><label><input type="checkbox" value="2">سه‌شنبه</label><label><input type="checkbox" value="3">چهارشنبه</label><label><input type="checkbox" value="4">پنجشنبه</label><label><input type="checkbox" value="5">جمعه</label></div></fieldset>
+          <label
+            >عنوان<input
+              id="mobileReminderTitle"
+              maxlength="200"
+              required
+              placeholder="مثلاً زمان مصرف دارو"
+          /></label>
+          <label
+            >شروع از تاریخ و ساعت<input
+              id="mobileReminderTime"
+              type="datetime-local"
+              required
+          /></label>
+          <label
+            >تکرار<select id="mobileReminderRepeat">
+              <option value="none">یک‌بار</option>
+              <option value="daily">هر روز</option>
+              <option value="weekly">روزهای منتخب هفته</option>
+            </select></label
+          >
+          <fieldset id="mobileReminderDays" hidden>
+            <legend>روزهای تکرار</legend>
+            <div class="reminder-days">
+              <label><input type="checkbox" value="6" />شنبه</label
+              ><label><input type="checkbox" value="7" />یکشنبه</label
+              ><label><input type="checkbox" value="1" />دوشنبه</label
+              ><label><input type="checkbox" value="2" />سه‌شنبه</label
+              ><label><input type="checkbox" value="3" />چهارشنبه</label
+              ><label><input type="checkbox" value="4" />پنجشنبه</label
+              ><label><input type="checkbox" value="5" />جمعه</label>
+            </div>
+          </fieldset>
           <p id="mobileReminderLink" class="record-meta"></p>
-          <div class="button-row"><button class="primary" id="mobileReminderSave" type="submit">ثبت یادآوری</button><button class="quiet" id="mobileReminderReset" type="button">پاک‌کردن فرم</button></div>
+          <div class="button-row">
+            <button class="primary" id="mobileReminderSave" type="submit">
+              ثبت یادآوری</button
+            ><button class="quiet" id="mobileReminderReset" type="button">
+              پاک‌کردن فرم
+            </button>
+          </div>
         </form>
-        <p id="mobileMessage" role="status" aria-live="polite"></p><div id="mobileReminderList"></div>
-        <small>مجوز اعلان و آلارم دقیق باید در اندروید فعال باشد. توقف اجباری برنامه و محدودیت باتری گوشی می‌تواند اعلان را متوقف یا عقب بیندازد؛ برای یادآوری حیاتی فقط به این برنامه تکیه نکن.</small>
+        <p id="mobileMessage" role="status" aria-live="polite"></p>
+        <div id="mobileReminderList"></div>
+        <small
+          >مجوز اعلان و آلارم دقیق باید در اندروید فعال باشد. توقف اجباری برنامه
+          و محدودیت باتری گوشی می‌تواند اعلان را متوقف یا عقب بیندازد؛ برای
+          یادآوری حیاتی فقط به این برنامه تکیه نکن.</small
+        >
       </section>
       <section class="settings-section">
         <h3>پشتیبان و انتقال اطلاعات</h3>
@@ -475,9 +532,23 @@
         </button>
       </section>
     </dialog>
-    <script src="/personal-core.js?v=2"></script>
-    <script src="/personal-storage.js?v=2"></script>
-    <script src="/mobile.js?v=2"></script>
-    <script src="/personal.js?v=6"></script>
+    <dialog id="categoryDialog">
+      <div class="section-heading">
+        <h2>دسته‌های من</h2>
+        <button data-close="categoryDialog" class="quiet">بستن</button>
+      </div>
+      <form id="categoryForm">
+        <label>نام دسته<input name="title" required maxlength="40" /></label
+        ><label>زیرمجموعهٔ<select name="parent"></select></label
+        ><button class="primary">افزودن دسته</button>
+        <p id="categoryError" role="status"></p>
+      </form>
+      <div id="categoryList"></div>
+    </dialog>
+    <script src="/orbit-simple.js?v=1"></script>
+    <script src="/personal-core.js?v=3"></script>
+    <script src="/personal-storage.js?v=3"></script>
+    <script src="/mobile.js?v=3"></script>
+    <script src="/personal.js?v=8"></script>
   </body>
 </html>

@@ -251,9 +251,9 @@
     flight = (async () => {
       let pending = await read("pending");
       // Parents are sent before linked records even when several were created offline.
-      const order = { goal: 0, project: 1, habit: 1 };
+      const order = { category: -1, goal: 0, project: 1, habit: 1 };
       pending.sort(
-        (a, b) => (order[a.entry?.kind] ?? 2) - (order[b.entry?.kind] ?? 2),
+        (a, b) => (order[a.entry?.kind] ?? 2) - (order[b.entry?.kind] ?? 2) || (a.entry?.kind === "category" && b.entry?.kind === "category" ? a.entry.title.split(" / ").length - b.entry.title.split(" / ").length : 0),
       );
       for (const job of pending) {
         if (job.blocked) continue;

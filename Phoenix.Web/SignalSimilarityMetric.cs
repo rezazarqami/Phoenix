@@ -26,7 +26,7 @@ internal sealed class SignalSimilarityMetric
     }
 
     internal double? Compare(ServerSignal candidate, TechnicalFeatureSnapshot features,
-        LearnedSignalPattern sample)
+        LearnedSignalPattern sample, bool matchTimeframe = true)
     {
         var a = Values(candidate, features); var b = Values(sample.Signal, sample.Features);
         var shared = scales.Where(x => a.ContainsKey(x.Key) && b.ContainsKey(x.Key)).ToArray();
@@ -35,7 +35,7 @@ internal sealed class SignalSimilarityMetric
         // Missing measurements never become matching zeros or inflate resemblance.
         var distance = shared.Average(x => Math.Pow(Math.Clamp((a[x.Key] - b[x.Key]) / x.Value, -6d, 6d), 2));
         return Math.Exp(-0.5d * distance) *
-            (SignalSimilarityService.TimeframeSimilarity(candidate.Timeframe, sample.Signal.Timeframe) ?? 1d);
+            (matchTimeframe ? SignalSimilarityService.TimeframeSimilarity(candidate.Timeframe, sample.Signal.Timeframe) ?? 1d : 1d);
     }
 
     private static Dictionary<string, double> Values(ServerSignal signal, TechnicalFeatureSnapshot features)
@@ -53,6 +53,12 @@ internal sealed class SignalSimilarityMetric
                 (double)level.CloudEntry * sign, (double)level.CloudStop * sign,
                 (double)level.CloudTarget * sign, (double)level.CloudBias * sign];
             for (var i = 0; i < readings.Length; i++) result[$"{level.Interval}:{level.Window}:{i}"] = readings[i];
+        }
+        if (features.TradeGeometry is { } g)
+        {
+            result["geometry:stop"] = (double)g.StopDistanceAtr;
+            result["geometry:target"] = (double)g.TargetDistanceAtr;
+            result["geometry:reward-risk"] = (double)g.RewardRisk;
         }
         return result;
     }

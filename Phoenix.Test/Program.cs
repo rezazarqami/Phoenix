@@ -49,6 +49,9 @@ Run("Outcome model learns approved evidence and validates chronologically", Outc
 Run("Outcome model rejects failed validation, duplication and future labels", OutcomeModelTests.RejectsUnvalidatedAndLeakedEvidence);
 Run("Outcome calibration isolates audit labels and rejects recent drift", OutcomeModelTests.CalibrationAndAuditIsolation);
 Run("Outcome models keep proposal and entry evidence separate", OutcomeModelTests.SeparatesEvidenceStages);
+Run("Learning reads complete archive without a rolling date window", SimilarityTests.LearningReadsEntireArchive);
+Run("Technical outcome inputs preserve proposed trade geometry", OutcomeModelTests.PlannedLevelGeometry);
+Run("Concise all-time counts include risk-free and separate other timeframes", SimilarityTests.ConciseThreeOutcomeCounts);
 Run("Similarity support excludes economic duplicates and labels historical frequencies", SimilarityTests.SupportAndEconomicDuplicates);
 Run("Technical cohorts enforce geometry, direction, past-only labels and diversity", TechnicalCohortTests.MembershipAndGeometry);
 Run("Outcome windows preserve first events, censoring and other exits", OutcomeWindowTests.FirstEventAndMissingness);

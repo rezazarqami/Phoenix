@@ -1,48 +1,17 @@
-using System.Globalization;
-
 namespace Phoenix.Web;
 
 internal static class SignalReviewText
 {
     internal static string Similarity(SignalSimilarityResult result)
     {
-        static string Percent(decimal? value) => value.HasValue
-            ? Math.Round(value.Value, 1, MidpointRounding.AwayFromZero).ToString("0.0", CultureInfo.InvariantCulture) + "٪"
-            : "—";
-
-        return Outcome(result.TargetOutcomePercent, result.StopOutcomePercent, result.OutcomeValidationCount) + $"\n\n🟢 <b>شباهت به تارگت‌ها: {Percent(result.TargetPercent)}</b>" +
-            $"\n🔴 <b>شباهت به استاپ‌ها: {Percent(result.StopPercent)}</b>" +
-            Comparison(result.TargetPercent, result.StopPercent) +
-            $"\n\n🧠 نمونه‌های تارگت: {result.TargetSampleCount} | استاپ: {result.StopSampleCount}" +
-            $"\n📐 نمونه‌های مقایسه: {result.CalibrationSampleCount}" + Support(result.Evidence);
+        return Outcome(result.TargetOutcomePercent, result.StopOutcomePercent, result.OutcomeValidationCount)
+            + Support(result.Evidence);
     }
-    internal static string Support(SimilarityEvidence? evidence)
+    internal static string Support(SimilarityEvidence? e)
     {
-        if (evidence is null) return "";
-        var stage = evidence.ReferenceStage == "proposal" ? "زمان پیشنهاد" : "لحظه ورود";
-        var text = $"\nمرجع شباهت: شرایط {stage} در گذشته." +
-            $"\nنمونه‌های نزدیکِ هم‌تایم‌فریم: {evidence.SameTimeframeNearbyTargets} تارگت / {evidence.SameTimeframeNearbyStops} استاپ.";
-        if (evidence.QueryStage != evidence.ReferenceStage)
-            text += "\nهنوز سابقهٔ کافی از زمان پیشنهاد نداریم؛ این مقایسه با شرایط ورود است.";
-        if (evidence.HistoricalTargetRate is { } rate)
-            text += $"\nسهم تارگت در همین نمونه‌های گذشته: {rate:0.0}٪؛ احتمال این سیگنال نیست.";
-        else text += "\nنمونه‌های نزدیک برای اعلام نرخ تاریخی کافی نیستند.";
-        if (evidence.TechnicalCohort is { } c)
-        {
-            text += $"\n🔬 نزدیک، هم‌جهت و فاصله‌های معاملاتی مشابه: {c.Targets} تارگت / {c.Stops} استاپ" +
-                $"\nپراکندگی: {c.DistinctDays} روز / {c.DistinctSymbols} نماد؛ تعداد مؤثر وزنی: {c.EffectiveSamples:0.#}" +
-                $"\n۳۰ روز اخیر این گروه: {c.RecentTargets} تارگت / {c.RecentStops} استاپ.";
-            if(c.BaselineTargetRate is { } baseline)
-                text += $"\nمرجع کل هم‌جهت و هم‌تایم‌فریم: {c.BaselineTargets} تارگت / {c.BaselineStops} استاپ ({baseline:0.#}٪ تارگت).";
-            foreach(var item in c.Conditions)
-                text += $"\n{item.Label}: {item.Targets} تارگت / {item.Stops} استاپ.";
-            text += "\nزیرگروه‌ها هم‌پوشان‌اند؛ تعداد مؤثر وزنی، تعداد تجربه‌های مستقل نیست؛ سیگنال‌های هم‌زمان می‌توانند وابسته باشند.";
-        }
-        text += Window(evidence.MainOutcomeWindow) + Window(evidence.ObservationOutcomeWindow);
-        if(evidence.Payoff is { } payoff)
-            text += $"\n⚖️ سود هدف / زیان استاپ: {payoff.RewardRisk:0.###}R؛ نرخ سربه‌سر نظری: {payoff.GrossBinaryBreakEvenRate:0.#}٪" +
-                "\nفقط با دو خروج تارگت/استاپ و بدون کارمزد و لغزش؛ احتمال موفقیت نیست.";
-        return text;
+        if (e is null) return "\nنمونه‌های مشابه: اطلاعات فنی کافی نیست.";
+        return $"\nنزدیکِ هم‌تایم‌فریم: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
+            $"\nنزدیکِ سایر تایم‌فریم‌ها: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
     }
     internal static string Window(OutcomeWindowEvidence? w)
     {
@@ -70,9 +39,9 @@ internal static class SignalReviewText
               "\nدرصد شباهت، احتمال نتیجه معامله نیست.";
     }
 
-    internal static string Outcome(decimal? target, decimal? stop, int validationCount) => target.HasValue
-        ? $"\n\n🎯 <b>برآورد تارگت پس از ورود: {target:0}٪</b>" +
-          $"\n🛑 <b>برآورد استاپ پس از ورود: {stop:0}٪</b>" +
-          $"\nاعتبارسنجی زمانی: {validationCount} نتیجه؛ مشروط به ورود و خروج تارگت/استاپ، بدون مهلت ثابت"
-        : "\n\nبرآورد نتیجه: داده یا اعتبارسنجی کافی برای مدل وجود ندارد.";
+    internal static string Outcome(decimal? target, decimal? stop, int validationCount) => target.HasValue && stop.HasValue
+        ? $"\n\n🎯 <b>احتمال ثبت تارگت: {target:0}٪</b>" +
+          $"\n🛑 <b>احتمال ثبت استاپ: {stop:0}٪</b>" +
+          "\nمشروط به ورود و خروج تارگت/استاپ."
+        : "\n\n🎯 احتمال ثبت تارگت: نامشخص\n🛑 احتمال ثبت استاپ: نامشخص";
 }

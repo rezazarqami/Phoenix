@@ -124,6 +124,57 @@ internal static class SimilarityTests
             "Structural evidence must be normalized to the signal direction");
     }
 
+    public static void LearningReadsEntireArchive()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "phoenix-learning-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var history = new SignalHistoryStore(Path.Combine(root, "queue.json"), Path.Combine(root, "history.db"));
+            var at = DateTime.UtcNow.AddYears(-15);
+            var signal = new ServerSignal { Id = Guid.NewGuid(), Symbol = "TESTUSDT", Direction = "Long",
+                CreatedAtUtc = at, EntryTriggeredAtUtc = at.AddDays(1), CompletedAtUtc = at.AddDays(4),
+                Outcome = "RiskFree", EntryPrice = 100, TakeProfit = 110, StopLoss = 90, EntryTechnicalFeatures = Features };
+            history.UpsertAsync(signal, "Test").GetAwaiter().GetResult();
+            Check(history.GetAsync(3650, 5000).GetAwaiter().GetResult().Count == 0,
+                "Fixture must lie outside the old history window");
+            Check(history.GetLearningAsync().GetAwaiter().GetResult().Single().Signal.Outcome == "RiskFree",
+                "Learning archive must retain old completed observations without a date window");
+        }
+        finally { SignalHistoryStore.ClearConnectionPools(); Directory.Delete(root, true); }
+    }
+
+    public static void ConciseThreeOutcomeCounts()
+    {
+        var at = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        LearnedSignalPattern Row(string outcome, string timeframe, int day) => new(new ServerSignal
+        {
+            Id = Guid.NewGuid(), Symbol = "TESTUSDT", Direction = "Long", Timeframe = timeframe,
+            EntryPrice = 100, TakeProfit = 110, StopLoss = 90,
+            EntryTriggeredAtUtc = at.AddDays(day), CompletedAtUtc = at.AddDays(day + 3)
+        }, outcome, Features);
+        var rows = new[] { Row("Target", "15", 0), Row("StopLoss", "15", 1), Row("RiskFree", "15", 2),
+            Row("Target", "D", 3), Row("StopLoss", "D", 4), Row("RiskFree", "D", 5) };
+        var candidate = new ServerSignal { Direction = "Long", Timeframe = "15", TechnicalFeatures = Features,
+            CreatedAtUtc = at.AddYears(6) };
+        var result = SignalSimilarityService.CalculateFromPatterns(candidate, rows.Concat(rows).ToArray());
+        Check(result.Evidence is { SameTimeframeNearbyTargets: 1, SameTimeframeNearbyStops: 1,
+            SameTimeframeNearbyRiskFree: 1, OtherTimeframeNearbyTargets: 1,
+            OtherTimeframeNearbyStops: 1, OtherTimeframeNearbyRiskFree: 1 },
+            "All-time, slow outcomes and other timeframes must count once each, including risk-free");
+        var text = SignalReviewText.Similarity(result);
+        Check(!text.Contains("۳۰") && !text.Contains("شباهت به") && !text.Contains("دقیقه") &&
+            !text.Contains("سربه‌سر") && text.Contains("ریسک‌فری") && text.Contains("نامشخص"),
+            "Concise summary must not expose diagnostics or disguise similarity as probability");
+        Check(SignalReviewText.Support(result.Evidence).Trim().Split('\n').Length == 2,
+            "Historical evidence must occupy exactly two lines");
+        var future = rows[0] with { Signal = new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
+            Timeframe = "15", CompletedAtUtc = candidate.CreatedAtUtc.AddDays(1) } };
+        Check(SignalSimilarityService.CalculateFromPatterns(candidate, rows.Append(future).ToArray()).Evidence == result.Evidence,
+            "Unknown future outcomes must never alter counts");
+        Check(SignalOutcomeModel.Train(rows) is null, "A few descriptive examples cannot activate probabilities");
+    }
+
     public static void SupportAndEconomicDuplicates()
     {
         var at = new DateTime(2026,1,1,0,0,0,DateTimeKind.Utc);
@@ -146,7 +197,7 @@ internal static class SimilarityTests
         var conflict=duplicate with { Outcome="StopLoss" };
         Check(SignalPatternIdentity.Unique(rows.Append(conflict)).Length==11,
             "Conflicting outcomes for the same episode must be excluded rather than arbitrarily chosen.");
-        Check(SignalReviewText.Support(result.Evidence).Contains("احتمال این سیگنال نیست"),
+        Check(!SignalReviewText.Support(result.Evidence).Contains("٪"),
             "Historical outcome frequencies must not be presented as new-signal probabilities.");
     }
 }

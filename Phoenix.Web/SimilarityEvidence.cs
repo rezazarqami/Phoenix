@@ -6,6 +6,10 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
     decimal EffectiveTargets, decimal EffectiveStops, int SameTimeframeNearbyTargets,
     int SameTimeframeNearbyStops)
 {
+    public int SameTimeframeNearbyRiskFree { get; init; }
+    public int OtherTimeframeNearbyTargets { get; init; }
+    public int OtherTimeframeNearbyStops { get; init; }
+    public int OtherTimeframeNearbyRiskFree { get; init; }
     public TechnicalCohortEvidence? TechnicalCohort { get; init; }
     public OutcomeWindowEvidence? MainOutcomeWindow { get; init; }
     public OutcomeWindowEvidence? ObservationOutcomeWindow { get; init; }

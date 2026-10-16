@@ -207,19 +207,12 @@ public static class SignalChartRenderer
             };
             if (note.Length > 0) DrawTinyText(pixels, width, height, 650, footerTop + 112, note, 2, 100, 100, 100);
         }
-        if (targetSimilarity.HasValue)
-            DrawSimilarityBar(pixels, width, height, 18, footerTop, "SIM TP", targetSimilarity.Value, 31, 170, 118);
-        if (stopSimilarity.HasValue)
-            DrawSimilarityBar(pixels, width, height, 18, footerTop + 52, "SIM SL", stopSimilarity.Value, 220, 55, 82);
-        if (elliott is null)
+        if (targetOutcome.HasValue && stopOutcome.HasValue)
         {
-            if (targetOutcome.HasValue && stopOutcome.HasValue)
-            {
-                DrawSimilarityBar(pixels, width, height, 385, footerTop, "EST TP", targetOutcome.Value, 31, 170, 118);
-                DrawSimilarityBar(pixels, width, height, 385, footerTop + 52, "EST SL", stopOutcome.Value, 220, 55, 82);
-            }
-            else DrawTinyText(pixels, width, height, 385, footerTop, "ESTIMATE UNAVAILABLE", 2, 90, 90, 90);
+            DrawSimilarityBar(pixels, width, height, 18, footerTop, "PROB TP", targetOutcome.Value, 31, 170, 118);
+            DrawSimilarityBar(pixels, width, height, 18, footerTop + 52, "PROB SL", stopOutcome.Value, 220, 55, 82);
         }
+        else DrawTinyText(pixels, width, height, 18, footerTop, "PROBABILITY UNKNOWN", 2, 90, 90, 90);
         return EncodePng(pixels, width, height);
 
         void Level(decimal value, byte r, byte g, byte b) => DrawLine(pixels, width, height, left, Y(value), width - right, Y(value), r, g, b, 2);

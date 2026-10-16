@@ -69,7 +69,7 @@ internal static class OutcomeModelTests
             "High resemblance cannot satisfy an outcome probability filter");
         Check(SignalBatchService.PassesOutcomeFilter(similarityOnly, 0m),
             "A disabled filter still allows human review when the model abstains");
-        Check(SignalBatchService.PassesOutcomeFilter(similarityOnly with { TargetOutcomePercent = 60m }, 55m),
+        Check(SignalBatchService.PassesOutcomeFilter(similarityOnly with { TargetOutcomePercent = 60m, OutcomeValidationCount = 20 }, 55m),
             "Validated estimates must drive the configured threshold");
         using var cts = new CancellationTokenSource(); cts.Cancel();
         try { SignalOutcomeModel.Train(History(), cts.Token); throw new Exception("Cancellation ignored"); }

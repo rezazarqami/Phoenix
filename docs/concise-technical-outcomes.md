@@ -1,5 +1,7 @@
 # Concise technical evidence — 2026-10-16
 
+> Updated policy: [October outcome audit](outcome-estimate-audit-fa.md) adds explicitly labelled, unvalidated same-stage/timeframe estimates when supported. Validated model gates and probability filters remain unchanged. Earlier statements that *all* unvalidated estimates remain blank describe the previous policy.
+
 The owner uses historical analogues to support discretionary level selection. The review is now two outcome-estimate lines and two historical count lines (same timeframe / other timeframes), each containing target, stop and risk-free counts. Diagnostic windows, recent subsets, weighted counts, subgroup breakdowns, payoff and similarity percentages are no longer displayed in Telegram, Phoenix cards or chart footers. Orbit and account ownership changes remain untouched.
 
 ## Counts

@@ -54,7 +54,8 @@ public sealed class EntrySignalReviewService(
         }
         var image = SignalChartRenderer.Render(chartCandles, candidate, false,
             Badge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent,
-            targetOutcome: signal.TargetOutcomePercent, stopOutcome: signal.StopOutcomePercent);
+            targetOutcome: signal.TargetOutcomePercent, stopOutcome: signal.StopOutcomePercent,
+            preliminaryOutcome: signal.OutcomeValidationCount == 0);
         return new(image, analysis is not null);
     }
 

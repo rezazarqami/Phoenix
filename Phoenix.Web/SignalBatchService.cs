@@ -9,7 +9,8 @@ public sealed class SignalBatchService(
     DedicatedTelegramNotifier dedicatedTelegram,
     ProfessionalSignalAnalysisService professional,
     ShadowSignalRuntime shadow,
-    IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
+    IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews,
+    ProposalLeverageCache? leverageInfo = null)
 {
     private readonly object _sync = new();
     private BatchState _state = BatchState.Idle;
@@ -451,7 +452,8 @@ public sealed class SignalBatchService(
             }
             var similarityResult = analysis.Prediction;
             var similarityLines = SignalReviewText.Similarity(similarityResult);
-            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
+            var leverageLines = leverageInfo?.Describe(selected.Symbol, selected.EntryPrice, selected.TakeProfit) ?? "";
+            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪{leverageLines}\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
             token.ThrowIfCancellationRequested();
             // Chart style is presentation-only; analysis retains the requested mode.
             var image = SignalChartRenderer.Render(chartCandles, selected, false,

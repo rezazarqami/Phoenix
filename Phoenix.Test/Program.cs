@@ -9,6 +9,9 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Proposal leverage displays raw, capped and unknown values without network calls", ProposalLeverageCacheTests.DisplayAndDailyRefresh);
+Run("Proposal leverage bulk refresh paginates and rejects invalid snapshots", ProposalLeverageCacheTests.PaginationAndFailure);
+
 Run("Staged protection follows 50/20 then 75/50/20 for Long and Short across restart", StagedRiskProtectionTests.BothDirections);
 Run("Staged protection handles gaps, failed market placement and unconfirmed cancellation", StagedRiskProtectionTests.GapsAndFailures);
 Run("Staged protection recovers duplicate acknowledgements and detects early fills", StagedRiskProtectionTests.DuplicateAndEarlyFill);

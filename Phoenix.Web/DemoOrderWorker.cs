@@ -222,7 +222,7 @@ public sealed class DemoOrderWorker(
                 ?? throw new InvalidOperationException("Signal leverage is missing."), token);
             var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
                 order.Direction == "Long" ? "Buy" : "Sell", token);
-            var result = await client.PlaceLimitOrderAsync(
+            var result = await client.PlaceMarketOrderAsync(
                 order.ToPreview(), order.OrderLinkId, positionIndex, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";

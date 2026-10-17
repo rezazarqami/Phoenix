@@ -109,7 +109,7 @@ public sealed class Strategy2Worker(
             await runtime.Client.SetLeverageAsync(order.Symbol, order.Leverage!.Value, token);
             var positionIndex = await runtime.Client.GetPositionIndexAsync(
                 order.Symbol, order.Direction == "Long" ? "Buy" : "Sell", token);
-            var result = await runtime.Client.PlaceLimitOrderAsync(
+            var result = await runtime.Client.PlaceMarketOrderAsync(
                 order.ToPreview(), order.OrderLinkId, positionIndex, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";

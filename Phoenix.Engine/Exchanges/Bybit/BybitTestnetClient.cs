@@ -311,7 +311,7 @@ public sealed partial class BybitDemoClient
         return request;
     }
 
-    public async Task<BybitOrderResult> PlaceLimitOrderAsync(
+    public async Task<BybitOrderResult> PlaceMarketOrderAsync(
         BybitOrderPreview preview,
         string? orderLinkId = null,
         int positionIndex = 0,
@@ -326,10 +326,8 @@ public sealed partial class BybitDemoClient
             ["category"] = "linear",
             ["symbol"] = NormalizeSymbol(preview.Symbol),
             ["side"] = preview.Side,
-            ["orderType"] = "Limit",
+            ["orderType"] = "Market",
             ["qty"] = FormatDecimal(preview.Quantity),
-            ["price"] = FormatDecimal(preview.Price),
-            ["timeInForce"] = "GTC",
             ["positionIdx"] = positionIndex,
             ["orderLinkId"] = orderLinkId,
             ["reduceOnly"] = false,

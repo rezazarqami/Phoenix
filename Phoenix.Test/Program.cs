@@ -706,27 +706,42 @@ Run("Bybit POST requests sign the exact JSON body", () =>
     Equal(64, request.Headers.GetValues("X-BAPI-SIGN").Single().Length);
 });
 
-Run("Bybit Demo limit orders include protection and return an order ID", () =>
+Run("Bybit market entries preserve Buy/Sell, quantity, identity and TP/SL without a limit price", () =>
 {
-    var handler = new StubHttpHandler(request =>
+    foreach (var side in new[] { "Buy", "Sell" })
     {
-        Equal("/v5/order/create", request.RequestUri!.AbsolutePath);
-        var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        True(body.Contains("\"orderType\":\"Limit\"", StringComparison.Ordinal));
-        True(body.Contains("\"takeProfit\":\"119000\"", StringComparison.Ordinal));
-        True(body.Contains("\"stopLoss\":\"118542\"", StringComparison.Ordinal));
-        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        var handler = new StubHttpHandler(request =>
         {
-            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"demo-123\",\"orderLinkId\":\"phoenix-test\"}}")
-        };
-    });
-    var client = new BybitDemoClient(
-        new BybitDemoOptions("test-key", "test-secret"),
-        new HttpClient(handler),
-        () => 1_700_000_000_000);
-    var preview = new BybitOrderPreview("BTCUSDT", "Buy", 0.001m, 118764m, 119000m, 118542m, 118.764m);
-    var result = client.PlaceLimitOrderAsync(preview, "phoenix-test").GetAwaiter().GetResult();
-    Equal("demo-123", result.OrderId);
+            Equal(HttpMethod.Post, request.Method);
+            Equal("/v5/order/create", request.RequestUri!.AbsolutePath);
+            using var document = System.Text.Json.JsonDocument.Parse(
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var body = document.RootElement;
+            Equal("Market", body.GetProperty("orderType").GetString()!);
+            Equal(side, body.GetProperty("side").GetString()!);
+            Equal("0.001", body.GetProperty("qty").GetString()!);
+            Equal("phoenix-test", body.GetProperty("orderLinkId").GetString()!);
+            Equal(side == "Buy" ? 1 : 2, body.GetProperty("positionIdx").GetInt32());
+            True(!body.GetProperty("reduceOnly").GetBoolean());
+            True(!body.TryGetProperty("price", out _));
+            True(!body.TryGetProperty("timeInForce", out _));
+            Equal("119000", body.GetProperty("takeProfit").GetString()!);
+            Equal("118542", body.GetProperty("stopLoss").GetString()!);
+            Equal("Market", body.GetProperty("tpOrderType").GetString()!);
+            Equal("Market", body.GetProperty("slOrderType").GetString()!);
+            Equal("Full", body.GetProperty("tpslMode").GetString()!);
+            return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"demo-123\",\"orderLinkId\":\"phoenix-test\"}}")
+            };
+        });
+        var client = new BybitDemoClient(
+            new BybitDemoOptions("test-key", "test-secret"), new HttpClient(handler),
+            () => 1_700_000_000_000);
+        var preview = new BybitOrderPreview("BTCUSDT", side, 0.001m, 118764m, 119000m, 118542m, 118.764m);
+        var result = client.PlaceMarketOrderAsync(preview, "phoenix-test", side == "Buy" ? 1 : 2).GetAwaiter().GetResult();
+        Equal("demo-123", result.OrderId);
+    }
 });
 
 Run("Bybit leverage is read from the Demo position setting", () =>

@@ -276,7 +276,7 @@ public partial class MainWindow : Window
 
         var preview = _lastPreview;
         var confirmation = MessageBox.Show(
-            $"این سفارش فقط به Bybit Demo ارسال می‌شود.\n\n{preview.Side} {preview.Quantity} {preview.Symbol}\nLimit: {preview.Price}\nTP: {preview.TakeProfit}\nSL: {preview.StopLoss}\n\nارسال شود؟",
+            $"این سفارش فقط به Bybit Demo ارسال می‌شود.\n\n{preview.Side} {preview.Quantity} {preview.Symbol}\nMarket (قیمت نهایی هنگام اجرا مشخص می‌شود)\nTP: {preview.TakeProfit}\nSL: {preview.StopLoss}\n\nارسال شود؟",
             "تأیید نهایی سفارش Demo",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
@@ -289,10 +289,10 @@ public partial class MainWindow : Window
 
         await RunBybitActionAsync(async () =>
         {
-            _lastDemoOrder = await _bybitClient.PlaceLimitOrderAsync(preview);
+            _lastDemoOrder = await _bybitClient.PlaceMarketOrderAsync(preview);
             _lastPreview = null;
             StatusValue.Text = "سفارش Demo ارسال شد";
-            Log($"سفارش Bybit Demo پذیرفته شد: {_lastDemoOrder.OrderId}، {_lastDemoOrder.Side} {_lastDemoOrder.Quantity} {_lastDemoOrder.Symbol} @ {_lastDemoOrder.Price}.");
+            Log($"سفارش Bybit Demo پذیرفته شد: {_lastDemoOrder.OrderId}، {_lastDemoOrder.Side} {_lastDemoOrder.Quantity} {_lastDemoOrder.Symbol} (Market).");
         });
     }
 
@@ -419,11 +419,11 @@ public partial class MainWindow : Window
                         order.ErrorMessage = "شناسه سفارش پیش از ارسال ذخیره نشد؛ برای جلوگیری از سفارش تکراری ارسال متوقف شد.";
                         continue;
                     }
-                    var result = await _bybitClient.PlaceLimitOrderAsync(preview, order.OrderLinkId);
+                    var result = await _bybitClient.PlaceMarketOrderAsync(preview, order.OrderLinkId);
                     order.BybitOrderId = result.OrderId;
                     order.SubmittedAtUtc = DateTime.UtcNow;
                     order.Status = QueuedOrderStatus.Submitted;
-                    Log($"سفارش صف به Bybit Demo ارسال شد: {result.OrderId}، {order.Side} {order.Quantity} {order.Symbol} @ {order.EntryPrice}.");
+                    Log($"سفارش صف به Bybit Demo ارسال شد: {result.OrderId}، {order.Side} {order.Quantity} {order.Symbol} (Market).");
                 }
                 catch (Exception exception) when (exception is HttpRequestException
                                                   or TaskCanceledException

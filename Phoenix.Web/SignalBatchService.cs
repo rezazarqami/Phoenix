@@ -456,7 +456,8 @@ public sealed class SignalBatchService(
             // Chart style is presentation-only; analysis retains the requested mode.
             var image = SignalChartRenderer.Render(chartCandles, selected, false,
                 TimeframeBadge(chartInterval), similarityResult.TargetPercent, similarityResult.StopPercent,
-                targetOutcome: similarityResult.TargetOutcomePercent, stopOutcome: similarityResult.StopOutcomePercent);
+                targetOutcome: similarityResult.TargetOutcomePercent, stopOutcome: similarityResult.StopOutcomePercent,
+                preliminaryOutcome: similarityResult.OutcomeValidationCount == 0);
             token.ThrowIfCancellationRequested();
             return new PreparedProposal(analysis, caption, image);
         }, token);
@@ -486,7 +487,8 @@ public sealed class SignalBatchService(
     private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "1" => "1M", "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value };
     internal static bool PassesOutcomeFilter(SignalSimilarityResult prediction, decimal minimum) =>
-        minimum <= 0m || prediction.TargetOutcomePercent is { } probability && probability >= minimum;
+        minimum <= 0m || prediction.OutcomeValidationCount > 0 &&
+            prediction.TargetOutcomePercent is { } probability && probability >= minimum;
 
     public static decimal EntryToTargetPercent(SignalCandidate candidate) => candidate.EntryPrice <= 0m
         ? 0m : candidate.Direction == "Long"

@@ -22,16 +22,19 @@ internal sealed class SignalOutcomeModel
     }
 
     internal static SignalOutcomeModel? Train(IReadOnlyList<LearnedSignalPattern> source,
-        CancellationToken token = default)
+        CancellationToken token = default, Action<OutcomeTrainingReport>? report = null)
     {
+        var audit = new OutcomeTrainingReport("not-started", source.Count);
+        SignalOutcomeModel? Reject(string reason) { report?.Invoke(audit with { Status = reason }); return null; }
         token.ThrowIfCancellationRequested();
-        if (source.Select(x => x.EvidenceStage).Distinct().Count() > 1) return null;
+        if (source.Select(x => x.EvidenceStage).Distinct().Count() > 1) return Reject("mixed-stages");
         // Unknown timestamps, open trades and duplicate records cannot train or validate.
-        var rows = SignalPatternIdentity.Unique(source.Where(x => x.Outcome is "Target" or "StopLoss")
-            .Where(x => x.Signal.Id != Guid.Empty && x.ObservedAtUtc is not null &&
+        var rows = SignalPatternIdentity.Unique(source.Where(x => x.Signal.Id != Guid.Empty && x.ObservedAtUtc is not null &&
                 x.Signal.CompletedAtUtc > x.ObservedAtUtc))
+            .Where(x => x.Outcome is "Target" or "StopLoss")
             .OrderBy(x => x.ObservedAtUtc).ToArray();
-        if (rows.Length < 100 || rows.Select(x => x.EvidenceStage).Distinct().Count() != 1) return null;
+        audit = audit with { EligibleCount = rows.Length };
+        if (rows.Length < 100 || rows.Select(x => x.EvidenceStage).Distinct().Count() != 1) return Reject("insufficient-completed-evidence");
         // Three chronological blocks: fit / calibration / untouched audit.
         // Purge labels that would still be unknown at the following boundary.
         var calibrationStart = rows[rows.Length * 3 / 5].ObservedAtUtc!.Value;
@@ -41,11 +44,12 @@ internal sealed class SignalOutcomeModel
         var calibration = rows.Where(x => x.ObservedAtUtc >= calibrationStart &&
             x.ObservedAtUtc < auditStart && x.Signal.CompletedAtUtc < auditStart).ToArray();
         var validation = rows.Where(x => x.ObservedAtUtc >= auditStart).ToArray();
+        audit = audit with { TrainingCount = training.Length, CalibrationCount = calibration.Length, ValidationCount = validation.Length };
         if (!Enough(training) || !Enough(calibration) || !Enough(validation) ||
-            calibration.Length < 20 || validation.Length < 20) return null;
+            calibration.Length < 20 || validation.Length < 20) return Reject("insufficient-purged-block-support");
         var fitted = Fit(training, token);
         var calibrationScores = calibration.Select(x => fitted.RawScore(x.Signal, x.Features)).ToArray();
-        if (calibrationScores.Any(x => x is null)) return null;
+        if (calibrationScores.Any(x => x is null)) return Reject("insufficient-calibration-features");
         (fitted.calibrationSlope, fitted.calibrationIntercept) = OutcomeCalibration.Fit(
             calibrationScores.Select(x => x!.Value).ToArray(),
             calibration.Select(x => x.Outcome == "Target").ToArray(), token);
@@ -56,7 +60,7 @@ internal sealed class SignalOutcomeModel
         {
             token.ThrowIfCancellationRequested();
             var score = fitted.RawScore(row.Signal, row.Features);
-            if (score is null) return null;
+            if (score is null) return Reject("insufficient-validation-features");
             predictions.Add((Logistic(fitted.calibrationSlope * score.Value +
                 fitted.calibrationIntercept), row.Outcome == "Target"));
         }
@@ -68,8 +72,9 @@ internal sealed class SignalOutcomeModel
         var baselineLogLoss = predictions.Average(x => OutcomeCalibration.LogLoss(prior, x.Target));
         // Score unrounded probabilities; one lucky older half must not hide recent failure.
         var recent = predictions.Skip(predictions.Count / 2).ToArray();
+        audit = audit with { Brier = brier, BaselineBrier = baseline, LogLoss = logLoss, BaselineLogLoss = baselineLogLoss };
         if (brier >= baseline * 0.95d || logLoss >= baselineLogLoss ||
-            recent.Average(Brier) >= recent.Average(BaseBrier)) return null;
+            recent.Average(Brier) >= recent.Average(BaseBrier)) return Reject("failed-out-of-time-validation");
         // Never refit on the audit labels or use them to choose the calibrator.
         fitted.EvidenceStage = rows[0].EvidenceStage;
         fitted.CalibrationCount = calibration.Length;
@@ -78,6 +83,7 @@ internal sealed class SignalOutcomeModel
         fitted.ValidationLogLoss = logLoss; fitted.BaselineLogLoss = baselineLogLoss;
         fitted.Reliability = OutcomeCalibration.Bins(predictions);
         fitted.trainedThroughUtc = rows.Max(x => x.Signal.CompletedAtUtc!.Value);
+        report?.Invoke(audit with { Status = "validated" });
         return fitted;
     }
 
@@ -126,7 +132,7 @@ internal sealed class SignalOutcomeModel
         string evidenceStage = "entry", DateTime? observedAtUtc = null)
     {
         if (evidenceStage != EvidenceStage) return null;
-        var evidenceTime = observedAtUtc ?? signal.EntryTriggeredAtUtc ??
+        var evidenceTime = observedAtUtc ?? (evidenceStage == "entry" ? signal.EntryTriggeredAtUtc : signal.ProposalEvidence?.ObservedAtUtc) ??
             (signal.CreatedAtUtc == default ? DateTime.UtcNow : signal.CreatedAtUtc);
         if (evidenceTime <= trainedThroughUtc) return null;
         var score = RawScore(signal, features);
@@ -198,3 +204,7 @@ internal sealed class SignalOutcomeModel
         return primary.Concat(multi).Concat(geometry).ToArray();
     }
 }
+
+internal sealed record OutcomeTrainingReport(string Status, int SourceCount,
+    int EligibleCount = 0, int TrainingCount = 0, int CalibrationCount = 0, int ValidationCount = 0,
+    double? Brier = null, double? BaselineBrier = null, double? LogLoss = null, double? BaselineLogLoss = null);

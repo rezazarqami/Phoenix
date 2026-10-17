@@ -16,6 +16,8 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build and run complete Phoenix regression suite
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release
+      - name: Verify frozen probability audit
+        run: python3 Phoenix.Test/frozen-probability-audit-tests.py
       - name: Verify private workspace and shared authentication
         run: python3 Phoenix.Test/personal-access-tests.py
       - name: Verify owner-only account removal and session revocation

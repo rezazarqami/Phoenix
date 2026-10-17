@@ -9,19 +9,33 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
+        return CalculateFromSnapshot(candidate, snapshot, token);
+    }
+
+    internal static SignalSimilarityResult CalculateFromSnapshot(ServerSignal candidate,
+        SignalLearningSnapshot snapshot, CancellationToken token = default)
+    {
+        if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var atEntry = candidate.EntryTriggeredAtUtc is not null;
         var stage = atEntry ? "entry" : "proposal";
         // Proposal and entry fingerprints describe different moments. Never apply
         // an entry-validated model to a proposal or silently pool the two cohorts.
-        var useProposals = !atEntry && snapshot.ProposalPatterns.Count(x => x.Outcome == "Target") >= 5 &&
-            snapshot.ProposalPatterns.Count(x => x.Outcome == "StopLoss") >= 5;
-        var patterns = useProposals ? snapshot.ProposalPatterns : snapshot.Patterns;
+        var cutoff = candidate.EntryTriggeredAtUtc ?? candidate.ProposalEvidence?.ObservedAtUtc ?? candidate.CreatedAtUtc;
+        var pastProposals = SignalPatternIdentity.Unique(snapshot.ProposalPatterns.Where(x =>
+            x.Signal.Id != candidate.Id && x.Signal.CompletedAtUtc < cutoff));
+        var useProposals = !atEntry && pastProposals.Count(x => x.Outcome == "Target") >= 5 &&
+            pastProposals.Count(x => x.Outcome == "StopLoss") >= 5;
+        var patterns = useProposals ? pastProposals : snapshot.Patterns;
         var similarity = CalculateFromPatterns(candidate, patterns, token);
         var model = atEntry ? snapshot.OutcomeModel : snapshot.ProposalOutcomeModel;
         var probability = model?.Predict(candidate, candidate.TechnicalFeatures, stage);
+        var validated = probability.HasValue;
+        var estimate = validated ? null : PreliminaryOutcomeEstimator.Estimate(candidate,
+            atEntry ? snapshot.Patterns : snapshot.ProposalPatterns, stage, token);
+        probability ??= estimate?.TargetPercent;
         return similarity with { TargetOutcomePercent = probability,
             StopOutcomePercent = probability.HasValue ? 100m - probability.Value : null,
-            OutcomeValidationCount = probability.HasValue ? model!.ValidationCount : 0 };
+            OutcomeValidationCount = validated ? model!.ValidationCount : 0, OutcomeEstimate = estimate };
     }
 
     internal static SignalSimilarityResult CalculateFromPatterns(ServerSignal candidate,
@@ -29,7 +43,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         SignalSimilarityMetric? metric = null)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
-        var cutoff = candidate.EntryTriggeredAtUtc ?? (candidate.CreatedAtUtc == default ? (DateTime?)null : candidate.CreatedAtUtc);
+        var cutoff = candidate.EntryTriggeredAtUtc ?? candidate.ProposalEvidence?.ObservedAtUtc ?? (candidate.CreatedAtUtc == default ? (DateTime?)null : candidate.CreatedAtUtc);
         patterns = SignalPatternIdentity.Unique(patterns.Where(x => x.Signal.Id != candidate.Id || candidate.Id == Guid.Empty)
             .Where(x => cutoff is null || x.Signal.CompletedAtUtc < cutoff));
         if (cutoff is not null) metric = null; // Historical reviews need a past-only ruler.
@@ -218,4 +232,5 @@ public sealed record SignalSimilarityResult(decimal? TargetPercent, decimal? Sto
     int OutcomeValidationCount = 0)
 {
     public SimilarityEvidence? Evidence { get; init; }
+    public OutcomeEstimateEvidence? OutcomeEstimate { get; init; }
 }

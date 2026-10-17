@@ -6,8 +6,9 @@ function similaritySupport(e) {
   return `<small>نزدیکِ هم‌تایم‌فریم: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ / ${n(e.sameTimeframeNearbyRiskFree)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ / ${n(e.otherTimeframeNearbyRiskFree)} ریسک‌فری</small>`;
 }
 function outcomeSummary(s) {
-  const percent = v => v == null ? 'نامشخص' : `${fa.format(v)}٪`;
-  return `🎯 احتمال ثبت تارگت: <b>${percent(s.targetOutcomePercent)}</b><br>🛑 احتمال ثبت استاپ: <b>${percent(s.stopOutcomePercent)}</b>${s.targetOutcomePercent == null ? '' : '<small>مشروط به ورود و خروج تارگت/استاپ.</small>'}`;
+  const qualifier = s.outcomeValidationCount > 0 ? 'مشروط' : 'تخمینی، مشروط';
+  const percent = v => v == null ? 'نامشخص' : `${fa.format(v)}٪ (${qualifier})`;
+  return `🎯 احتمال ثبت تارگت: <b>${percent(s.targetOutcomePercent)}</b><br>🛑 احتمال ثبت استاپ: <b>${percent(s.stopOutcomePercent)}</b>`;
 }
 const connection = document.querySelector('#connection');
 const price = document.querySelector('#price');

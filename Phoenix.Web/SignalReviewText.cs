@@ -39,9 +39,13 @@ internal static class SignalReviewText
               "\nدرصد شباهت، احتمال نتیجه معامله نیست.";
     }
 
-    internal static string Outcome(decimal? target, decimal? stop, int validationCount) => target.HasValue && stop.HasValue
-        ? $"\n\n🎯 <b>احتمال ثبت تارگت: {target:0}٪</b>" +
-          $"\n🛑 <b>احتمال ثبت استاپ: {stop:0}٪</b>" +
-          "\nمشروط به ورود و خروج تارگت/استاپ."
-        : "\n\n🎯 احتمال ثبت تارگت: نامشخص\n🛑 احتمال ثبت استاپ: نامشخص";
+    internal static string Outcome(decimal? target, decimal? stop, int validationCount)
+    {
+        // Keep exactly two lines; no diagnostic panel or extra conditional row.
+        var qualifier = validationCount > 0 ? "مشروط" : "تخمینی، مشروط";
+        return target.HasValue && stop.HasValue
+            ? $"\n\n🎯 <b>احتمال ثبت تارگت: {target:0}٪ ({qualifier})</b>" +
+              $"\n🛑 <b>احتمال ثبت استاپ: {stop:0}٪ ({qualifier})</b>"
+            : "\n\n🎯 احتمال ثبت تارگت: نامشخص\n🛑 احتمال ثبت استاپ: نامشخص";
+    }
 }

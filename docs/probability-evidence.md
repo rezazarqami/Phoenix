@@ -1,5 +1,7 @@
 # Probability and resemblance evidence
 
+> Updated policy: [October outcome audit](outcome-estimate-audit-fa.md) adds explicitly labelled, unvalidated same-stage/timeframe estimates when supported. Validated model gates and probability filters remain unchanged. Earlier statements that *all* unvalidated estimates remain blank describe the previous policy.
+
 Resemblance percentages are independently normalized technical distances to target and stop examples. They are not probabilities and need not add to 100. The interface also reports comparable counts, nearby same-timeframe outcomes and the observation stage. A historical target frequency is descriptive and is only displayed with at least ten nearby same-timeframe examples; it is not a calibrated forecast or confidence interval.
 
 Proposal-time and entry-time features now use closed candles. Version 3 marks this consistent extraction policy. Frozen version-3 proposal evidence is trained separately from entry evidence. Older proposal snapshots are not relabeled as closed-candle observations. Entry examples can still provide explicitly labeled descriptive references while proposal history grows, but the entry model cannot supply a proposal probability. Both models condition on entered signals eventually ending in Target or StopLoss; expiries, risk-free and manual closes are separate outcomes.

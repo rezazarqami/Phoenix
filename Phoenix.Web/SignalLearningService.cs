@@ -12,6 +12,8 @@ public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> 
 {
     internal SignalSimilarityMetric? SimilarityMetric { get; init; }
     internal SignalOutcomeModel? OutcomeModel { get; init; }
+    internal OutcomeTrainingReport? EntryTrainingReport { get; init; }
+    internal OutcomeTrainingReport? ProposalTrainingReport { get; init; }
     internal SignalOutcomeModel? ProposalOutcomeModel { get; init; }
     public IReadOnlyList<LearnedSignalPattern> ProposalPatterns { get; init; } = [];
     internal IReadOnlyList<(string Source,SignalHistoryItem Item)> OutcomeHistory { get; init; } = [];
@@ -58,7 +60,8 @@ public sealed class SignalLearningService(
             var completed = history.Select(x => x.Signal)
                 .Where(x => x.Outcome is "Target" or "StopLoss" or "RiskFree")
                 .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
-                .GroupBy(x => x.Id).Select(x => x.First()).ToArray();
+                .GroupBy(x => x.Id).Where(g => g.Select(x => x.Outcome).Distinct().Count() == 1)
+                .Select(x => x.First()).ToArray();
             var patterns = new List<LearnedSignalPattern>(completed.Length);
             foreach (var signal in completed)
             {
@@ -80,11 +83,16 @@ public sealed class SignalLearningService(
                         CreatedAtUtc=x.ProposalEvidence.ObservedAtUtc
                     }, x.Outcome!, x.ProposalEvidence!.Features)
                     { ObservedAtUtc = x.ProposalEvidence!.ObservedAtUtc, EvidenceStage = "proposal" }).ToArray();
+            OutcomeTrainingReport? entryReport = null, proposalReport = null;
+            var entryModel = SignalOutcomeModel.Train(patterns, token, r => entryReport = r);
+            var proposalModel = SignalOutcomeModel.Train(proposals, token, r => proposalReport = r);
             _snapshot = new(patterns, DateTime.UtcNow)
-            { OutcomeModel = SignalOutcomeModel.Train(patterns, token),
+            { OutcomeModel = entryModel, EntryTrainingReport = entryReport, ProposalTrainingReport = proposalReport,
                 OutcomeHistory = outcomeHistory,
-                ProposalPatterns = proposals, ProposalOutcomeModel = SignalOutcomeModel.Train(proposals, token),
+                ProposalPatterns = proposals, ProposalOutcomeModel = proposalModel,
                 SimilarityMetric = SignalSimilarityMetric.Build(patterns) };
+            logger.LogInformation("Phoenix outcome training: entry={EntryStatus}, proposal={ProposalStatus}, eligible proposal outcomes={ProposalCount}.",
+                entryReport?.Status, proposalReport?.Status, proposalReport?.EligibleCount);
             logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}.",
                 patterns.Count, _snapshot.OutcomeModel is not null, _snapshot.OutcomeModel?.ValidationCount ?? 0,
                 _snapshot.OutcomeModel?.ValidationBrier, _snapshot.OutcomeModel?.BaselineBrier);

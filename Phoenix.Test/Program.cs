@@ -55,6 +55,9 @@ Run("Evaluation export preserves provenance, excludes private data and refuses t
 Run("Crypto statistics include lifetime trades and ignore unentered signals", CryptoStatisticsTests.Lifetime);
 Run("Crypto statistics migrate queues, retain removed trades and refresh outcomes", CryptoStatisticsTests.Migration);
 
+Run("Preliminary estimates use outcome frequencies with inline status", PreliminaryOutcomeTests.FrequenciesNotResemblance);
+Run("Preliminary estimates exclude unsupported, future and mismatched evidence", PreliminaryOutcomeTests.MissingnessAndTemporalIsolation);
+Run("Training diagnostics and proposal clocks remain auditable", PreliminaryOutcomeTests.TrainingReportsAndProposalClock);
 Run("Outcome model learns approved evidence and validates chronologically", OutcomeModelTests.LearnsOutcomesAndValidates);
 Run("Outcome model rejects failed validation, duplication and future labels", OutcomeModelTests.RejectsUnvalidatedAndLeakedEvidence);
 Run("Outcome calibration isolates audit labels and rejects recent drift", OutcomeModelTests.CalibrationAndAuditIsolation);

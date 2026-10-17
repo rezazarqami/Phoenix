@@ -34,6 +34,12 @@ public sealed class StagedRiskProtection(BybitDemoClient client, ServerOrderStor
         order.ProtectionStage = Math.Max(order.ProtectionStage, stage);
         if (order.ProtectionStage == 0) return false;
         await store.UpdateAsync(order, token);
+        if (order.ProtectionStage == 1 && !string.IsNullOrWhiteSpace(order.EarlyStopLimitOrderId)) return false;
+        if (order.ProtectionStage == 2 && order.RiskFreeReachedAtUtc is not null &&
+            !string.IsNullOrWhiteSpace(order.StopLoss2OrderId) &&
+            !string.IsNullOrWhiteSpace(order.RiskFreeStopMarketOrderId) &&
+            (string.IsNullOrWhiteSpace(order.EarlyStopLimitOrderId) || order.EarlyStopLimitCancelledAtUtc is not null))
+            return false;
 
         var rules = await client.GetInstrumentRulesAsync(order.Symbol, token);
         var positionIndex = await client.GetPositionIndexAsync(order.Symbol,

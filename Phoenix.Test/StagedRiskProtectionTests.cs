@@ -66,6 +66,14 @@ internal static class StagedRiskProtectionTests
     public static void DuplicateAndEarlyFill() => CheckDuplicateAndEarlyFill().GetAwaiter().GetResult();
     private static async Task CheckDuplicateAndEarlyFill()
     {
+        using (var race = new Harness("Short"))
+        {
+            await race.Save(); await race.Advance(race.Level(.50m));
+            race.FillOnCancel = true;
+            await ExpectFailure(() => race.Advance(race.Level(.75m)));
+            Check(race.Signal.RiskFreeReachedAtUtc is null && race.Signal.EarlyStopLimitCancelledAtUtc is null);
+            Check((await race.Protection.FilledAsync(race.Signal, default))?.OrderId == race.Signal.EarlyStopLimitOrderId);
+        }
         using var h = new Harness("Long");
         await h.Save(); await h.Advance(h.Level(.50m));
         var early = h.Signal.EarlyStopLimitOrderId!;
@@ -110,6 +118,7 @@ internal static class StagedRiskProtectionTests
         private readonly Dictionary<string, string> links = [];
         public bool FailMarket;
         public bool ConfirmCancellation = true;
+        public bool FillOnCancel;
         public StagedRiskProtection Protection => new(client, store);
         public Harness(string direction)
         {
@@ -153,7 +162,8 @@ internal static class StagedRiskProtectionTests
             if (path.EndsWith("order/cancel"))
             {
                 var id = body.GetProperty("orderId").GetString()!; Events.Add("Cancel");
-                if (ConfirmCancellation) Status[id] = "Cancelled";
+                if (FillOnCancel) Status[id] = "Filled";
+                else if (ConfirmCancellation) Status[id] = "Cancelled";
                 return Json(JsonSerializer.Serialize(new { orderId = id, orderLinkId = "" }));
             }
             Check(path.EndsWith("order/create"));

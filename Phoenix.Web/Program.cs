@@ -22,6 +22,8 @@ builder.Services.AddSingleton<ServerState>();
 builder.Services.AddSingleton<ServerOrderStore>();
 builder.Services.AddSingleton<SignalCancellationService>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
+builder.Services.AddSingleton<ProposalLeverageCache>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<ProposalLeverageCache>());
 builder.Services.AddHttpClient("MarketCap", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);

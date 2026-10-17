@@ -150,16 +150,14 @@ public sealed class Strategy2Worker(
     {
         if (order.CompletedAtUtc is not null) return;
         BackfillLevels(order);
-        if (!string.IsNullOrWhiteSpace(order.StopLoss2OrderId))
+        var filled = await new StagedRiskProtection(runtime.Client, runtime.Store).FilledAsync(order, token);
+        if (filled is not null)
         {
-            var sl2 = await runtime.Client.GetOrderStatusAsync(order.StopLoss2OrderId, token);
-            if (sl2?.Status == "Filled")
-            {
-                Complete(order, "RiskFree");
-                await telegram.ClosedRiskFreeAsync(order, token);
-                await runtime.Store.UpdateAsync(order, token);
-                return;
-            }
+            Complete(order, "RiskFree");
+            await CancelSl2Async(order, token, filled.OrderId);
+            await telegram.ClosedRiskFreeAsync(order, token);
+            await runtime.Store.UpdateAsync(order, token);
+            return;
         }
         if (DemoOrderWorker.TargetReached(order, price))
         {
@@ -167,26 +165,17 @@ public sealed class Strategy2Worker(
             await CancelSl2Async(order, token);
             await telegram.TargetAsync(order, token);
         }
-        else if (order.RiskFreeReachedAtUtc is null && order.RiskFreePrice is { } rf &&
-                 order.StopLoss2 is { } sl2 && ProfitReached(order, price, rf))
+        else
         {
             try
             {
-                var rules = await runtime.Client.GetInstrumentRulesAsync(order.Symbol, token);
-                var positionIndex = await runtime.Client.GetPositionIndexAsync(order.Symbol,
-                    order.Direction == "Long" ? "Buy" : "Sell", token);
-                var result = await runtime.Client.PlaceStopLimitAsync(order.Symbol, order.Direction,
-                    order.ExecutedQuantity ?? order.Quantity, sl2, rules.TickSize,
-                    $"s2sl-{order.Id:N}"[..36], positionIndex, token);
-                order.StopLoss2 = result.Price;
-                order.StopLoss2OrderId = result.OrderId;
-                order.RiskFreeReachedAtUtc = DateTime.UtcNow;
-                await telegram.RiskFreeAsync(order, token);
+                if (await new StagedRiskProtection(runtime.Client, runtime.Store).AdvanceAsync(order, price, token))
+                    await telegram.RiskFreeAsync(order, token);
             }
             catch (Exception exception)
             {
-                order.Error = "SL2: " + exception.Message;
-                logger.LogError(exception, "Strategy 2 SL2 failed");
+                order.Error = "Risk-free protection: " + exception.Message;
+                logger.LogError(exception, "Strategy 2 protection failed");
             }
         }
         if (DemoOrderWorker.StopLossReached(order, price))
@@ -198,11 +187,11 @@ public sealed class Strategy2Worker(
         await runtime.Store.UpdateAsync(order, token);
     }
 
-    private async Task CancelSl2Async(ServerSignal order, CancellationToken token)
+    private async Task CancelSl2Async(ServerSignal order, CancellationToken token, string? exceptOrderId = null)
     {
-        if (string.IsNullOrWhiteSpace(order.StopLoss2OrderId)) return;
-        try { await runtime.Client.CancelOrderAsync(order.Symbol, order.StopLoss2OrderId, token); }
-        catch (Exception exception) { logger.LogWarning(exception, "Strategy 2 SL2 cancellation failed"); }
+        foreach (var id in StagedRiskProtection.OrderIds(order).Where(id => id != exceptOrderId))
+            try { await runtime.Client.CancelOrderAsync(order.Symbol, id, token); }
+            catch (Exception exception) { logger.LogWarning(exception, "Strategy 2 protection cancellation failed"); }
     }
 
     private static bool IsActive(ServerSignal x) => x.Status is "Pending" or "Submitted" or "Filled";

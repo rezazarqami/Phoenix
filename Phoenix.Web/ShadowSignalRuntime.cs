@@ -27,7 +27,8 @@ public sealed class ShadowSignalRuntime
             StopLoss = candidate.StopLoss, LastPrice = candidate.LastPrice,
             StopLoss2 = candidate.StopLoss2 ?? candidate.EntryPrice + (candidate.TakeProfit - candidate.EntryPrice) * .50m,
             RiskFreePrice = candidate.RiskFreePrice ?? candidate.EntryPrice + (candidate.TakeProfit - candidate.EntryPrice) * .75m,
-            RiskFreeStopMarket = DemoOrderWorker.RiskFreeStopMarketPrice(candidate.EntryPrice, candidate.TakeProfit),
+            // Observation policy v1 stays unchanged; live protection is managed separately.
+            RiskFreeStopMarket = candidate.EntryPrice + (candidate.TakeProfit - candidate.EntryPrice) * .25m,
             Leverage = candidate.Leverage,
             ObservationPolicyVersion = 1,
             ExpirePrice = candidate.Direction == "Long" ? candidate.Ceiling : candidate.Floor,

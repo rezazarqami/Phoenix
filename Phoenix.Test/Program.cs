@@ -9,6 +9,10 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Staged protection follows 50/20 then 75/50/20 for Long and Short across restart", StagedRiskProtectionTests.BothDirections);
+Run("Staged protection handles gaps, failed market placement and unconfirmed cancellation", StagedRiskProtectionTests.GapsAndFailures);
+Run("Staged protection recovers duplicate acknowledgements and detects early fills", StagedRiskProtectionTests.DuplicateAndEarlyFill);
+
 Run("Scan performance preserves order and bounds overlapping candle requests", ScanPerformanceTests.OrderedFetch);
 Run("Scan performance deduplicates analysis candles and isolates cancelled waiters", ScanPerformanceTests.AnalysisFetchDeduplication);
 
@@ -869,10 +873,10 @@ Run("Bybit SL2 is a reduce-only conditional stop-limit order", () =>
     True(requests[1].Contains("\"triggerDirection\":1", StringComparison.Ordinal));
 });
 
-Run("Risk-free backup is a reduce-only stop-market at twenty-five percent", () =>
+Run("Risk-free backup is a reduce-only stop-market at twenty percent", () =>
 {
-    Near(102.5m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 110m));
-    Near(97.5m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 90m));
+    Near(102m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 110m));
+    Near(98m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 90m));
     var requests = new List<string>();
     var handler = new StubHttpHandler(request =>
     {

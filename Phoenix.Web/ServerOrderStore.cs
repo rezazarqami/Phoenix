@@ -22,6 +22,10 @@ public sealed class ServerSignal
     public decimal EntryPrice { get; set; }
     public decimal TakeProfit { get; set; }
     public decimal StopLoss { get; set; }
+    public int ProtectionStage { get; set; }
+    public decimal? EarlyStopLimit { get; set; }
+    public string? EarlyStopLimitOrderId { get; set; }
+    public DateTime? EarlyStopLimitCancelledAtUtc { get; set; }
     public decimal? StopLoss2 { get; set; }
     public decimal? RiskFreeStopMarket { get; set; }
     public decimal? RiskFreePrice { get; set; }
@@ -448,6 +452,9 @@ public sealed class ServerOrderStore
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,
         ExpiryPriceTrail = signal.ExpiryPriceTrail?.ToList() ?? [],
         ExpireStage = signal.ExpireStage,
+        ProtectionStage = signal.ProtectionStage, EarlyStopLimit = signal.EarlyStopLimit,
+        EarlyStopLimitOrderId = signal.EarlyStopLimitOrderId,
+        EarlyStopLimitCancelledAtUtc = signal.EarlyStopLimitCancelledAtUtc,
         StopLoss2 = signal.StopLoss2, RiskFreeStopMarket = signal.RiskFreeStopMarket,
         RiskFreePrice = signal.RiskFreePrice,
         StopLoss2OrderId = signal.StopLoss2OrderId,

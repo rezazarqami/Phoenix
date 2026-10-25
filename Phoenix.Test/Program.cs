@@ -9,6 +9,7 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Entry image refresh preserves original proposal evidence without reanalysis", FrozenEntryReviewTests.CurrentImageWithInitialEvidence);
 Run("Similarity sparse legacy and distant timeframe regression", SimilarityTests.SparseAndDistantHistoryRemainsComparable);
 Run("Proposal leverage displays raw, capped and unknown values without network calls", ProposalLeverageCacheTests.DisplayAndDailyRefresh);
 Run("Proposal leverage bulk refresh paginates and rejects invalid snapshots", ProposalLeverageCacheTests.PaginationAndFailure);

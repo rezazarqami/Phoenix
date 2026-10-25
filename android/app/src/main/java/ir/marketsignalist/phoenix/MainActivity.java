@@ -21,6 +21,7 @@ import java.util.UUID;
 
 public final class MainActivity extends Activity {
     private static final String HOME="https://marketsignalist.ir";
+    private static final String PHOENIX_UI="(()=>{const install=()=>{if(document.getElementById('phoenix-only-style'))return;const s=document.createElement('style');s.id='phoenix-only-style';s.textContent='a[href=\"/\"],a[href=\"/index.html\"],a[href^=\"/?\"]{display:none!important}';(document.head||document.documentElement).appendChild(s)};if(document.documentElement)install();else document.addEventListener('DOMContentLoaded',install,{once:true})})()";
     private static final String START_ROUTE=BuildConfig.PHOENIX_ONLY?"/phoenix":"/";
     private WebView browser;
     private FrameLayout root;
@@ -65,17 +66,31 @@ public final class MainActivity extends Activity {
                 try{startActivityForResult(choose,43);}catch(ActivityNotFoundException e){files.onReceiveValue(null);files=null;}return true;
             }
         });
+        if(BuildConfig.PHOENIX_ONLY&&WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+            WebViewCompat.addDocumentStartJavaScript(browser,PHOENIX_UI,Collections.singleton(HOME));
         browser.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
+                if(BuildConfig.PHOENIX_ONLY&&TrustedNavigation.trusted(request.getUrl().toString())) {
+                    String path=request.getUrl().getPath();
+                    try {
+                        if(request.isForMainFrame()&&("/login".equals(path)||"/login.html".equals(path)))
+                            return new WebResourceResponse("text/html","UTF-8",getAssets().open("phoenix-login.html"));
+                        if("/__phoenix_app/gold.jpg".equals(path))
+                            return new WebResourceResponse("image/jpeg",null,getResources().openRawResource(ir.marketsignalist.phoenix.R.drawable.phoenix_standalone_logo));
+                    } catch(java.io.IOException e) { return new WebResourceResponse("text/plain","UTF-8",new java.io.ByteArrayInputStream("Phoenix login unavailable".getBytes(java.nio.charset.StandardCharsets.UTF_8))); }
+                }
                 if(TrustedNavigation.trusted(request.getUrl().toString())&&"POST".equals(request.getMethod())&&(request.getUrl().getPath().equals("/api/auth/logout")||request.getUrl().getPath().equals("/api/analysis/auth/logout")))runOnUiThread(()->{try{resetDevice();}catch(Exception ignored){}});
                 return null;
             }
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){
+                if(BuildConfig.PHOENIX_ONLY&&TrustedNavigation.trusted(url)&&!TrustedNavigation.phoenixPage(url)){view.stopLoading();loadPage(HOME+START_ROUTE);return;}
                 if(TrustedNavigation.trusted(url)){lastUrl=url;beginLoading();loadStage="دریافت صفحه";}
             }
             @Override public void onPageCommitVisible(WebView view,String url){pageReady(url);}
             @Override public void onPageFinished(WebView view,String url){
-                CookieManager.getInstance().flush();pageReady(url);
+                CookieManager.getInstance().flush();
+                if(BuildConfig.PHOENIX_ONLY&&TrustedNavigation.phoenixPage(url))view.evaluateJavascript(PHOENIX_UI,null);
+                pageReady(url);
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
                 if(request.isForMainFrame())pageError("اتصال به سرور برقرار نشد ("+error.getErrorCode()+"). اتصال اینترنت را بررسی کن.");
@@ -87,7 +102,9 @@ public final class MainActivity extends Activity {
                 handler.cancel();pageError("اتصال امن سرور تأیید نشد. تاریخ و ساعت گوشی و اتصال اینترنت را بررسی کن.");
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
-                String url=request.getUrl().toString();if(TrustedNavigation.trusted(url))return false;
+                String url=request.getUrl().toString();
+                if(request.isForMainFrame()&&BuildConfig.PHOENIX_ONLY&&TrustedNavigation.trusted(url)&&!TrustedNavigation.phoenixPage(url)){loadPage(HOME+START_ROUTE);return true;}
+                if(TrustedNavigation.trusted(url))return false;
                 if(request.isForMainFrame() && ("https".equals(request.getUrl().getScheme())||"http".equals(request.getUrl().getScheme())))try{startActivity(new Intent(Intent.ACTION_VIEW,request.getUrl()));}catch(ActivityNotFoundException ignored){}
                 return true;
             }
@@ -103,7 +120,7 @@ public final class MainActivity extends Activity {
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private void makePageCover(){
         pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(35,26,47));
-        TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
+        TextView title=new TextView(this);title.setText(BuildConfig.PHOENIX_ONLY?"فونیکس":"مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
         pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
         retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
         connectionCheck=new Button(this);connectionCheck.setText("بررسی اتصال همین گوشی");connectionCheck.setOnClickListener(v->{if(unlocked&&pageFailed)checkConnection();});pageCover.addView(connectionCheck);
@@ -152,7 +169,7 @@ public final class MainActivity extends Activity {
         });
     }
     private void pageError(String text){pageLoading=false;pageFailed=true;pageStatus.setText(text);ui.removeCallbacks(loadTimeout);renderPageState();}
-    private void loadPage(String url){lastUrl=url;beginLoading();browser.loadUrl(url);}
+    private void loadPage(String url){if(BuildConfig.PHOENIX_ONLY&&TrustedNavigation.trusted(url)&&!TrustedNavigation.phoenixPage(url))url=HOME+START_ROUTE;lastUrl=url;beginLoading();browser.loadUrl(url);}
     private boolean deviceSecure(){return getSystemService(KeyguardManager.class).isDeviceSecure();}
     private void unlock(){
         if(isFinishing())return;

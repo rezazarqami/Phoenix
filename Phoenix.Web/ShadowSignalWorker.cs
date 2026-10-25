@@ -6,7 +6,6 @@ namespace Phoenix.Web;
 public sealed class ShadowSignalWorker(
     ShadowSignalRuntime runtime,
     BybitDemoClient bybit,
-    ProfessionalSignalAnalysisService professional,
     ILogger<ShadowSignalWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken token)
@@ -56,24 +55,8 @@ public sealed class ShadowSignalWorker(
                 // The entry sample can already be beyond the stop after a market gap.
                 ObservationOutcomeTracker.TrackFilled(signal, price, signal.EntryTriggeredAtUtc.Value);
                 await runtime.Store.UpdateAsync(signal, token);
-                try
-                {
-                    var interval = signal.Timeframe ?? "15";
-                    var candles = await bybit.GetKlinesAsync(signal.Symbol, interval, 1000, token);
-                    var candidate = new SignalCandidate(signal.Symbol, interval, signal.Direction,
-                        signal.Ceiling, signal.Floor, signal.EntryPrice, signal.EntryPrice,
-                        signal.TakeProfit, signal.StopLoss, signal.StopLoss2, signal.RiskFreePrice,
-                        signal.Leverage ?? 1m, signal.Quantity, 0m,
-                        candles[0].OpenTime, candles[^1].OpenTime,
-                        candles[0].OpenTime, candles[^1].OpenTime,
-                        candles.Count, "Observed entry", false, candles[^1].OpenTime);
-                    var analysis = await professional.AnalyzeAsync(candidate, candles, interval, token,
-                        signal.EntryTriggeredAtUtc);
-                    await runtime.Store.SaveEntryTechnicalFeaturesAsync(signal.Id, analysis.Features,
-                        signal.EntryTriggeredAtUtc.Value, token);
-                }
-                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                catch (Exception ex) { logger.LogWarning(ex, "Entry fingerprint unavailable for {Symbol}", signal.Symbol); }
+                // Tracking entry changes lifecycle only. Proposal evidence is frozen;
+                // no candle fetch or second technical analysis is needed here.
             }
             else if (InitialExpiryReached(signal, price))
             {

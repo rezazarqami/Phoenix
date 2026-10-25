@@ -24,6 +24,7 @@ public sealed class HistoricalEntryBackfillWorker(
                 var observed = (await shadow.Store.GetHistoryAsync(3650, 5000, token))
                     .Select(x => (Signal: x.Signal, Destination: shadow.Store));
                 var missing = real.Concat(observed)
+                    .Where(x => x.Signal.ProposalEvidence is null)
                     .Where(x => x.Signal.Outcome is "Target" or "StopLoss" &&
                         (x.Signal.EntryTechnicalFeatures is null || x.Signal.EntryTechnicalFeatures.SimilarityContextVersion < 2) &&
                         x.Signal.EntryPrice > 0m && x.Signal.Ceiling > x.Signal.Floor &&

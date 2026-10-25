@@ -10,7 +10,10 @@ internal static class SignalReviewText
     internal static string Support(SimilarityEvidence? e)
     {
         if (e is null) return "\nنمونه‌های مشابه: اطلاعات فنی کافی نیست.";
-        return $"\nنزدیکِ هم‌تایم‌فریم: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
+        if (e.ComparableTargets + e.ComparableStops + e.ComparableRiskFree == 0)
+            return "\nنمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.";
+        var stageNote = e.QueryStage != e.ReferenceStage ? " (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)" : "";
+        return $"\nنزدیکِ هم‌تایم‌فریم{stageNote}: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
             $"\nنزدیکِ سایر تایم‌فریم‌ها: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
     }
     internal static string Window(OutcomeWindowEvidence? w)
@@ -39,9 +42,6 @@ internal static class SignalReviewText
               "\nدرصد شباهت، احتمال نتیجه معامله نیست.";
     }
 
-    internal static string Outcome(decimal? target, decimal? stop, int validationCount) => target.HasValue && stop.HasValue
-        ? $"\n\n🎯 <b>احتمال ثبت تارگت: {target:0}٪</b>" +
-          $"\n🛑 <b>احتمال ثبت استاپ: {stop:0}٪</b>" +
-          "\nمشروط به ورود و خروج تارگت/استاپ."
-        : "\n\n🎯 احتمال ثبت تارگت: نامشخص\n🛑 احتمال ثبت استاپ: نامشخص";
+    // Kept as a no-op for archived callers; probability is retired.
+    internal static string Outcome(decimal? target, decimal? stop, int validationCount) => "";
 }

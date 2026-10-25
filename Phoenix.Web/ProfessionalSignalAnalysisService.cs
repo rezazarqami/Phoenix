@@ -119,7 +119,6 @@ public sealed class ProfessionalSignalAnalysisService(
         if (f.BitcoinMarketAlignment < -0.2m) return "حرکت بیت‌کوین برخلاف جهت سیگنال";
         if (f.StructureScore < 0.35m) return "ساختار نامناسب یا شکست ساختار خلاف جهت";
         if (f.LiquiditySweepScore < 0.35m) return "جمع‌آوری نقدینگی در خلاف جهت ورود";
-        if (f.VolumeRatio < 0.75m) return "حجم ناکافی برای ادامه حرکت";
         return "غلبه حرکت مخالف پس از فعال‌شدن ورود";
     }
 

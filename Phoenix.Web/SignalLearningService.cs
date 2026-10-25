@@ -81,13 +81,12 @@ public sealed class SignalLearningService(
                     }, x.Outcome!, x.ProposalEvidence!.Features)
                     { ObservedAtUtc = x.ProposalEvidence!.ObservedAtUtc, EvidenceStage = "proposal" }).ToArray();
             _snapshot = new(patterns, DateTime.UtcNow)
-            { OutcomeModel = SignalOutcomeModel.Train(patterns, token),
+            {
                 OutcomeHistory = outcomeHistory,
-                ProposalPatterns = proposals, ProposalOutcomeModel = SignalOutcomeModel.Train(proposals, token),
-                SimilarityMetric = SignalSimilarityMetric.Build(patterns) };
-            logger.LogInformation("Phoenix learned {Count} completed technical patterns; outcome model validated: {Validated}, held-out results: {ValidationCount}, Brier: {Brier}, baseline: {Baseline}.",
-                patterns.Count, _snapshot.OutcomeModel is not null, _snapshot.OutcomeModel?.ValidationCount ?? 0,
-                _snapshot.OutcomeModel?.ValidationBrier, _snapshot.OutcomeModel?.BaselineBrier);
+                ProposalPatterns = proposals,
+                SimilarityMetric = null };
+            logger.LogInformation("Phoenix loaded {EntryCount} entry and {ProposalCount} proposal fingerprints; outcome probability disabled.",
+                patterns.Count, proposals.Length);
         }
         finally { _refreshGate.Release(); }
     }

@@ -2,12 +2,13 @@ const fa = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 4 });
 
 function similaritySupport(e) {
   if (!e) return '<small>نمونه‌های مشابه: اطلاعات فنی کافی نیست.</small>';
+  if (e.comparisonVersion >= 2 && !(e.comparableTargets + e.comparableStops + e.comparableRiskFree)) return '<small>نمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.</small>';
   const n = v => fa.format(v ?? 0);
-  return `<small>نزدیکِ هم‌تایم‌فریم: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ / ${n(e.sameTimeframeNearbyRiskFree)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ / ${n(e.otherTimeframeNearbyRiskFree)} ریسک‌فری</small>`;
+  const stageNote = e.queryStage !== e.referenceStage ? ' (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)' : '';
+  return `<small>نزدیکِ هم‌تایم‌فریم${stageNote}: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ / ${n(e.sameTimeframeNearbyRiskFree)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ / ${n(e.otherTimeframeNearbyRiskFree)} ریسک‌فری</small>`;
 }
 function outcomeSummary(s) {
-  const percent = v => v == null ? 'نامشخص' : `${fa.format(v)}٪`;
-  return `🎯 احتمال ثبت تارگت: <b>${percent(s.targetOutcomePercent)}</b><br>🛑 احتمال ثبت استاپ: <b>${percent(s.stopOutcomePercent)}</b>${s.targetOutcomePercent == null ? '' : '<small>مشروط به ورود و خروج تارگت/استاپ.</small>'}`;
+  return '';
 }
 const connection = document.querySelector('#connection');
 const price = document.querySelector('#price');

@@ -6,6 +6,8 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
     decimal EffectiveTargets, decimal EffectiveStops, int SameTimeframeNearbyTargets,
     int SameTimeframeNearbyStops)
 {
+    public int ComparisonVersion { get; init; }
+    public int ComparableRiskFree { get; init; }
     public int SameTimeframeNearbyRiskFree { get; init; }
     public int OtherTimeframeNearbyTargets { get; init; }
     public int OtherTimeframeNearbyStops { get; init; }

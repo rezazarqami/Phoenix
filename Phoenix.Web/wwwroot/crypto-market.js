@@ -39,8 +39,8 @@ document.querySelector('#exportReviews').addEventListener('click', async () => {
 });
 
 document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
-<details class="results-report" open><summary>داده‌های ارزیابی احتمال تارگت و استاپ</summary>
-<div class="results-body"><p id="learningStatus" class="results-note" role="status">در حال بررسی اعتبار مدل احتمال…</p><p class="results-note">می‌توانید داده‌ها را همین‌جا مشاهده و کپی کنید یا فایل ZIP بگیرید. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
+<details class="results-report" open><summary>داده‌های تاریخی سیگنال‌ها</summary>
+<div class="results-body"><p id="learningStatus" class="results-note" role="status">در حال دریافت تعداد سوابق…</p><p class="results-note">می‌توانید داده‌ها را همین‌جا مشاهده و کپی کنید یا فایل ZIP بگیرید. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
 <div class="results-filters"><label>از تاریخ<input id="evaluationFrom" type="date"></label><label>تا تاریخ<input id="evaluationTo" type="date"></label><button id="showEvaluation" type="button">نمایش داده‌ها بدون دانلود</button><button id="exportEvaluation" type="button">دانلود مستقیم ZIP</button></div>
 <p id="evaluationMessage" role="status" class="results-message"></p>
 <div id="evaluationOutput" hidden><p id="evaluationPageStatus"></p><textarea id="evaluationText" aria-label="داده‌های ارزیابی" readonly dir="ltr" style="width:100%;min-height:280px;box-sizing:border-box"></textarea>
@@ -53,10 +53,8 @@ async function loadLearningStatus() {
     if (!response.ok) throw new Error();
     const state = await response.json();
     if (!Number.isInteger(state.proposalSamples)) throw new Error();
-    element.textContent = `نمونهٔ معتبر زمان پیشنهاد: ${faMarket.format(state.proposalSamples)} · لحظه ورود: ${faMarket.format(state.entrySamples)}. ` +
-      (state.proposalModelValidated ? 'مدل زمان پیشنهاد آزمون زمانی را گذرانده است؛ برآورد فقط برای ورودهای منتهی به تارگت یا استاپ است.' :
-      'احتمال زمان پیشنهاد هنوز اعتبارسنجی نشده است. برای جست‌وجوی بدون فیلتر احتمال، حداقل را خودتان صفر کنید؛ شباهت فنی همچنان جداگانه نمایش داده می‌شود.');
-  } catch { element.textContent = 'وضعیت اعتبار مدل فعلاً قابل دریافت نیست؛ از درصد شباهت به‌عنوان احتمال استفاده نکنید.'; }
+    element.textContent = `سوابق پیشنهاد: ${faMarket.format(state.proposalSamples)} · ورود: ${faMarket.format(state.entrySamples)}. مقایسه بر پایهٔ شباهت فنی است.`;
+  } catch { element.textContent = 'تعداد سوابق فعلاً قابل دریافت نیست.'; }
 }
 loadLearningStatus();
 const evaluationStart = new Date(); evaluationStart.setDate(evaluationStart.getDate()-365);
@@ -177,7 +175,7 @@ async function loadShadowSignals() {
     const data = await response.json(), summary = data.summary;
     document.querySelector('#shadowCount').textContent = faMarket.format(summary.total);
     document.querySelector('#shadowSummary').textContent = `منتظر ورود ${faMarket.format(summary.waitingEntry)} · ورود فعال ${faMarket.format(summary.entered)} · تارگت ${faMarket.format(summary.target)} · استاپ ${faMarket.format(summary.stopLoss)}`;
-    document.querySelector('#shadowRows').innerHTML = data.signals.length ? data.signals.map(s => `<a class="shadow-row" href="${s.imageUrl}" target="_blank"><b>${s.symbol}</b><span>${s.direction} · ${s.timeframe || '—'}</span><span>${shadowStatus(s)}</span><span>TP ${s.targetProbability == null ? '—' : faMarket.format(s.targetProbability)}٪ / SL ${s.stopProbability == null ? '—' : faMarket.format(s.stopProbability)}٪</span></a>`).join('') : '<div class="results-empty">هنوز سیگنالی در این صف نیست.</div>';
+    document.querySelector('#shadowRows').innerHTML = data.signals.length ? data.signals.map(s => `<a class="shadow-row" href="${s.imageUrl}" target="_blank"><b>${s.symbol}</b><span>${s.direction} · ${s.timeframe || '—'}</span><span>${shadowStatus(s)}</span></a>`).join('') : '<div class="results-empty">هنوز سیگنالی در این صف نیست.</div>';
   } catch (error) { document.querySelector('#shadowSummary').textContent = error.message; }
 }
 document.querySelector('#refreshShadow').addEventListener('click', loadShadowSignals);

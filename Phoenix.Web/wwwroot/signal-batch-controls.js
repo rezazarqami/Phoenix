@@ -14,7 +14,6 @@ function saveBatchSetting(key, value) {
   try { localStorage.setItem(key, value); } catch { /* Storage is optional in Android WebView. */ }
 }
 document.querySelector('#batchSize').value = readBatchSetting('phoenix.signal.positionSizeUsdt', '10');
-document.querySelector('#batchMinTarget').value = readBatchSetting('phoenix.signal.minimumTargetProbability', '55');
 const timedMode = document.querySelector('#batchTimedMode');
 const batchCount = document.querySelector('#batchCount');
 const batchDuration = document.querySelector('#batchDuration');
@@ -131,14 +130,13 @@ document.querySelector('#startBatch').addEventListener('click', async () => {
   const started = await batchCommand('/api/analysis/signal-batch', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({count: Number(batchCount.value), positionSizeUsdt: Number(document.querySelector('#batchSize').value),
-      minimumTargetProbability: Number(document.querySelector('#batchMinTarget').value),
+      minimumTargetProbability: 0,
       directionFilter: document.querySelector('#batchDirection').value, chartFilter: document.querySelector('#batchChart').value,
       timeframeFilter: document.querySelector('#batchTimeframe').value, timedMode: timedMode.checked,
       durationMinutes: Number(batchDuration.value)})
   }, 'در حال ارسال دستور شروع…');
   if (started) {
     saveBatchSetting('phoenix.signal.positionSizeUsdt', document.querySelector('#batchSize').value);
-    saveBatchSetting('phoenix.signal.minimumTargetProbability', document.querySelector('#batchMinTarget').value);
   }
 });
 document.querySelector('#stopBatch').addEventListener('click', () =>
@@ -149,7 +147,7 @@ function renderBatch(state) {
   const status = document.querySelector('#batchStatus');
   status.classList.toggle('running', state.running);
   const remainingMinutes = state.endsAtUtc ? Math.max(0, Math.ceil((new Date(state.endsAtUtc) - Date.now()) / 60000)) : 0;
-  const probabilityFilter = state.minimumTargetProbability > 0 ? ` · حداقل برآورد تارگت پس از ورود ${faMarket.format(state.minimumTargetProbability)}٪` : '';
+  const probabilityFilter = '';
   const progress = state.timedMode
     ? `تأیید ${faMarket.format(state.approved)} · پیشنهاد ${faMarket.format(state.proposed)} · باقی‌مانده حدود ${faMarket.format(remainingMinutes)} دقیقه`
     : `تأیید ${faMarket.format(state.approved)} از ${faMarket.format(state.target)}`;

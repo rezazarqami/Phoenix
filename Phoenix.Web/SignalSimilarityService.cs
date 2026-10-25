@@ -10,30 +10,22 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
         var atEntry = candidate.EntryTriggeredAtUtc is not null;
-        var stage = atEntry ? "entry" : "proposal";
-        // Proposal and entry fingerprints describe different moments. Never apply
-        // an entry-validated model to a proposal or silently pool the two cohorts.
-        var useProposals = !atEntry && snapshot.ProposalPatterns.Count(x => x.Outcome == "Target") >= 5 &&
-            snapshot.ProposalPatterns.Count(x => x.Outcome == "StopLoss") >= 5;
-        var patterns = useProposals ? snapshot.ProposalPatterns : snapshot.Patterns;
-        var similarity = CalculateFromPatterns(candidate, patterns, token);
-        var model = atEntry ? snapshot.OutcomeModel : snapshot.ProposalOutcomeModel;
-        var probability = model?.Predict(candidate, candidate.TechnicalFeatures, stage);
-        return similarity with { TargetOutcomePercent = probability,
-            StopOutcomePercent = probability.HasValue ? 100m - probability.Value : null,
-            OutcomeValidationCount = probability.HasValue ? model!.ValidationCount : 0 };
+        // Prefer the same observation stage, even for small or single-outcome
+        // cohorts. Legacy entry fallback is explicitly labeled in the summary.
+        var patterns = !atEntry && snapshot.ProposalPatterns.Count > 0
+            ? snapshot.ProposalPatterns : snapshot.Patterns;
+        return CalculateFromPatterns(candidate, patterns, token);
     }
 
     internal static SignalSimilarityResult CalculateFromPatterns(ServerSignal candidate,
-        IReadOnlyList<LearnedSignalPattern> patterns, CancellationToken token = default,
-        SignalSimilarityMetric? metric = null)
+        IReadOnlyList<LearnedSignalPattern> patterns, CancellationToken token = default)
     {
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var cutoff = candidate.EntryTriggeredAtUtc ?? (candidate.CreatedAtUtc == default ? (DateTime?)null : candidate.CreatedAtUtc);
         patterns = SignalPatternIdentity.Unique(patterns.Where(x => x.Signal.Id != candidate.Id || candidate.Id == Guid.Empty)
             .Where(x => cutoff is null || x.Signal.CompletedAtUtc < cutoff));
-        if (cutoff is not null) metric = null; // Historical reviews need a past-only ruler.
-        metric ??= SignalSimilarityMetric.Build(patterns);
+        // Use the explicit technical ruler consistently, including legacy snapshots.
+        // Dataset dispersion and sparse new fields must not redefine proximity.
         var targets = patterns.Where(x => x.Outcome == "Target").ToArray();
         var stops = patterns.Where(x => x.Outcome == "StopLoss").ToArray();
         // Every valid entry-time example contributes. Exponential weights make
@@ -48,6 +40,8 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             (decimal)targetEvidence.Effective, (decimal)stopEvidence.Effective,
             targetEvidence.SameTimeframeClose, stopEvidence.SameTimeframeClose)
         {
+            ComparisonVersion = 2,
+            ComparableRiskFree = riskFreeEvidence.UsedCount,
             SameTimeframeNearbyRiskFree = riskFreeEvidence.SameTimeframeClose,
             OtherTimeframeNearbyTargets = OtherCount("Target"),
             OtherTimeframeNearbyStops = OtherCount("StopLoss"),
@@ -56,9 +50,8 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         int OtherCount(string outcome) => patterns.Count(example => example.Outcome == outcome &&
             !string.IsNullOrWhiteSpace(candidate.Timeframe) && !string.IsNullOrWhiteSpace(example.Signal.Timeframe) &&
             candidate.Timeframe != example.Signal.Timeframe &&
-            (metric is null ? TechnicalSimilarity(candidate, example.Signal, candidate.TechnicalFeatures,
-                example.Features, false) : metric.Compare(candidate, candidate.TechnicalFeatures, example, false))
-                >= (metric is null ? 0.65d : 0.5d));
+            TechnicalSimilarity(candidate, example.Signal, candidate.TechnicalFeatures,
+                example.Features, false) >= 0.65d);
         if (targetEvidence.UsedCount < 5 || stopEvidence.UsedCount < 5 ||
             Math.Max(targetEvidence.CloseCount, stopEvidence.CloseCount) < 5)
             return new(null, null, patterns.Count, targets.Length, stops.Length, compared) { Evidence = support };
@@ -75,17 +68,15 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             foreach (var example in group)
             {
                 token.ThrowIfCancellationRequested();
-                var measured = metric is null ? TechnicalSimilarity(candidate, example.Signal,
-                    candidate.TechnicalFeatures, example.Features)
-                    : metric.Compare(candidate, candidate.TechnicalFeatures, example);
-                if (measured is not { } similarity) continue;
+                var similarity = TechnicalSimilarity(candidate, example.Signal,
+                    candidate.TechnicalFeatures, example.Features);
                 usedCount++;
                 // Initial transparent settings, not fitted or calibrated probabilities.
                 var weight = Math.Exp(-8d * (1d - similarity));
                 weighted += similarity * weight;
                 weights += weight;
                 squaredWeights += weight * weight;
-                if (similarity >= (metric is null ? 0.65d : 0.5d))
+                if (similarity >= 0.65d)
                 {
                     closeCount++;
                     if (!string.IsNullOrWhiteSpace(candidate.Timeframe) && candidate.Timeframe == example.Signal.Timeframe)

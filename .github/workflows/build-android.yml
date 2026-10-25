@@ -72,12 +72,7 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
-            if [ -f previous-phoenix.apk ]; then
-              adb install previous-phoenix.apk
-              adb install android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk
-              adb shell pm path ir.marketsignalist.phoenix.standalone
-              adb shell pm path ir.marketsignalist.phoenix.standalone.capture
-            fi
+            if [ -f previous-phoenix.apk ]; then adb install previous-phoenix.apk && adb install android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk && adb shell pm path ir.marketsignalist.phoenix.standalone && adb shell pm path ir.marketsignalist.phoenix.standalone.capture; fi
             cd android && gradle :app:connectedOrbitDebugAndroidTest :app:connectedPhoenixDebugAndroidTest --no-daemon
       - name: Save Android test reports
         if: always()

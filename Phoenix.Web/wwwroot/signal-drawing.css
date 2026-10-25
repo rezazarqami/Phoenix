@@ -1,0 +1,16 @@
+.chart-tools { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-top: 1px solid #1b2b26; border-bottom: 1px solid #1b2b26; background: #091310; direction: rtl; }
+.chart-tools button { min-height: 32px; padding: 0 11px; border: 1px solid #263b34; border-radius: 6px; background: #101c18; color: #879992; font-size: 10px; cursor: pointer; }
+.chart-tools button:hover { color: #dce8e4; border-color: #42685b; }
+.chart-tools button.active { color: #38d39f; border-color: #38d39f; background: #123127; box-shadow: inset 0 0 0 1px #38d39f22; }
+.chart-tools .tool-spacer { flex: 1; }
+.chart-tools small { color: #556761; font-size: 9px; }
+#signalChart { position: relative; }
+.signal-drawing-layer { position: absolute; inset: 0; z-index: 8; width: 100%; height: 100%; direction: ltr; pointer-events: none; }
+.signal-drawing-layer.drawing { pointer-events: auto; cursor: crosshair; }
+.signal-drawing-layer .trend { stroke: #46a6ff; stroke-width: 2; fill: none; }
+.signal-drawing-layer .fib { stroke: #d4aa4b; stroke-width: 1; stroke-dasharray: 5 4; }
+.signal-drawing-layer .fib-main { stroke: #f0c75e; stroke-width: 1.5; }
+.signal-drawing-layer .anchor { fill: #0d1715; stroke: #38d39f; stroke-width: 2; }
+.signal-drawing-layer text { fill: #e7d38f; stroke: #07100f; stroke-width: 3px; paint-order: stroke; font: 10px Arial; }
+.signal-drawing-layer .preview { opacity: .55; }
+@media(max-width:600px){.chart-tools{overflow-x:auto}.chart-tools small{display:none}.chart-tools button{white-space:nowrap}}

@@ -1,0 +1,11 @@
+.signal-symbol-control { position: relative; display: grid; gap: 5px; min-width: 190px; }
+.signal-symbol-control > label { color: #71827d; font-size: 9px; }
+.signal-symbol-input { display: flex; height: 39px; border: 1px solid #293a36; border-radius: 7px; background: #111d1a; overflow: hidden; }
+.signal-symbol-input:focus-within { border-color: #3b7b68; }
+.signal-symbol-input input { width: 150px !important; height: 37px !important; border: 0 !important; background: transparent !important; }
+.signal-symbol-input button { width: 38px; border: 0; border-right: 1px solid #293a36; background: #14231f; color: #91a29c; cursor: pointer; }
+.signal-symbol-menu { position: absolute; z-index: 20; top: 64px; right: 0; width: 260px; max-height: 360px; overflow: auto; padding: 6px; border: 1px solid #315047; border-radius: 8px; background: #091310; box-shadow: 0 18px 55px #000b; }
+.signal-symbol-menu button { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 9px 10px; border: 0; border-bottom: 1px solid #17241f; background: transparent; color: #dce7e3; direction: ltr; cursor: pointer; }
+.signal-symbol-menu button:hover { background: #142a23; color: #42d5a4; }
+.signal-symbol-menu small, .symbol-loading, .signal-symbol-empty { color: #64766f; font-size: 9px; }
+.symbol-loading, .signal-symbol-empty { padding: 14px; text-align: center; direction: rtl; }

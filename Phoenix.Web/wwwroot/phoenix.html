@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <script>if (/PhoenixAndroid\//.test(navigator.userAgent)) document.documentElement.classList.add('android-shell');</script>
+  <meta name="theme-color" content="#0b0e11">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/phoenix-192.png">
+  <link rel="apple-touch-icon" href="/icons/phoenix-192.png">
+  <link rel="stylesheet" href="/styles.css?v=5">
+  <link rel="stylesheet" href="/security.css?v=2">
+  <link rel="stylesheet" href="/professional-ui.css?v=1">
+  <link rel="stylesheet" href="/home-redesign.css?v=3">
+  <link rel="stylesheet" href="/crypto-statistics.css?v=1">
+  <title>Phoenix Trading Panel</title>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <main>
+    <header class="topbar">
+      <div class="brand"><img class="home-brand-logo" src="/analysis-assets/phoenix-gold.jpg" alt="لوگوی فونیکس"><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p></div></div>
+      <div class="header-actions">
+        <a class="security-button" href="/">بازگشت به مدار</a>
+        <span id="connection" class="badge"><i></i>در حال بررسی</span>
+        <button id="settingsToggle" class="security-button home-settings-toggle" type="button" aria-expanded="false" aria-controls="settingsMenu"><span aria-hidden="true">⚙</span> تنظیمات</button>
+        <div id="settingsMenu" class="settings-menu" hidden>
+          <button id="telegramAccessButton" class="security-button" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
+          <button id="usersButton" class="security-button" type="button"><span class="action-icon">♙</span><span>کاربران</span></button>
+          <button id="securityButton" class="security-button" type="button"><span class="action-icon">⚙</span><span>تنظیمات امنیتی</span></button>
+          <button id="logoutButton" class="security-button logout-action" type="button"><span class="action-icon">↪</span><span>خروج</span></button>
+          <button id="installPhoenixButton" class="security-button install-phoenix-button" type="button"><span class="action-icon">＋</span><span>افزودن به صفحه اصلی</span></button>
+        </div>
+      </div>
+    </header>
+
+    <nav class="home-tabs" role="tablist" aria-label="بخش‌های فونیکس">
+      <button class="home-tab active" id="tab-home" type="button" role="tab" aria-selected="true" aria-controls="panel-home" data-panel="home"><span>◈</span> مرکز مدیریت سیگنال</button>
+      <button class="home-tab" id="tab-crypto" type="button" role="tab" aria-selected="false" aria-controls="panel-crypto" data-panel="crypto"><span>◇</span> Crypto Markets</button>
+      <button class="home-tab" id="tab-signal" type="button" role="tab" aria-selected="false" aria-controls="panel-signal" data-panel="signal"><span>⌁</span> Signal Lab</button>
+      <button class="home-tab" id="tab-elliott" type="button" role="tab" aria-selected="false" aria-controls="panel-elliott" data-panel="elliott"><span>∿</span> Elliott Wave Lab</button>
+      <button class="home-tab" id="tab-strategy" type="button" role="tab" aria-selected="false" aria-controls="panel-strategy" data-panel="strategy"><span>Ⅱ</span> Strategy 2</button>
+      <button class="home-tab" id="tab-statistics" type="button" role="tab" aria-selected="false" aria-controls="panel-statistics" data-panel="statistics"><span>▤</span> آمار رمز ارزها</button>
+    </nav>
+
+    <div id="panel-home" class="home-section" role="tabpanel" aria-labelledby="tab-home">
+
+    <section class="hero">
+      <div class="hero-copy"><span class="eyebrow">REAL STRATEGY</span><h2>مرکز مدیریت سیگنال</h2><p>ثبت و پایش استراتژی اصلی روی حساب واقعی</p></div>
+      <div class="ticker"><div><small>BTC / USDT</small><span>قیمت لحظه‌ای</span></div><strong id="price">—</strong><span id="updated">در حال اتصال به Bybit</span></div>
+    </section>
+
+    <div class="workspace">
+      <section class="card signal-card">
+        <div class="section-title"><div><span class="step">01</span><div><h2>سیگنال جدید</h2><p>پارامترهای معامله را وارد کنید</p></div></div><span class="demo-pill">REAL</span></div>
+        <form id="signalForm" novalidate>
+          <label id="keyField">کلید ورود پنل<input name="panelKey" type="password" autocomplete="current-password" placeholder="کلید خصوصی پنل"></label>
+
+          <div class="ai-signal-box">
+            <label for="aiSignalText">ورود سریع با AI</label>
+            <textarea id="aiSignalText" rows="3" maxlength="2000" placeholder="مثال: BTCUSDT لانگ، سقف ۶۵۰۰۰، کف ۶۲۰۰۰، ورودی ۲۵ تتر"></textarea>
+            <button id="aiParseButton" class="security-button" type="button">استخراج اطلاعات سیگنال</button>
+            <small id="aiSignalMessage" class="field-hint">AI فقط اطلاعات نوشته‌شده را استخراج می‌کند؛ ثبت سفارش همچنان با تأیید شما انجام می‌شود.</small>
+          </div>
+
+          <label class="symbol-label">نماد Bybit Futures
+            <div id="symbolPicker" class="symbol-picker">
+              <div class="symbol-input-wrap"><span class="search-icon">⌕</span><input id="symbolSearch" type="text" value="BTCUSDT" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="symbolMenu" aria-expanded="false" placeholder="جست‌وجو؛ مثال BTC"><span class="chevron">⌄</span></div>
+              <input name="symbol" type="hidden" value="BTCUSDT">
+              <div id="symbolMenu" class="symbol-menu" role="listbox" hidden>
+                <div class="menu-head"><span>قراردادهای فعال Bybit</span><small id="symbolCount">در حال دریافت…</small></div>
+                <div id="symbolOptions" class="symbol-options"></div>
+                <p id="symbolEmpty" class="symbol-empty" hidden>نمادی با این عبارت پیدا نشد.</p>
+              </div>
+            </div>
+            <small id="symbolHint" class="field-hint">فقط نمادهای فعال بازار خطی Bybit قابل انتخاب‌اند.</small>
+            <small id="maximumLeverage" class="field-hint leverage-hint">حداکثر Leverage مجاز Bybit: —</small>
+          </label>
+
+          <label>جهت معامله<div class="segmented"><input id="long" name="direction" type="radio" value="Long" checked><label for="long">Long <span>خرید</span></label><input id="short" name="direction" type="radio" value="Short"><label for="short">Short <span>فروش</span></label></div></label>
+          <div class="row"><label>سقف قیمت<div class="input-unit"><input name="ceiling" inputmode="decimal" required placeholder="0.00"><span>USDT</span></div></label><label>کف قیمت<div class="input-unit"><input name="floor" inputmode="decimal" required placeholder="0.00"><span>USDT</span></div></label></div>
+          <label>مقدار ورودی (USDT)<div class="input-unit"><input name="positionSizeUsdt" inputmode="decimal" required placeholder="مثلاً 25"><span>USDT</span></div></label>
+          <button class="primary" type="submit"><span>ثبت در صف سفارش‌ها</span><b>←</b></button>
+          <div id="modeNote" class="safe"><i>✓</i><span>در حال بررسی وضعیت موتور سفارش</span></div>
+          <p id="message" role="status"></p>
+        </form>
+      </section>
+
+      <section class="card orders-card">
+        <div id="bulkControls" hidden style="padding:18px;border-bottom:1px solid #806328">
+          <p>عملیات گروهی — فقط حساب استراتژی اصلی (Strategy 2 دمو تغییر نمی‌کند)</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <select id="cancelDirection" aria-label="جهت سیگنال‌های منتظر ورود"><option value="All">همه جهت‌ها</option><option value="Long">فقط Long</option><option value="Short">فقط Short</option></select>
+            <button id="cancelPendingButton" type="button" class="security-button">لغو منتظرهای ورود</button>
+            <button id="closePositionsButton" type="button" class="security-button" style="color:#f87171">بستن همه پوزیشن‌های باز…</button>
+            <button id="resumeEntriesButton" type="button" class="security-button" hidden>ادامه ورودهای جدید</button>
+          </div>
+          <p id="bulkStatus" role="status" style="white-space:pre-line"></p>
+        </div>
+        <div class="section-title"><div><span class="step">02</span><div><h2>سیگنال‌های فعال</h2><p>سیگنال‌های در انتظار یا معامله‌های باز</p></div></div><span id="count" class="counter">۰</span></div>
+        <div id="orders" class="orders"><div class="empty"><span>◇</span><strong>هنوز سیگنالی ثبت نشده</strong><p>اولین سیگنال شما اینجا نمایش داده می‌شود.</p></div></div>
+      </section>
+    </div>
+    <section class="card history-card">
+      <div class="section-title"><div><span class="step">03</span><div><h2>تاریخچه نتایج</h2><p>سیگنال‌های پایان‌یافته در ۳۰ روز گذشته</p></div></div><span id="historyCount" class="counter">۰</span></div>
+      <div id="history" class="history-list"><div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div></div>
+    </section>
+    <footer><span>PHOENIX • BYBIT REAL</span><span>استراتژی اصلی حساب واقعی</span></footer>
+    </div>
+    <section id="panel-crypto" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-crypto" hidden></section>
+    <section id="panel-signal" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-signal" hidden></section>
+    <section id="panel-elliott" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-elliott" hidden></section>
+    <section id="panel-strategy" class="home-section embedded-section" role="tabpanel" aria-labelledby="tab-strategy" hidden></section>
+    <section id="panel-statistics" class="home-section crypto-statistics" role="tabpanel" aria-labelledby="tab-statistics" hidden>
+      <div class="statistics-heading">
+        <div><span class="eyebrow">TRADE STATISTICS</span><h2>آمار رمز ارزها</h2><p>تمام تاریخچه · مرتب‌شده بر اساس بیشترین تعداد معاملات</p></div>
+        <label>استراتژی<select id="statisticsStrategy"><option value="main">استراتژی اصلی · واقعی</option><option value="strategy2">استراتژی ۲ · دمو</option></select></label>
+      </div>
+      <div class="statistics-summary" aria-live="polite"><span>رمز ارزها <b id="statisticsCoins">—</b></span><span>کل معاملات <b id="statisticsTotal">—</b></span><span class="stat-target">تارگت <b id="statisticsTargets">—</b></span><span class="stat-stop">استاپ <b id="statisticsStops">—</b></span></div>
+      <p id="statisticsStatus" class="statistics-status" role="status">با باز کردن این سربرگ، آمار دریافت می‌شود.</p>
+      <div class="statistics-table-wrap">
+        <table class="statistics-table"><caption class="sr-only">نتایج معاملات هر رمز ارز</caption><thead><tr><th scope="col">#</th><th scope="col">رمز ارز</th><th scope="col">کل</th><th scope="col">باز</th><th scope="col" class="stat-target">تارگت</th><th scope="col" class="stat-stop">استاپ</th><th scope="col">ریسک‌فری</th><th scope="col">سایر بسته</th></tr></thead><tbody id="statisticsRows"><tr><td colspan="8">در انتظار دریافت آمار…</td></tr></tbody></table>
+      </div>
+      <p class="statistics-note">کل = باز + تارگت + استاپ + ریسک‌فری + سایر بسته‌شده‌ها. سیگنال‌های منتظر ورود و منقضی یا لغوشده پیش از ورود شمرده نمی‌شوند. به‌روزرسانی خودکار هر ۵ ثانیه.</p>
+    </section>
+  </main>
+  <dialog id="installPhoenixDialog" class="install-phoenix-dialog" aria-labelledby="installPhoenixTitle">
+    <div class="install-phoenix-content">
+      <img src="/icons/phoenix-192.png" width="76" height="76" alt="نشان Phoenix">
+      <h2 id="installPhoenixTitle">نصب Phoenix روی صفحه اصلی</h2>
+      <p id="installPhoenixHelp"></p>
+      <button id="closeInstallPhoenix" class="security-button" type="button">متوجه شدم</button>
+    </div>
+  </dialog>
+  <dialog id="securityDialog" class="security-dialog">
+    <form id="securityForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">03</span><div><h2>تنظیمات امنیتی</h2><p>تغییر نام کاربری و رمز ورود پنل</p></div></div><button id="closeSecurity" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <div class="security-note"><i>!</i><span>بعد از ذخیره، اطلاعات ورود قبلی فوراً غیرفعال می‌شود و باید با اطلاعات جدید وارد شوید.</span></div>
+        <label>نام کاربری جدید<input name="username" dir="ltr" autocomplete="username" minlength="3" maxlength="32" required placeholder="new-username"></label>
+        <label>رمز عبور جدید<input name="password" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="حداقل ۶ کاراکتر"></label>
+        <label>تکرار رمز عبور<input name="confirmPassword" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="رمز را دوباره وارد کنید"></label>
+        <small class="password-rule">رمز عبور باید حداقل ۶ کاراکتر باشد.</small>
+        <button class="primary" type="submit">ذخیره اطلاعات ورود جدید</button>
+        <p id="securityMessage" role="status"></p>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="telegramAccessDialog" class="security-dialog users-dialog">
+    <form id="telegramAccessForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">05</span><div><h2>دسترسی تلگرام</h2><p>افراد مجاز برای فرمان‌ها و دکمه‌های ربات Phoenix</p></div></div><button id="closeTelegramAccess" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <div class="security-note"><i>i</i><span>کاربر ابتدا در گفت‌وگوی خصوصی ربات دستور <b dir="ltr">/myid</b> را می‌زند و شناسه عددی نمایش‌داده‌شده را برای شما می‌فرستد. کانال‌های اعلان دو ربات دیگر باید در تلگرام خصوصی نگه داشته شوند.</span></div>
+        <label>نام نمایشی<input name="displayName" maxlength="80" required placeholder="مثلاً علی رضایی"></label>
+        <label>شناسه عددی تلگرام<input name="userId" dir="ltr" inputmode="numeric" pattern="[0-9]+" required placeholder="مثلاً 123456789"></label>
+        <label>نام کاربری تلگرام (اختیاری)<input name="username" dir="ltr" autocomplete="off" placeholder="username@"></label>
+        <button class="primary" type="submit">افزودن به کاربران مجاز</button>
+        <p id="telegramAccessMessage" role="status"></p>
+        <div class="user-list-head"><b>کاربران مجاز ربات</b><button id="refreshTelegramAccess" type="button">به‌روزرسانی</button></div>
+        <div id="telegramAccessList" class="user-list"></div>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="usersDialog" class="security-dialog users-dialog">
+    <form id="userForm" method="dialog" novalidate>
+      <div class="dialog-head"><div><span class="step">04</span><div><h2>مدیریت کاربران</h2><p>ساخت دسترسی جداگانه برای نمایش پنل</p></div></div><button id="closeUsers" type="button" aria-label="بستن">×</button></div>
+      <div class="dialog-body">
+        <label>نام کاربری<input name="username" dir="ltr" autocomplete="off" minlength="3" maxlength="32" required placeholder="viewer-name"></label>
+        <label>رمز عبور<input name="password" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required placeholder="حداقل ۶ کاراکتر"></label>
+        <label>تکرار رمز عبور<input name="confirmPassword" type="password" dir="ltr" autocomplete="new-password" minlength="6" maxlength="128" required></label>
+        <label class="viewer-check"><input name="viewerOnly" type="checkbox" checked><span><b>فقط مشاهده‌گر</b><small>امکان ثبت، تأیید، حذف یا تغییر هیچ اطلاعاتی را ندارد.</small></span></label>
+        <button class="primary" type="submit">ایجاد کاربر جدید</button>
+        <p id="userMessage" role="status"></p>
+        <div class="user-list-head"><b>کاربران ثبت‌شده</b><button id="refreshUsers" type="button">به‌روزرسانی</button></div>
+        <div id="userList" class="user-list"></div>
+      </div>
+    </form>
+  </dialog>
+  <link rel="stylesheet" href="/history.css?v=1">
+  <script src="/confirmation.js?v=1"></script>
+  <script src="/app.js?v=20261016-concise-outcomes"></script>
+  <script src="/install-phoenix.js?v=2"></script>
+  <script src="/bulk-controls.js?v=2"></script>
+  <script src="/crypto-statistics.js?v=1"></script>
+  <script src="/home-tabs.js?v=20261010-2"></script>
+</body>
+</html>

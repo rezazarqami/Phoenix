@@ -1,0 +1,420 @@
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
+
+namespace Phoenix.Web;
+
+public sealed class SignalHistoryStore
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly string _connectionString;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private bool _initialized;
+
+    public static void ClearConnectionPools() => SqliteConnection.ClearAllPools();
+
+    public SignalHistoryStore(string queuePath, string? databasePath = null)
+    {
+        databasePath ??= Environment.GetEnvironmentVariable("PHOENIX_HISTORY_DB_PATH")
+            ?? Path.Combine(Path.GetDirectoryName(queuePath)!, "phoenix-history.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+        _connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Cache = SqliteCacheMode.Shared
+        }.ToString();
+    }
+
+    public async Task UpsertAsync(ServerSignal signal, string fallbackEvent, CancellationToken token = default,
+        SignalEvidence? evidence = null)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var previous = await ReadSnapshotAsync(connection, signal.Id, token);
+            var eventType = previous is null ? fallbackEvent : DetectEvent(previous, signal);
+            var now = DateTime.UtcNow;
+            var payload = JsonSerializer.Serialize(signal, JsonOptions);
+
+            await using var transaction = await connection.BeginTransactionAsync(token);
+            var command = connection.CreateCommand();
+            command.Transaction = (SqliteTransaction)transaction;
+            command.CommandText = """
+                INSERT INTO signals (id, symbol, direction, status, created_at_utc, updated_at_utc, removed_at_utc, payload, timeframe, chart_mode, review_image)
+                VALUES ($id, $symbol, $direction, $status, $created, $updated, NULL, $payload, $timeframe, $chartMode, $image)
+                ON CONFLICT(id) DO UPDATE SET
+                    symbol = excluded.symbol, direction = excluded.direction, status = excluded.status,
+                    updated_at_utc = excluded.updated_at_utc, payload = excluded.payload,
+                    timeframe = COALESCE(excluded.timeframe, signals.timeframe),
+                    chart_mode = COALESCE(excluded.chart_mode, signals.chart_mode),
+                    review_image = COALESCE(excluded.review_image, signals.review_image);
+                """;
+            Add(command, "$id", signal.Id.ToString());
+            Add(command, "$symbol", signal.Symbol);
+            Add(command, "$direction", signal.Direction);
+            Add(command, "$status", signal.Status);
+            Add(command, "$created", signal.CreatedAtUtc.ToString("O"));
+            Add(command, "$updated", now.ToString("O"));
+            Add(command, "$payload", payload);
+            AddNullable(command, "$timeframe", evidence?.Timeframe ?? signal.Timeframe);
+            AddNullable(command, "$chartMode", evidence?.ChartMode ?? signal.ChartMode);
+            AddNullable(command, "$image", evidence?.Image);
+            await command.ExecuteNonQueryAsync(token);
+
+            if (eventType is not null)
+                await InsertEventAsync(connection, (SqliteTransaction)transaction, signal.Id, eventType, now, payload, token);
+            if (signal.Outcome == "Expired" && signal.ExpireReason == "InitialBoundary")
+                await CompactInitialExpiryAsync(connection, (SqliteTransaction)transaction, signal, now, token);
+            await transaction.CommitAsync(token);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task MarkRemovedAsync(ServerSignal signal, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var now = DateTime.UtcNow;
+            var payload = JsonSerializer.Serialize(signal, JsonOptions);
+            await using var transaction = await connection.BeginTransactionAsync(token);
+            var command = connection.CreateCommand();
+            command.Transaction = (SqliteTransaction)transaction;
+            command.CommandText = "UPDATE signals SET removed_at_utc=$removed, updated_at_utc=$removed, payload=$payload WHERE id=$id";
+            Add(command, "$removed", now.ToString("O"));
+            Add(command, "$payload", payload);
+            Add(command, "$id", signal.Id.ToString());
+            await command.ExecuteNonQueryAsync(token);
+            await InsertEventAsync(connection, (SqliteTransaction)transaction, signal.Id, "RemovedFromQueue", now, payload, token);
+            await transaction.CommitAsync(token);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> SaveHistoricalEntryFeaturesAsync(Guid id, DateTime entryAtUtc,
+        TechnicalFeatureSnapshot features, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var signal = await ReadSnapshotAsync(connection, id, token);
+            if (signal is null || (signal.EntryTechnicalFeatures is { } existing &&
+                existing.SimilarityContextVersion >= features.SimilarityContextVersion) ||
+                signal.Outcome is not ("Target" or "StopLoss")) return false;
+            signal.EntryTriggeredAtUtc ??= entryAtUtc;
+            signal.EntryTechnicalFeatures = features;
+            var command = connection.CreateCommand();
+            command.CommandText = "UPDATE signals SET payload=$payload, updated_at_utc=$updated WHERE id=$id";
+            Add(command, "$payload", JsonSerializer.Serialize(signal, JsonOptions));
+            Add(command, "$updated", DateTime.UtcNow.ToString("O"));
+            Add(command, "$id", id.ToString());
+            return await command.ExecuteNonQueryAsync(token) > 0;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<SignalHistoryItem>> GetAsync(int days, int limit, CancellationToken token = default)
+    {
+        days = Math.Clamp(days, 1, 3650);
+        limit = Math.Clamp(limit, 1, 5000);
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
+                FROM signals WHERE created_at_utc >= $from
+                ORDER BY created_at_utc DESC LIMIT $limit;
+                """;
+            Add(command, "$from", DateTime.UtcNow.AddDays(-days).ToString("O"));
+            Add(command, "$limit", limit);
+            var result = new List<SignalHistoryItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
+                if (signal is null) continue;
+                result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
+                    reader.GetBoolean(3)));
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    internal async Task<IReadOnlyList<SignalHistoryItem>> GetLearningAsync(CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
+                FROM signals ORDER BY created_at_utc DESC;
+                """;
+            var result = new List<SignalHistoryItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
+                if (signal is null) continue;
+                result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
+                    reader.GetBoolean(3)));
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    // Active snapshots are visible but quarantined: they can never resume execution
+    // until their exchange state has been reconciled. The archive itself stays unchanged.
+    internal async Task<List<ServerSignal>> ReadQueueForRecoveryAsync(CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var check = connection.CreateCommand();
+            check.CommandText = "PRAGMA quick_check";
+            if (!string.Equals(await check.ExecuteScalarAsync(token) as string, "ok", StringComparison.Ordinal))
+                throw new InvalidDataException("Signal history failed its integrity check; queue recovery stopped.");
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT id,status,payload FROM signals WHERE removed_at_utc IS NULL ORDER BY created_at_utc,id";
+            var result = new List<ServerSignal>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(2), JsonOptions)
+                    ?? throw new InvalidDataException("An archived queue snapshot is empty.");
+                if (signal.Id == Guid.Empty || signal.Id.ToString() != reader.GetString(0) || signal.Status != reader.GetString(1))
+                    throw new InvalidDataException("An archived queue snapshot has inconsistent identity or status.");
+                if (signal.Status is "Pending" or "Submitting" or "Submitted" or "Filled" or "Closing")
+                {
+                    signal.RecoveryOriginalStatus = signal.Status;
+                    signal.Status = "RecoveryRequired";
+                }
+                else if (signal.Status is not ("Completed" or "Cancelled" or "Expired" or "Error" or "Rejected" or "Deactivated" or "RecoveryRequired"))
+                    throw new InvalidDataException("Queue history contains an unknown status; the original file was preserved.");
+                result.Add(signal);
+            }
+            if (result.Count == 0)
+                throw new InvalidDataException("No recoverable queue snapshots exist; the original file was preserved.");
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<SignalHistoryItem>> GetCreatedRangeAsync(
+        DateTime fromUtc, DateTime toUtc, int limit = 20000, CancellationToken token = default)
+    {
+        if (toUtc <= fromUtc) throw new ArgumentException("Report end date must be after start date.");
+        limit = Math.Clamp(limit, 1, 50000);
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
+                FROM signals
+                WHERE created_at_utc >= $from AND created_at_utc < $to
+                ORDER BY created_at_utc DESC LIMIT $limit;
+                """;
+            Add(command, "$from", fromUtc.ToUniversalTime().ToString("O"));
+            Add(command, "$to", toUtc.ToUniversalTime().ToString("O"));
+            Add(command, "$limit", limit);
+            var result = new List<SignalHistoryItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+            {
+                var signal = JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions);
+                if (signal is null) continue;
+                result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
+                    reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
+                    reader.GetBoolean(3)));
+            }
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<CryptoStatisticsItem>> GetCryptoStatisticsAsync(CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            // Aggregate snapshots, not events: repeated updates and queue removal must
+            // never count a trade twice. No date or row limit on lifetime statistics.
+            command.CommandText = """
+                WITH snapshots AS (
+                    SELECT UPPER(TRIM(symbol)) AS symbol, status,
+                        COALESCE(NULLIF(json_extract(payload, '$.outcome'), ''),
+                            CASE
+                                WHEN json_extract(payload, '$.targetReachedAtUtc') IS NOT NULL THEN 'Target'
+                                WHEN json_extract(payload, '$.riskFreeClosedAtUtc') IS NOT NULL THEN 'RiskFree'
+                                WHEN json_extract(payload, '$.stopLossReachedAtUtc') IS NOT NULL THEN 'StopLoss'
+                            END) AS outcome,
+                        json_extract(payload, '$.filledAtUtc') AS filled,
+                        json_extract(payload, '$.completedAtUtc') AS completed,
+                        json_extract(payload, '$.executedQuantity') AS quantity
+                    FROM signals WHERE symbol != 'DELETED' AND TRIM(symbol) != ''
+                ), trades AS (
+                    SELECT * FROM snapshots
+                    WHERE outcome IN ('Target', 'StopLoss', 'RiskFree', 'ManualClosed')
+                        OR filled IS NOT NULL OR quantity > 0 OR status IN ('Filled', 'Closing')
+                )
+                SELECT symbol, COUNT(*),
+                    SUM(CASE WHEN outcome IS NULL AND completed IS NULL THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome = 'Target' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome = 'StopLoss' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome = 'RiskFree' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN outcome NOT IN ('Target', 'StopLoss', 'RiskFree')
+                        OR (outcome IS NULL AND completed IS NOT NULL) THEN 1 ELSE 0 END)
+                FROM trades GROUP BY symbol ORDER BY COUNT(*) DESC, symbol ASC;
+                """;
+            var result = new List<CryptoStatisticsItem>();
+            await using var reader = await command.ExecuteReaderAsync(token);
+            while (await reader.ReadAsync(token))
+                result.Add(new(reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2),
+                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6)));
+            return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<byte[]?> GetImageAsync(Guid id, CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection = await OpenAsync(token);
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT review_image FROM signals WHERE id=$id";
+            Add(command, "$id", id.ToString());
+            return await command.ExecuteScalarAsync(token) as byte[];
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<SqliteConnection> OpenAsync(CancellationToken token)
+    {
+        var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(token);
+        if (!_initialized)
+        {
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                PRAGMA journal_mode=WAL;
+                PRAGMA foreign_keys=ON;
+                CREATE TABLE IF NOT EXISTS signals (
+                    id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL, status TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL, updated_at_utc TEXT NOT NULL, removed_at_utc TEXT NULL,
+                    payload TEXT NOT NULL, timeframe TEXT NULL, chart_mode TEXT NULL, review_image BLOB NULL);
+                CREATE INDEX IF NOT EXISTS ix_signals_created ON signals(created_at_utc DESC);
+                CREATE INDEX IF NOT EXISTS ix_signals_symbol ON signals(symbol, created_at_utc DESC);
+                CREATE INDEX IF NOT EXISTS ix_signals_status ON signals(status, created_at_utc DESC);
+                CREATE TABLE IF NOT EXISTS signal_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT, signal_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL, occurred_at_utc TEXT NOT NULL, payload TEXT NOT NULL,
+                    FOREIGN KEY(signal_id) REFERENCES signals(id));
+                CREATE INDEX IF NOT EXISTS ix_events_signal ON signal_events(signal_id, occurred_at_utc);
+                """;
+            await command.ExecuteNonQueryAsync(token);
+            await EnsureColumnAsync(connection, "signals", "timeframe", "TEXT NULL", token);
+            await EnsureColumnAsync(connection, "signals", "chart_mode", "TEXT NULL", token);
+            await EnsureColumnAsync(connection, "signals", "review_image", "BLOB NULL", token);
+            _initialized = true;
+        }
+        return connection;
+    }
+
+    private static async Task<ServerSignal?> ReadSnapshotAsync(SqliteConnection connection, Guid id, CancellationToken token)
+    {
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT payload FROM signals WHERE id=$id";
+        Add(command, "$id", id.ToString());
+        var payload = await command.ExecuteScalarAsync(token) as string;
+        return payload is null ? null : JsonSerializer.Deserialize<ServerSignal>(payload, JsonOptions);
+    }
+
+    private static string? DetectEvent(ServerSignal before, ServerSignal after)
+    {
+        if (before.Status != after.Status) return $"Status:{before.Status}->{after.Status}";
+        if (before.ExpireStage != after.ExpireStage) return $"ExpireStage:{before.ExpireStage}->{after.ExpireStage}";
+        if (before.TargetReachedAtUtc != after.TargetReachedAtUtc) return "TargetReached";
+        if (before.RiskFreeReachedAtUtc != after.RiskFreeReachedAtUtc) return "RiskFreeReached";
+        if (before.RiskFreeClosedAtUtc != after.RiskFreeClosedAtUtc) return "RiskFreeClosed";
+        if (before.StopLossReachedAtUtc != after.StopLossReachedAtUtc) return "StopLossReached";
+        if (before.Outcome != after.Outcome) return $"Completed:{after.Outcome}";
+        return null;
+    }
+
+    private static async Task InsertEventAsync(SqliteConnection connection, SqliteTransaction transaction,
+        Guid id, string eventType, DateTime occurredAt, string payload, CancellationToken token)
+    {
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "INSERT INTO signal_events(signal_id,event_type,occurred_at_utc,payload) VALUES($id,$type,$at,$payload)";
+        Add(command, "$id", id.ToString());
+        Add(command, "$type", eventType);
+        Add(command, "$at", occurredAt.ToString("O"));
+        Add(command, "$payload", payload);
+        await command.ExecuteNonQueryAsync(token);
+    }
+
+    private static async Task CompactInitialExpiryAsync(SqliteConnection connection, SqliteTransaction transaction,
+        ServerSignal signal, DateTime now, CancellationToken token)
+    {
+        var compact = new ServerSignal
+        {
+            Id = signal.Id, Symbol = "DELETED", Direction = "Deleted", Status = "Expired",
+            CreatedAtUtc = signal.CreatedAtUtc, CompletedAtUtc = signal.CompletedAtUtc,
+            ExpiredAtUtc = signal.ExpiredAtUtc, Outcome = "Expired", ExpireReason = "InitialBoundary"
+        };
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "UPDATE signals SET symbol='DELETED',direction='Deleted',status='Expired',updated_at_utc=$updated,payload=$payload,timeframe=NULL,chart_mode=NULL,review_image=NULL WHERE id=$id";
+        Add(command, "$updated", now.ToString("O"));
+        Add(command, "$payload", JsonSerializer.Serialize(compact, JsonOptions));
+        Add(command, "$id", signal.Id.ToString());
+        await command.ExecuteNonQueryAsync(token);
+        var events = connection.CreateCommand();
+        events.Transaction = transaction;
+        events.CommandText = "DELETE FROM signal_events WHERE signal_id=$id";
+        Add(events, "$id", signal.Id.ToString());
+        await events.ExecuteNonQueryAsync(token);
+    }
+
+    private static async Task EnsureColumnAsync(SqliteConnection connection, string table, string column,
+        string definition, CancellationToken token)
+    {
+        var inspect = connection.CreateCommand();
+        inspect.CommandText = $"PRAGMA table_info({table})";
+        await using var reader = await inspect.ExecuteReaderAsync(token);
+        var exists = false;
+        while (await reader.ReadAsync(token))
+            if (reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase)) { exists = true; break; }
+        await reader.DisposeAsync();
+        if (exists) return;
+        var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        await alter.ExecuteNonQueryAsync(token);
+    }
+
+    private static void Add(SqliteCommand command, string name, object value) =>
+        command.Parameters.AddWithValue(name, value);
+    private static void AddNullable(SqliteCommand command, string name, object? value) =>
+        command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+}
+
+public sealed record SignalHistoryItem(ServerSignal Signal, DateTime UpdatedAtUtc, DateTime? RemovedAtUtc,
+    bool HasImage = false);

@@ -4,58 +4,45 @@ namespace Phoenix.Web;
 
 public sealed class EntrySignalReviewService(
     BybitDemoClient bybit,
-    ProfessionalSignalAnalysisService professional,
-    ServerOrderStore store,
     TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
     ILogger<EntrySignalReviewService> logger)
 {
     public async Task<EntrySignalReview> BuildCurrentAsync(ServerSignal signal, CancellationToken token)
     {
+        ApplyInitialEvidence(signal);
         var interval = string.IsNullOrWhiteSpace(signal.Timeframe) ? "15" : signal.Timeframe!;
-        var candles = await bybit.GetKlinesAsync(signal.Symbol, interval, 1000, token);
         var chartInterval = SignalBatchService.ReviewChartInterval(interval);
-        var chartCandles = chartInterval == interval ? candles
-            : await bybit.GetKlinesAsync(signal.Symbol, chartInterval, 1000, token);
-        if (candles.Count < 52 || chartCandles.Count < 52)
+        var chartCandles = await bybit.GetKlinesAsync(signal.Symbol, chartInterval, 1000, token);
+        if (chartCandles.Count < 52)
             throw new InvalidOperationException("کندل کافی برای تصویر شرایط فعلی وجود ندارد.");
         var anchorStart = chartCandles[Math.Max(0, chartCandles.Count - 220)].OpenTime;
         var candidate = new SignalCandidate(signal.Symbol, interval, signal.Direction,
-            signal.Ceiling, signal.Floor, signal.LastPrice ?? candles[^1].Close, signal.EntryPrice,
+            signal.Ceiling, signal.Floor, signal.LastPrice ?? chartCandles[^1].Close, signal.EntryPrice,
             signal.TakeProfit, signal.StopLoss, signal.StopLoss2, signal.RiskFreePrice,
             signal.Leverage ?? 1m, signal.Quantity, 0m,
             anchorStart, chartCandles[^1].OpenTime, anchorStart, chartCandles[^1].OpenTime,
-            candles.Count, "Current market review", false, candles[^1].OpenTime);
-        ProfessionalSignalAnalysis? analysis = null;
-        try
-        {
-            analysis = await professional.AnalyzeAsync(candidate, candles, interval, token,
-                signal.EntryTriggeredAtUtc);
-            signal.TargetSimilarityPercent = analysis.Prediction.TargetPercent;
-            signal.StopSimilarityPercent = analysis.Prediction.StopPercent;
-            signal.SimilaritySampleCount = analysis.Prediction.SampleCount;
-            signal.SimilarityEvidence = analysis.Prediction.Evidence;
-            signal.TargetOutcomePercent = analysis.Prediction.TargetOutcomePercent;
-            signal.StopOutcomePercent = analysis.Prediction.StopOutcomePercent;
-            signal.OutcomeValidationCount = analysis.Prediction.OutcomeValidationCount;
-            signal.TechnicalFeatures = analysis.Features;
-            if (signal.EntryTriggeredAtUtc is { } entryAt)
-            {
-                await store.SaveEntryTechnicalFeaturesAsync(signal.Id, analysis.Features, entryAt, token);
-                signal.EntryTechnicalFeatures = analysis.Features;
-            }
-            signal.AnalysisSummary = string.Join(" | ", analysis.Strengths.Concat(analysis.Risks));
-            signal.MarketRegime = analysis.MarketRegime;
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Current AI refresh failed for {Symbol}; rendering with stored probabilities", signal.Symbol);
-        }
+            chartCandles.Count, "Current market review", false, chartCandles[^1].OpenTime);
         var image = SignalChartRenderer.Render(chartCandles, candidate, false,
             Badge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent,
             targetOutcome: signal.TargetOutcomePercent, stopOutcome: signal.StopOutcomePercent);
-        return new(image, analysis is not null);
+        return new(image, false);
+    }
+
+    // Restore the exact proposal fingerprint and result; never relabel it as
+    // entry-time evidence or compare it again against a newer archive.
+    internal static void ApplyInitialEvidence(ServerSignal signal)
+    {
+        if (signal.ProposalEvidence is not { } proposal) return;
+        var initial = proposal.Prediction;
+        signal.TechnicalFeatures = proposal.Features;
+        signal.TargetSimilarityPercent = initial.TargetPercent;
+        signal.StopSimilarityPercent = initial.StopPercent;
+        signal.SimilaritySampleCount = initial.SampleCount;
+        signal.SimilarityEvidence = initial.Evidence;
+        signal.TargetOutcomePercent = null;
+        signal.StopOutcomePercent = null;
+        signal.OutcomeValidationCount = 0;
     }
 
     public async Task RefreshAndNotifyAsync(ServerSignal signal, CancellationToken token)

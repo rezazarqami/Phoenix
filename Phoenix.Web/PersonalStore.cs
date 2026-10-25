@@ -144,6 +144,19 @@ public sealed class PersonalStore
         foreach (var link in new[] { (d.GoalId, "goal"), (d.ProjectId, "project"), (entry.Kind == "habit-log" ? d.ParentId : null, "habit") })
             if (link.Item1 is { } id && (id == entry.Id || !entries.Any(e => e.Id == id && e.Kind == link.Item2)))
                 throw new PersonalConflict("هدف، پروژه یا عادت مرتبط موجود نیست.");
+        if (entry.Kind == "category")
+        {
+            if (d.ParentId is { } parent && (parent == entry.Id || !entries.Any(e => e.Id == parent && e.Kind == "category" && e.Category == entry.Category)))
+                throw new PersonalConflict("دستهٔ بالادست معتبر نیست.");
+            if (entries.Any(e => e.Kind == "category" && e.Category == entry.Category && e.Title == entry.Title))
+                throw new PersonalConflict("این دسته از قبل هست.");
+            var ancestor = d.ParentId; var visited = new HashSet<Guid> { entry.Id };
+            while (ancestor is { } id)
+            {
+                if (!visited.Add(id)) throw new PersonalConflict("دسته‌ها نمی‌توانند چرخه داشته باشند.");
+                ancestor = entries.FirstOrDefault(e => e.Id == id)?.Details?.ParentId;
+            }
+        }
         if (entry.Kind == "task" && d.Important && d.Status != "cancelled" && entries.Count(e => e.Kind == "task" && e.Date == entry.Date && e.Details?.Important == true && e.Details.Status != "cancelled") >= 3)
             throw new PersonalConflict("برای هر روز حداکثر سه کار مهم انتخاب کنید.");
         if (entry.Kind == "checkin" && entries.Any(e => e.Kind == "checkin" && e.Date == entry.Date))
@@ -310,6 +323,16 @@ public sealed class PersonalStore
                 var d = e.Details; if (d is null) continue;
                 foreach (var link in new[] { (d.GoalId, "goal"), (d.ProjectId, "project"), (e.Kind == "habit-log" ? d.ParentId : null, "habit") })
                     if (link.Item1 is { } id && (id == e.Id || !all.Any(r => r.Id == id && r.Kind == link.Item2))) throw new ArgumentException("یکی از ارتباط‌های پشتیبان موجود نیست.");
+                if (e.Kind == "category")
+                {
+                    var ancestor = d.ParentId; var visited = new HashSet<Guid> { e.Id };
+                    while (ancestor is { } parent)
+                    {
+                        var category = all.FirstOrDefault(r => r.Id == parent && r.Kind == "category" && r.Category == e.Category);
+                        if (category is null || !visited.Add(parent)) throw new ArgumentException("دستهٔ بالادست معتبر نیست.");
+                        ancestor = category.Details?.ParentId;
+                    }
+                }
                 foreach (var id in d.AttachmentIds)
                     if (!media.ContainsKey(id) && await ReadAttachmentAsync(connection, id, token) is null) throw new ArgumentException("یکی از پیوست‌های ثبت موجود نیست.");
             }

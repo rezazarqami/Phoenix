@@ -12,9 +12,6 @@ import android.view.*;
 import android.webkit.*;
 import android.widget.*;
 import androidx.annotation.NonNull;
-import androidx.biometric.BiometricManager;
-import androidx.biometric.BiometricPrompt;
-import androidx.fragment.app.FragmentActivity;
 import androidx.webkit.*;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -22,14 +19,12 @@ import org.json.*;
 import java.util.Collections;
 import java.util.UUID;
 
-public final class MainActivity extends FragmentActivity {
-    private static final String START_ROUTE=BuildConfig.PHOENIX_ONLY?"/phoenix":"/";
-    private static final String CLIENT_NAME=BuildConfig.PHOENIX_ONLY?"فونیکس":"مدار و فونیکس";
+public final class MainActivity extends Activity {
     private static final String HOME="https://marketsignalist.ir";
+    private static final String START_ROUTE=BuildConfig.PHOENIX_ONLY?"/phoenix":"/";
     private WebView browser;
     private FrameLayout root;
-    private LinearLayout cover;
-    private TextView lockStatus, pageStatus;
+    private TextView pageStatus;
     private LinearLayout pageCover;
     private Button retry, connectionCheck;
     private int loadProgress=0;
@@ -41,23 +36,25 @@ public final class MainActivity extends FragmentActivity {
     private long navigation=0;
     private String lastUrl=HOME+START_ROUTE;
     private final Runnable loadTimeout=()->{if(pageLoading){pageError("باز شدن صفحه کامل نشد. مرحله: "+loadStage+"؛ پیشرفت: "+loadProgress+"٪. در حال بررسی مستقل اتصال گوشی…");checkConnection();}};
-    private boolean unlocked=false, authenticating=false, initialLoaded=false;
+    private boolean unlocked=true, initialLoaded=false;
     private String requestedRoute=START_ROUTE;
     private boolean openReminders=false;
-    private BiometricPrompt biometric;
-    private boolean credentialActivity=false, resumed=false, credentialVerified=false;
+    private boolean resumed=false;
+    private JavaScriptReplyProxy smsReply;
+    private String smsRequestId;
     private android.webkit.ValueCallback<Uri[]> files;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        getWindow().setStatusBarColor(Color.rgb(16,13,26));getWindow().setNavigationBarColor(Color.rgb(16,13,26));
-        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(16,13,26));
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        getWindow().setStatusBarColor(Color.rgb(245,243,248));getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(245,243,248));
         root.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
-        browser=new WebView(this);browser.setBackgroundColor(Color.rgb(16,13,26));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();makeCover();setContentView(root);readIntent(getIntent());
+        browser=new WebView(this);browser.setBackgroundColor(Color.rgb(245,243,248));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.6");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.9");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView view,int progress){loadProgress=progress;}
@@ -90,14 +87,7 @@ public final class MainActivity extends FragmentActivity {
                 handler.cancel();pageError("اتصال امن سرور تأیید نشد. تاریخ و ساعت گوشی و اتصال اینترنت را بررسی کن.");
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
-                String url=request.getUrl().toString();
-                // Admin login redirects to Orbit. Keep this separate client on Phoenix,
-                // while using the same server authentication and session cookies.
-                if(request.isForMainFrame()&&BuildConfig.PHOENIX_ONLY&&TrustedNavigation.trusted(url)&&
-                    ("/".equals(request.getUrl().getPath())||"/index.html".equals(request.getUrl().getPath()))){
-                    loadPage(HOME+START_ROUTE);return true;
-                }
-                if(TrustedNavigation.trusted(url))return false;
+                String url=request.getUrl().toString();if(TrustedNavigation.trusted(url))return false;
                 if(request.isForMainFrame() && ("https".equals(request.getUrl().getScheme())||"http".equals(request.getUrl().getScheme())))try{startActivity(new Intent(Intent.ACTION_VIEW,request.getUrl()));}catch(ActivityNotFoundException ignored){}
                 return true;
             }
@@ -108,13 +98,12 @@ public final class MainActivity extends FragmentActivity {
                 handleMessage(message.getData(),reply);
             });
         }
-        // Restore neither unlocked state nor a rendered web snapshot after process death.
-        showLock();
+        unlock();
     }
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private void makePageCover(){
         pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(35,26,47));
-        TextView title=new TextView(this);title.setText(CLIENT_NAME);title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
+        TextView title=new TextView(this);title.setText("مدار و فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
         pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
         retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
         connectionCheck=new Button(this);connectionCheck.setText("بررسی اتصال همین گوشی");connectionCheck.setOnClickListener(v->{if(unlocked&&pageFailed)checkConnection();});pageCover.addView(connectionCheck);
@@ -122,7 +111,7 @@ public final class MainActivity extends FragmentActivity {
     }
     private void renderPageState(){
         if(!unlocked){pageCover.setVisibility(View.GONE);return;}
-        boolean covered=pageFailed||(!BuildConfig.PHOENIX_ONLY&&pageLoading);
+        boolean covered=pageLoading||pageFailed;
         pageCover.setVisibility(covered?View.VISIBLE:View.GONE);
         // Keep the WebView visible behind the opaque cover so its compositor can produce a frame.
         browser.setVisibility(View.VISIBLE);
@@ -164,58 +153,47 @@ public final class MainActivity extends FragmentActivity {
     }
     private void pageError(String text){pageLoading=false;pageFailed=true;pageStatus.setText(text);ui.removeCallbacks(loadTimeout);renderPageState();}
     private void loadPage(String url){lastUrl=url;beginLoading();browser.loadUrl(url);}
-    private void verified(){
-        authenticating=false;
-        if(resumed)unlock();else credentialVerified=true;
-    }
-    private void makeCover(){
-        cover=new LinearLayout(this);cover.setOrientation(LinearLayout.VERTICAL);cover.setGravity(Gravity.CENTER);cover.setPadding(dp(34),dp(34),dp(34),dp(34));cover.setBackgroundColor(Color.rgb(16,13,26));
-        TextView title=new TextView(this);title.setText(CLIENT_NAME);title.setTextColor(Color.WHITE);title.setTextSize(30);title.setGravity(Gravity.CENTER);cover.addView(title);
-        lockStatus=new TextView(this);lockStatus.setText("برای ورود، هویتت را با قفل امن گوشی تأیید کن.");lockStatus.setTextColor(Color.rgb(215,194,230));lockStatus.setTextSize(16);lockStatus.setGravity(Gravity.CENTER);lockStatus.setPadding(0,dp(21),0,dp(21));cover.addView(lockStatus);
-        Button unlock=new Button(this);unlock.setText("بازکردن با اثر انگشت یا رمز گوشی");unlock.setTextColor(Color.rgb(38,28,48));unlock.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));unlock.setOnClickListener(v->authenticate());cover.addView(unlock);
-        Button credential=new Button(this);credential.setText("استفاده از رمز / الگوی گوشی");credential.setOnClickListener(v->credential());cover.addView(credential);
-        root.addView(cover,new FrameLayout.LayoutParams(-1,-1));
-    }
-    private void showLock(){if(BuildConfig.PHOENIX_ONLY){unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);return;}unlocked=false;cover.setVisibility(View.VISIBLE);browser.setVisibility(View.INVISIBLE);pageCover.setVisibility(View.GONE);}
     private boolean deviceSecure(){return getSystemService(KeyguardManager.class).isDeviceSecure();}
-    private void authenticate(){
-        if(authenticating||!resumed||isFinishing())return;
-        if(!deviceSecure()){lockStatus.setText("ابتدا برای گوشی رمز، الگو یا اثر انگشت تنظیم کن؛ برنامه بدون قفل دستگاه باز نمی‌شود.");startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));return;}
-        int strong=BiometricManager.Authenticators.BIOMETRIC_STRONG;
-        int allowed=Build.VERSION.SDK_INT>=30?strong|BiometricManager.Authenticators.DEVICE_CREDENTIAL:strong;
-        if(BiometricManager.from(this).canAuthenticate(allowed)!=BiometricManager.BIOMETRIC_SUCCESS){credential();return;}
-        authenticating=true;
-        biometric=new BiometricPrompt(this,androidx.core.content.ContextCompat.getMainExecutor(this),new BiometricPrompt.AuthenticationCallback(){
-            @Override public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result){verified();}
-            @Override public void onAuthenticationError(int code,@NonNull CharSequence text){authenticating=false;showLock();if(code==BiometricPrompt.ERROR_NEGATIVE_BUTTON||code==BiometricPrompt.ERROR_LOCKOUT||code==BiometricPrompt.ERROR_LOCKOUT_PERMANENT)credential();else lockStatus.setText("ورود تأیید نشد؛ دوباره تلاش کن یا رمز گوشی را بزن.");}
-            @Override public void onAuthenticationFailed(){lockStatus.setText("اثر انگشت تأیید نشد؛ دوباره تلاش کن یا رمز گوشی را بزن.");}
-        });
-        BiometricPrompt.PromptInfo.Builder builder=new BiometricPrompt.PromptInfo.Builder().setTitle("بازکردن "+CLIENT_NAME).setSubtitle("تأیید هویت با امنیت خود گوشی").setAllowedAuthenticators(allowed);
-        if(Build.VERSION.SDK_INT<30)builder.setNegativeButtonText("رمز گوشی");
-        biometric.authenticate(builder.build());
-    }
-    private void credential(){
-        if(authenticating||!resumed||isFinishing())return;
-        Intent intent=getSystemService(KeyguardManager.class).createConfirmDeviceCredentialIntent(CLIENT_NAME,"رمز، الگو یا PIN گوشی را وارد کن");
-        if(intent==null){lockStatus.setText("قفل امن گوشی فعال نیست.");startActivity(new Intent(Settings.ACTION_SECURITY_SETTINGS));return;}
-        authenticating=true;credentialActivity=true;startActivityForResult(intent,42);
-    }
     private void unlock(){
         if(isFinishing())return;
-        unlocked=true;cover.setVisibility(View.GONE);browser.setVisibility(View.VISIBLE);browser.onResume();browser.requestLayout();
+        unlocked=true;browser.setVisibility(View.VISIBLE);browser.onResume();browser.requestLayout();
         if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?START_ROUTE:requestedRoute;loadPage(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
         renderPageState();
         browser.evaluateJavascript("window.dispatchEvent(new Event('orbit-native-resume'))",null);
     }
     private void readIntent(Intent intent){if(intent==null)return;requestedRoute=BuildConfig.PHOENIX_ONLY?START_ROUTE:TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);showLock();}
-    @Override protected void onResume(){super.onResume();resumed=true;browser.onResume();if(BuildConfig.PHOENIX_ONLY){unlock();return;}if(credentialVerified){credentialVerified=false;unlock();return;}if(!unlocked&&!authenticating){showLock();ui.post(this::authenticate);}}
-    @Override protected void onPause(){resumed=false;credentialVerified=false;CookieManager.getInstance().flush();showLock();browser.onPause();super.onPause();}
-    @Override protected void onStop(){showLock();if(authenticating&&!credentialActivity&&biometric!=null)biometric.cancelAuthentication();super.onStop();}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);unlock();}
+    @Override protected void onResume(){super.onResume();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;unlock();}
+    @Override protected void onPause(){resumed=false;CookieManager.getInstance().flush();browser.onPause();super.onPause();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request==42){credentialActivity=false;authenticating=false;if(result==RESULT_OK){verified();}else{showLock();lockStatus.setText("برای ورود باید قفل دستگاه تأیید شود.");}}
         if(request==43&&files!=null){java.util.ArrayList<Uri> values=new java.util.ArrayList<>();if(result==RESULT_OK&&data!=null){if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)values.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)values.add(data.getData());}files.onReceiveValue(values.isEmpty()?null:values.toArray(new Uri[0]));files=null;}
+    }
+    @Override public void onRequestPermissionsResult(int request,@NonNull String[] permissions,@NonNull int[] results){
+        super.onRequestPermissionsResult(request,permissions,results);
+        if(request==45&&smsReply!=null){
+            JavaScriptReplyProxy proxy=smsReply;String id=smsRequestId;smsReply=null;smsRequestId=null;
+            readSms(proxy,id);
+        }
+    }
+    private void readSms(JavaScriptReplyProxy proxy,String id){
+        if(checkSelfPermission(Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED){try{reply(proxy,id,new JSONObject().put("granted",false).put("messages",new JSONArray()),null);}catch(JSONException ignored){}return;}
+        network.execute(()->{
+            JSONArray messages=new JSONArray();String error=null;
+            try(android.database.Cursor cursor=getContentResolver().query(Uri.parse("content://sms/inbox"),new String[]{"_id","body","date"},"date >= ?",new String[]{String.valueOf(System.currentTimeMillis()-30L*24*60*60*1000)},"date ASC")){
+                if(cursor!=null)while(cursor.moveToNext()){
+                    String body=cursor.getString(1);
+                    // Only debit candidates leave the native inbox reader. OTPs and other messages stay here.
+                    if(body==null||body.length()>4000||!body.matches("(?s).*(برداشت|خرید|بدهکار|پرداخت|انتقال وجه).*"))continue;
+                    if(body.matches("(?s).*(رمز|یکبار مصرف|واریز|بستانکار).*"))continue;
+                    if(!body.matches("(?s).*(ریال|تومان).*"))continue;
+                    if(!body.matches("(?s).*(بانک|حساب|کارت|مانده|موجودی).*"))continue;
+                    messages.put(new JSONObject().put("id",cursor.getString(0)).put("body",body).put("at",cursor.getLong(2)));
+                }
+            }catch(Exception e){error="خواندن پیامک‌ها انجام نشد؛ اجازهٔ پیامک را در تنظیمات گوشی بررسی کن.";}
+            final String failure=error;
+            ui.post(()->{if(isDestroyed()||!TrustedNavigation.trusted(browser.getUrl())||!"/".equals(Uri.parse(browser.getUrl()).getPath()))return;try{reply(proxy,id,new JSONObject().put("granted",true).put("messages",messages),failure);}catch(JSONException ignored){}});
+        });
     }
     private JSONObject status() throws JSONException {
         OrbitNotifications.channels(this);
@@ -236,6 +214,14 @@ public final class MainActivity extends FragmentActivity {
             if(raw==null||raw.length()>10000)throw new IllegalArgumentException("درخواست معتبر نیست.");
             JSONObject input=new JSONObject(raw);id=input.getString("id");if(id.length()>100)throw new IllegalArgumentException("شناسه معتبر نیست.");
             String command=input.getString("command");
+            if(command.equals("readSms")){
+                if(!"/".equals(Uri.parse(browser.getUrl()).getPath()))throw new IllegalArgumentException("پیامک فقط در فضای شخصی در دسترس است.");
+                if(input.optBoolean("requestPermission")&&checkSelfPermission(Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED){
+                    if(smsReply!=null)throw new IllegalStateException("درخواست اجازهٔ پیامک در انتظار است.");
+                    smsReply=proxy;smsRequestId=id;requestPermissions(new String[]{Manifest.permission.READ_SMS},45);return;
+                }
+                readSms(proxy,id);return;
+            }
             if(command.equals("configurePush")){OrbitFirebase.configure(this,input.getJSONObject("config"));reply(proxy,id,status(),null);return;}
             if(command.equals("status")){reply(proxy,id,status(),null);return;}
             if(command.equals("requestNotifications")){
@@ -262,10 +248,10 @@ public final class MainActivity extends FragmentActivity {
                 if(command.equals("logout"))resetDevice();
                 reply(proxy,id,new JSONObject().put("disabled",true),null);return;
             }
-            if(command.equals("lock")){reply(proxy,id,new JSONObject().put("locked",true),null);showLock();return;}
+
             throw new IllegalArgumentException("این فرمان پشتیبانی نمی‌شود.");
         }catch(Exception e){reply(proxy,id,null,e instanceof JSONException?"ساختار درخواست معتبر نیست.":e.getMessage());}
     }
     @Override public void onBackPressed(){if(!unlocked){finish();return;}if(browser.canGoBack())browser.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){network.shutdownNow();ui.removeCallbacksAndMessages(null);if(files!=null)files.onReceiveValue(null);if(biometric!=null)biometric.cancelAuthentication();browser.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){network.shutdownNow();ui.removeCallbacksAndMessages(null);if(files!=null)files.onReceiveValue(null);browser.destroy();super.onDestroy();}
 }

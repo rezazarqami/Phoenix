@@ -22,6 +22,8 @@ builder.Services.AddSingleton<ServerState>();
 builder.Services.AddSingleton<ServerOrderStore>();
 builder.Services.AddSingleton<SignalCancellationService>();
 builder.Services.AddSingleton<BybitInstrumentCatalog>();
+builder.Services.AddSingleton<ProposalLeverageCache>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<ProposalLeverageCache>());
 builder.Services.AddHttpClient("MarketCap", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);
@@ -347,7 +349,8 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
         }
         catch { /* A temporary Bybit failure must not make the signal panel unavailable. */ }
     }
-    foreach (var signal in signals.Where(x => x.CompletedAtUtc is null && (x.TargetSimilarityPercent is null || x.TargetOutcomePercent is null)))
+    foreach (var signal in signals.Where(x => x.CompletedAtUtc is null && x.EntryTriggeredAtUtc is null && x.ProposalEvidence is null &&
+        x.TechnicalFeatures is not null && x.SimilarityEvidence?.ComparisonVersion != 2))
     {
         try
         {
@@ -617,13 +620,9 @@ app.MapPost("/api/analysis/signal-batch", async (StartSignalBatchRequest request
     var timeframeFilter = string.IsNullOrWhiteSpace(request.TimeframeFilter) ? "All" : request.TimeframeFilter;
     if (timeframeFilter is not ("All" or "1" or "5" or "15" or "60" or "240"))
         return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
-    if (request.MinimumTargetProbability is < 0m or > 100m)
-        return Results.BadRequest(new { error = "حداقل برآورد تارگت پس از ورود باید بین صفر تا ۱۰۰ درصد باشد." });
-    if (request.MinimumTargetProbability > 0m && (await learning.GetSnapshotAsync(token)).ProposalOutcomeModel is null)
-        return Results.Conflict(new { error = "مدل احتمالِ زمان پیشنهاد هنوز اعتبارسنجی نشده است؛ فیلتر درصد قابل اجرا نیست. برای بررسی پیشنهادها بدون فیلتر احتمال، مقدار حداقل را خودتان صفر کنید. درصد شباهت جای احتمال را نمی‌گیرد." });
     PhoenixSessionAuth.TryGetIdentity(httpRequest, out var identity);
     return batches.Start(request.Count, request.PositionSizeUsdt, directionFilter, chartFilter,
-            timeframeFilter, request.MinimumTargetProbability, request.TimedMode, request.DurationMinutes,
+            timeframeFilter, 0m, request.TimedMode, request.DurationMinutes,
             identity.Username, out var error)
         ? Results.Accepted(value: batches.Status)
         : Results.Conflict(new { error });

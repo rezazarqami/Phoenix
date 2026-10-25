@@ -92,9 +92,8 @@ public static class TechnicalFeatureExtractor
         var direction = candidate.Direction == "Long" ? 1m : -1m;
         var priceAction = Clamp((directionalBars * direction + 1m) / 2m, 0m, 1m);
 
-        var recentVolume = candles.Skip(candles.Length - 10).Average(x => x.Volume);
-        var baseVolume = candles.Skip(Math.Max(0, candles.Length - 50)).Average(x => x.Volume);
-        var volumeRatio = baseVolume <= 0m ? 1m : Clamp(recentVolume / baseVolume, 0m, 3m);
+        // Volume is excluded from analysis; retain a neutral legacy schema value.
+        const decimal volumeRatio = 1m;
 
         var structure = StructureScore(swingHighs, swingLows, direction);
         var liquiditySweep = LiquiditySweep(candles, direction);

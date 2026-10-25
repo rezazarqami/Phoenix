@@ -65,8 +65,8 @@ internal static class OutcomeModelTests
         Check(SignalOutcomeModel.Train(Enumerable.Range(0, 10).SelectMany(_ => duplicate).ToArray()) is null,
             "Duplicating records cannot satisfy sample requirements");
         var similarityOnly = new SignalSimilarityResult(90m, 89m, 100, 50, 50);
-        Check(!SignalBatchService.PassesOutcomeFilter(similarityOnly, 55m),
-            "High resemblance cannot satisfy an outcome probability filter");
+        Check(SignalBatchService.PassesOutcomeFilter(similarityOnly, 55m),
+            "Retired probability thresholds from old clients cannot block proposals");
         Check(SignalBatchService.PassesOutcomeFilter(similarityOnly, 0m),
             "A disabled filter still allows human review when the model abstains");
         Check(SignalBatchService.PassesOutcomeFilter(similarityOnly with { TargetOutcomePercent = 60m }, 55m),

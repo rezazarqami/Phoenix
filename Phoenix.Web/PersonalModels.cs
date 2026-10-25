@@ -3,6 +3,7 @@ namespace Phoenix.Web;
 
 public sealed record PersonalDetails
 {
+    public string? SourceId { get; init; }
     public string Status { get; init; } = "active";
     public bool Important { get; init; }
     public string? DueTime { get; init; }
@@ -55,7 +56,7 @@ public sealed class PersonalConflict(string message, PersonalEntry? current = nu
 }
 public static class PersonalRules
 {
-    public static readonly HashSet<string> Kinds = ["finance", "vehicle", "journal", "task", "goal", "project", "habit", "habit-log", "checkin", "decision", "craft", "time", "experiment", "review"];
+    public static readonly HashSet<string> Kinds = ["category", "finance", "vehicle", "journal", "task", "goal", "project", "habit", "habit-log", "checkin", "decision", "craft", "time", "experiment", "review"];
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public static string? Validate(PersonalInput input)
     {
@@ -68,6 +69,8 @@ public static class PersonalRules
         if (input.Kind == "finance" && (input.Amount is null or <= 0 || input.Flow is not ("income" or "expense")))
             return "مبلغ مثبت و نوع درآمد یا هزینه را مشخص کنید.";
         if (input.Details is not { } d) return input.Kind is "finance" or "vehicle" or "journal" ? null : "جزئیات این ثبت لازم است.";
+        if (d.SourceId is { Length: > 100 }) return "شناسهٔ پیامک معتبر نیست.";
+        if (input.Kind == "category" && input.Category is not ("finance" or "task")) return "نوع دسته معتبر نیست.";
         if (d.Status is not ("active" or "todo" or "done" or "waiting" or "cancelled" or "archived")) return "وضعیت معتبر نیست.";
         if (d.DueTime is { Length: > 0 } && !TimeOnly.TryParseExact(d.DueTime, "HH:mm", out _)) return "زمان را به شکل ساعت و دقیقه وارد کنید.";
         if (d.Target is < 1 or > 100 || d.Cadence is not ("day" or "week")) return "تعداد هدف و دورهٔ تکرار معتبر نیست.";

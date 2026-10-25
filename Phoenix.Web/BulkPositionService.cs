@@ -83,8 +83,7 @@ public sealed class BulkPositionService(ServerOrderStore store, BybitDemoClient 
                         {
                             if (positions.Any(x => x.Symbol == s.Symbol &&
                                 x.Side == (s.Direction == "Long" ? "Buy" : "Sell"))) continue;
-                            foreach (var protectionOrderId in new[]
-                                     { s.StopLoss2OrderId, s.RiskFreeStopMarketOrderId })
+                            foreach (var protectionOrderId in StagedRiskProtection.OrderIds(s))
                             {
                                 if (string.IsNullOrWhiteSpace(protectionOrderId)) continue;
                                 var protection = await client.GetOrderStatusAsync(protectionOrderId, token);

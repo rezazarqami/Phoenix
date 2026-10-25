@@ -20,6 +20,7 @@ public sealed class ProfessionalSignalAnalysisService(
 {
     private static readonly string[] ContextIntervals = ["15", "60", "240", "D"];
     private static readonly string[] ExtendedIntervals = ["5", "W", "M"];
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _fetchGates = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<ProfessionalSignalAnalysis> AnalyzeAsync(SignalCandidate candidate,
@@ -118,7 +119,6 @@ public sealed class ProfessionalSignalAnalysisService(
         if (f.BitcoinMarketAlignment < -0.2m) return "حرکت بیت‌کوین برخلاف جهت سیگنال";
         if (f.StructureScore < 0.35m) return "ساختار نامناسب یا شکست ساختار خلاف جهت";
         if (f.LiquiditySweepScore < 0.35m) return "جمع‌آوری نقدینگی در خلاف جهت ورود";
-        if (f.VolumeRatio < 0.75m) return "حجم ناکافی برای ادامه حرکت";
         return "غلبه حرکت مخالف پس از فعال‌شدن ورود";
     }
 
@@ -136,9 +136,19 @@ public sealed class ProfessionalSignalAnalysisService(
         var key = $"{symbol}|{interval}|{limit}";
         if (_cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.AtUtc < TimeSpan.FromSeconds(45))
             return cached.Candles;
-        var candles = await bybit.GetKlinesAsync(symbol, interval, limit, token);
-        _cache[key] = new(DateTime.UtcNow, candles);
-        return candles;
+        var gate = _fetchGates.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(token);
+        try
+        {
+            // Concurrent proposals share the existing 45-second cache. A failed or
+            // cancelled fetch is never cached; the next caller can retry normally.
+            if (_cache.TryGetValue(key, out cached) && DateTime.UtcNow - cached.AtUtc < TimeSpan.FromSeconds(45))
+                return cached.Candles;
+            var candles = await bybit.GetKlinesAsync(symbol, interval, limit, token);
+            _cache[key] = new(DateTime.UtcNow, candles);
+            return candles;
+        }
+        finally { gate.Release(); }
     }
 
     private static decimal DirectionalTrend(TechnicalFeatureSnapshot f, decimal direction) =>

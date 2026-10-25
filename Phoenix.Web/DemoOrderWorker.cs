@@ -222,7 +222,7 @@ public sealed class DemoOrderWorker(
                 ?? throw new InvalidOperationException("Signal leverage is missing."), token);
             var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
                 order.Direction == "Long" ? "Buy" : "Sell", token);
-            var result = await client.PlaceLimitOrderAsync(
+            var result = await client.PlaceMarketOrderAsync(
                 order.ToPreview(), order.OrderLinkId, positionIndex, token);
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
@@ -257,7 +257,7 @@ public sealed class DemoOrderWorker(
     {
         if (order.CompletedAtUtc is not null) return;
         BackfillStopLoss2Levels(order);
-        var filledProtection = await FilledRiskFreeProtectionAsync(order, token);
+        var filledProtection = await new StagedRiskProtection(client, store).FilledAsync(order, token);
         if (filledProtection is not null)
         {
             Complete(order, "RiskFree", filledProtection.UpdatedAtUtc ?? DateTime.UtcNow);
@@ -273,38 +273,12 @@ public sealed class DemoOrderWorker(
             await CancelRiskFreeProtectionAsync(order, token);
             await telegram.TargetReachedAsync(order, token);
         }
-        else if (order.RiskFreePrice is { } riskFree &&
-                 order.StopLoss2 is { } stopLoss2 && order.RiskFreeStopMarket is { } stopMarket &&
-                 (order.RiskFreeReachedAtUtc is not null || ProfitLevelReached(order, price, riskFree)))
+        else
         {
             try
             {
-                var newlyReached = order.RiskFreeReachedAtUtc is null;
-                var rules = await client.GetInstrumentRulesAsync(order.Symbol, token);
-                var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
-                    order.Direction == "Long" ? "Buy" : "Sell", token);
-                var quantity = order.ExecutedQuantity ?? order.Quantity;
-                if (string.IsNullOrWhiteSpace(order.StopLoss2OrderId))
-                {
-                    var result = await PlaceRiskFreeProtectionAsync(order, quantity, stopLoss2,
-                        rules.TickSize, $"sl2-{order.Id:N}"[..36], positionIndex, false, token);
-                    order.StopLoss2 = result.Price;
-                    order.StopLoss2OrderId = result.OrderId;
-                    await store.UpdateAsync(order, token);
-                }
-                if (string.IsNullOrWhiteSpace(order.RiskFreeStopMarketOrderId))
-                {
-                    var result = await PlaceRiskFreeProtectionAsync(order, quantity, stopMarket,
-                        rules.TickSize, $"rfm-{order.Id:N}"[..36], positionIndex, true, token);
-                    order.RiskFreeStopMarket = result.Price;
-                    order.RiskFreeStopMarketOrderId = result.OrderId;
-                    await store.UpdateAsync(order, token);
-                }
-                if (newlyReached)
-                {
-                    order.RiskFreeReachedAtUtc = DateTime.UtcNow;
+                if (await new StagedRiskProtection(client, store).AdvanceAsync(order, price, token))
                     await telegram.RiskFreeReachedAsync(order, token);
-                }
             }
             catch (Exception exception)
             {
@@ -347,48 +321,12 @@ public sealed class DemoOrderWorker(
     }
 
     public static decimal RiskFreeStopMarketPrice(decimal entryPrice, decimal takeProfit) =>
-        entryPrice + (takeProfit - entryPrice) * 0.25m;
-
-    private async Task<BybitOrderStatus?> FilledRiskFreeProtectionAsync(
-        ServerSignal order, CancellationToken token)
-    {
-        foreach (var orderId in new[] { order.StopLoss2OrderId, order.RiskFreeStopMarketOrderId })
-        {
-            if (string.IsNullOrWhiteSpace(orderId)) continue;
-            var status = await client.GetOrderStatusAsync(orderId, token);
-            if (status?.Status == "Filled") return status;
-        }
-        return null;
-    }
-
-    private async Task<BybitOrderResult> PlaceRiskFreeProtectionAsync(
-        ServerSignal order, decimal quantity, decimal stopPrice, decimal tickSize,
-        string linkId, int positionIndex, bool market, CancellationToken token)
-    {
-        try
-        {
-            return market
-                ? await client.PlaceStopMarketAsync(order.Symbol, order.Direction, quantity,
-                    stopPrice, tickSize, linkId, positionIndex, token)
-                : await client.PlaceStopLimitAsync(order.Symbol, order.Direction, quantity,
-                    stopPrice, tickSize, linkId, positionIndex, token);
-        }
-        catch (Exception exception) when (
-            exception.Message.Contains("110072", StringComparison.Ordinal) ||
-            exception.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
-        {
-            var recovered = await client.GetOrderStatusByLinkIdAsync(linkId, token);
-            if (recovered is null) throw;
-            return new BybitOrderResult(recovered.OrderId, linkId, order.Symbol,
-                order.Direction == "Long" ? "Sell" : "Buy", quantity,
-                BybitOrderPreviewBuilder.RoundToStep(stopPrice, tickSize));
-        }
-    }
+        entryPrice + (takeProfit - entryPrice) * 0.20m;
 
     private async Task CancelRiskFreeProtectionAsync(
         ServerSignal order, CancellationToken token, string? exceptOrderId = null)
     {
-        foreach (var orderId in new[] { order.StopLoss2OrderId, order.RiskFreeStopMarketOrderId }
+        foreach (var orderId in StagedRiskProtection.OrderIds(order)
                      .Where(value => !string.IsNullOrWhiteSpace(value) && value != exceptOrderId))
             try { await client.CancelOrderAsync(order.Symbol, orderId!, token); }
             catch (Exception exception)

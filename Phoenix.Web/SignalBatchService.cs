@@ -9,7 +9,8 @@ public sealed class SignalBatchService(
     DedicatedTelegramNotifier dedicatedTelegram,
     ProfessionalSignalAnalysisService professional,
     ShadowSignalRuntime shadow,
-    IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews)
+    IHostApplicationLifetime lifetime, ILogger<SignalBatchService> logger, ReviewArchiveStore reviews,
+    ProposalLeverageCache? leverageInfo = null)
 {
     private readonly object _sync = new();
     private BatchState _state = BatchState.Idle;
@@ -240,9 +241,15 @@ public sealed class SignalBatchService(
 
                     var rules = await bybit.GetInstrumentRulesAsync(asset.Symbol, token);
                     var options = new List<RankedCandidate>();
-                    foreach (var interval in Intervals(timeframeFilter))
+                    // Fetch independent timeframes concurrently, but evaluate them in
+                    // the original order so tie-breaking and proposal priority stay unchanged.
+                    var intervals = Intervals(timeframeFilter);
+                    var histories = await OrderedConcurrentFetch.RunAsync(intervals,
+                        interval => bybit.GetKlinesAsync(asset.Symbol, interval, 1000, token), 3, token);
+                    for (var intervalIndex = 0; intervalIndex < intervals.Length; intervalIndex++)
                     {
-                        var candles = await bybit.GetKlinesAsync(asset.Symbol, interval, 1000, token);
+                        var interval = intervals[intervalIndex];
+                        var candles = histories[intervalIndex];
                         var chartModes = chartFilter switch
                         {
                             "Candles" => new[] { false }, "Line" => new[] { true }, _ => new[] { false, true }
@@ -415,8 +422,7 @@ public sealed class SignalBatchService(
             token.ThrowIfCancellationRequested();
             var selected = option.Candidate;
             var analysis = await professional.AnalyzeAsync(selected, option.Candles, option.Interval, token);
-            if (EntryToTargetPercent(selected) < 0.5m ||
-                !PassesOutcomeFilter(analysis.Prediction, minimumTargetProbability))
+            if (EntryToTargetPercent(selected) < 0.5m)
                 return (PreparedProposal?)null;
             var chartInterval = ReviewChartInterval(option.Interval);
             IReadOnlyList<BybitKline> chartCandles;
@@ -445,7 +451,8 @@ public sealed class SignalBatchService(
             }
             var similarityResult = analysis.Prediction;
             var similarityLines = SignalReviewText.Similarity(similarityResult);
-            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
+            var leverageLines = leverageInfo?.Describe(selected.Symbol, selected.EntryPrice, selected.TakeProfit) ?? "";
+            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪{leverageLines}\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
             token.ThrowIfCancellationRequested();
             // Chart style is presentation-only; analysis retains the requested mode.
             var image = SignalChartRenderer.Render(chartCandles, selected, false,
@@ -480,7 +487,7 @@ public sealed class SignalBatchService(
     private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
     private static string TimeframeBadge(string value) => value switch { "1" => "1M", "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value };
     internal static bool PassesOutcomeFilter(SignalSimilarityResult prediction, decimal minimum) =>
-        minimum <= 0m || prediction.TargetOutcomePercent is { } probability && probability >= minimum;
+        true;
 
     public static decimal EntryToTargetPercent(SignalCandidate candidate) => candidate.EntryPrice <= 0m
         ? 0m : candidate.Direction == "Long"

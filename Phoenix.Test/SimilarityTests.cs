@@ -69,12 +69,12 @@ internal static class SimilarityTests
         { new LearnedSignalPattern(signal, "Target", target), new LearnedSignalPattern(signal, "StopLoss", stop) }).ToArray();
         var candidate = new ServerSignal { Direction = "Long", Timeframe = "15", TechnicalFeatures = target };
         var result = SignalSimilarityService.CalculateFromPatterns(candidate, patterns);
-        Check(result.TargetPercent == 100m && result.StopPercent < 20m,
-            "Constant shared readings must not bury the only distinguishing measurement");
+        Check(result.TargetPercent == 100m && result.StopPercent < result.TargetPercent,
+            "Explicit weights retain differences without dataset-dependent exaggeration");
         var ambiguous = SignalSimilarityService.CalculateFromPatterns(withFeatures(target with { StopLevelStrength = 0.5m }), patterns);
         Check(ambiguous.TargetPercent == ambiguous.StopPercent, "A midpoint must remain honestly ambiguous");
         var missing = SignalSimilarityService.CalculateFromPatterns(withFeatures(Features), patterns);
-        Check(missing.TargetPercent is null && missing.StopPercent is null, "Missing distance evidence must abstain");
+        Check(missing.TargetPercent.HasValue && missing.StopPercent.HasValue, "Missing optional fields must still compare shared legacy measurements");
         var legacy = target with { SimilarityContextVersion = 0, MultiScaleLevels = [], MarketRegimeScore = 0m };
         Check(SignalOutcomeModel.Values(signal, legacy)[10] is null, "Unversioned historical context is missing, not zero");
         Check(SignalReviewText.Comparison(81m, 80m).Contains("نزدیک"), "Close resemblance must be explained");
@@ -96,8 +96,8 @@ internal static class SimilarityTests
         var candidate = new ServerSignal { Direction = "Long", Timeframe = "15", TechnicalFeatures = target,
             EntryTriggeredAtUtc = new DateTime(2026, 2, 1) };
         var baseline = SignalSimilarityService.CalculateFromPatterns(candidate, rows);
-        Check(baseline.TargetPercent == 100m && baseline.StopPercent < 20m,
-            "Opposing timeframe readings cannot cancel through averaging");
+        Check(baseline.TargetPercent == 100m && baseline.StopPercent < baseline.TargetPercent,
+            "Matching interval/window readings must preserve technical differences");
         Check(!SignalOutcomeModel.Values(signal, target).SequenceEqual(SignalOutcomeModel.Values(signal, stop)),
             "Outcome learning must preserve timeframe identity too");
         var future = rows.Select(x => new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(),
@@ -105,8 +105,34 @@ internal static class SimilarityTests
         var review = SignalSimilarityService.CalculateFromPatterns(candidate, rows.Concat(future).Concat(rows).ToArray());
         Check(review == baseline, "Future labels and duplicated IDs must not affect a past review");
         var wrongInterval = new ServerSignal { Direction = "Long", Timeframe = "D", TechnicalFeatures = target };
-        Check(SignalSimilarityService.CalculateFromPatterns(wrongInterval, rows).TargetPercent is null,
-            "Unrelated signal timeframes cannot supply nearby evidence");
+        Check(SignalSimilarityService.CalculateFromPatterns(wrongInterval, rows).TargetPercent > 0m,
+            "A distant timeframe must not multiply technical resemblance by zero");
+    }
+
+    public static void SparseAndDistantHistoryRemainsComparable()
+    {
+        var now = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var current = Features with { SimilarityContextVersion = 3, EntryLevelStrength = 0.9m,
+            StopLevelStrength = 0.8m, TargetLevelStrength = 0.7m };
+        var candidate = new ServerSignal { Direction = "Long", Timeframe = "1",
+            CreatedAtUtc = now, TechnicalFeatures = current };
+        var rows = new[] { "Target", "StopLoss", "RiskFree" }.Select(outcome =>
+            new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
+                Timeframe = "D", CompletedAtUtc = now.AddDays(-1) }, outcome, Features)).ToArray();
+        var result = SignalSimilarityService.CalculateFromPatterns(candidate, rows);
+        Check(result.Evidence is { ComparisonVersion: 2, ComparableTargets: 1, ComparableStops: 1,
+            ComparableRiskFree: 1, OtherTimeframeNearbyTargets: 1, OtherTimeframeNearbyStops: 1,
+            OtherTimeframeNearbyRiskFree: 1, SameTimeframeNearbyTargets: 0 },
+            "Sparse legacy snapshots and distant timeframes must retain all three outcome counts");
+        Check(!SignalReviewText.Similarity(result).Contains("احتمال"),
+            "Uncalibrated and archived probability fields must never be displayed");
+        var none = SignalSimilarityService.CalculateFromPatterns(candidate, []);
+        Check(SignalReviewText.Support(none.Evidence).Contains("سابقهٔ فنی قابل‌مقایسه"),
+            "No comparable history must not masquerade as six measured zeros");
+        Check(SignalReviewText.Outcome(99m, 1m, 1000) == "",
+            "Even previously stored probabilities must stay hidden");
+        Check(SignalBatchService.PassesOutcomeFilter(result, 99m),
+            "A stale client probability threshold must not suppress proposals");
     }
 
     public static void BreakAndRetestUseConfirmedPastPivots()
@@ -164,7 +190,7 @@ internal static class SimilarityTests
             "All-time, slow outcomes and other timeframes must count once each, including risk-free");
         var text = SignalReviewText.Similarity(result);
         Check(!text.Contains("۳۰") && !text.Contains("شباهت به") && !text.Contains("دقیقه") &&
-            !text.Contains("سربه‌سر") && text.Contains("ریسک‌فری") && text.Contains("نامشخص"),
+            !text.Contains("سربه‌سر") && text.Contains("ریسک‌فری") && !text.Contains("احتمال"),
             "Concise summary must not expose diagnostics or disguise similarity as probability");
         Check(SignalReviewText.Support(result.Evidence).Trim().Split('\n').Length == 2,
             "Historical evidence must occupy exactly two lines");

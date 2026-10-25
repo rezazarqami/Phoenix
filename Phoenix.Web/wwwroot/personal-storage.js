@@ -160,53 +160,63 @@
       clientId: entry.id,
     };
   }
+  // Compare and write inside one IndexedDB transaction: a server response must
+  // never erase an edit made between a pending-job read and its acknowledgement.
+  async function withEntry(id, change) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(["records", "pending"], "readwrite");
+      let value;
+      tx.oncomplete = () => resolve(value);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || Error("ذخیره در گوشی انجام نشد."));
+      const pending = tx.objectStore("pending").get(id);
+      pending.onsuccess = () => {
+        const record = tx.objectStore("records").get(id);
+        record.onsuccess = () => {
+          value = change(pending.result, record.result, tx);
+        };
+      };
+    });
+  }
   async function save(values, existing) {
-    const id = existing?.id || crypto.randomUUID(),
-      pending = await read("pending", id);
-    const entry = {
-      ...values,
-      id,
-      revision: existing?.revision || 1,
-      createdAt: existing?.createdAt || new Date().toISOString(),
-      updatedAt: existing ? new Date().toISOString() : null,
-      _pending: true,
-    };
-    const operation = {
-      id,
-      operationId: crypto.randomUUID(),
-      action: pending?.action === "create" || !existing ? "create" : "update",
-      entry: input(entry),
-      revision: pending?.revision || entry.revision,
-      blocked: false,
-    };
-    await write([
-      { store: "records", value: entry },
-      { store: "pending", value: operation },
-    ]);
-    return entry;
+    const id = existing?.id || crypto.randomUUID();
+    return withEntry(id, (pending, local, tx) => {
+      const entry = {
+        ...values,
+        id,
+        revision: local?.revision || existing?.revision || 1,
+        createdAt:
+          local?.createdAt || existing?.createdAt || new Date().toISOString(),
+        updatedAt: existing ? new Date().toISOString() : null,
+        _pending: true,
+      };
+      tx.objectStore("records").put(entry);
+      tx.objectStore("pending").put({
+        id,
+        operationId: crypto.randomUUID(),
+        action: pending?.action === "create" || !existing ? "create" : "update",
+        entry: input(entry),
+        revision: pending?.revision || entry.revision,
+        blocked: false,
+      });
+      return entry;
+    });
   }
   async function remove(entry) {
-    const pending = await read("pending", entry.id);
-    if (pending?.action === "create" && !inFlightIds.has(entry.id)) {
-      await write([
-        { store: "records", remove: entry.id },
-        { store: "pending", remove: entry.id },
-      ]);
-      return;
-    }
-    await write([
-      { store: "records", remove: entry.id },
-      {
-        store: "pending",
-        value: {
+    return withEntry(entry.id, (pending, local, tx) => {
+      tx.objectStore("records").delete(entry.id);
+      if (pending?.action === "create" && !inFlightIds.has(entry.id))
+        tx.objectStore("pending").delete(entry.id);
+      else
+        tx.objectStore("pending").put({
           id: entry.id,
           operationId: crypto.randomUUID(),
           action: "delete",
-          revision: pending?.revision || entry.revision,
+          revision: pending?.revision || local?.revision || entry.revision,
           blocked: false,
-        },
-      },
-    ]);
+        });
+    });
   }
   async function addFile(file) {
     if (file.size > 16 * 1024 * 1024)
@@ -251,9 +261,14 @@
     flight = (async () => {
       let pending = await read("pending");
       // Parents are sent before linked records even when several were created offline.
-      const order = { goal: 0, project: 1, habit: 1 };
+      const order = { category: -1, goal: 0, project: 1, habit: 1 };
       pending.sort(
-        (a, b) => (order[a.entry?.kind] ?? 2) - (order[b.entry?.kind] ?? 2),
+        (a, b) =>
+          (order[a.entry?.kind] ?? 2) - (order[b.entry?.kind] ?? 2) ||
+          (a.entry?.kind === "category" && b.entry?.kind === "category"
+            ? a.entry.title.split(" / ").length -
+              b.entry.title.split(" / ").length
+            : 0),
       );
       for (const job of pending) {
         if (job.blocked) continue;
@@ -283,46 +298,35 @@
               },
             );
           }
-          const current = await read("pending", job.id);
-          if (current?.operationId === job.operationId) {
-            const changes = [{ store: "pending", remove: job.id }];
-            if (result) changes.push({ store: "records", value: result });
-            await write(changes);
-          } else if (current && result) {
-            const local = await read("records", job.id);
-            const changes = [
-              {
-                store: "pending",
-                value: {
-                  ...current,
-                  action: current.action === "delete" ? "delete" : "update",
-                  revision: result.revision,
-                },
-              },
-            ];
-            if (local)
-              changes.push({
-                store: "records",
-                value: { ...local, revision: result.revision },
+          await withEntry(job.id, (current, local, tx) => {
+            if (current?.operationId === job.operationId) {
+              tx.objectStore("pending").delete(job.id);
+              if (result) tx.objectStore("records").put(result);
+            } else if (current && result) {
+              tx.objectStore("pending").put({
+                ...current,
+                action: current.action === "delete" ? "delete" : "update",
+                revision: result.revision,
               });
-            await write(changes);
-          }
+              if (local)
+                tx.objectStore("records").put({
+                  ...local,
+                  revision: result.revision,
+                });
+            }
+          });
         } catch (error) {
           if (error.status === 401 || error.status === 403) throw error;
           if (error instanceof ApiError) {
-            const latest = await read("pending", job.id);
-            if (latest?.operationId === job.operationId)
-              await write([
-                {
-                  store: "pending",
-                  value: {
-                    ...job,
-                    blocked: true,
-                    error: error.message,
-                    current: error.current || null,
-                  },
-                },
-              ]);
+            await withEntry(job.id, (latest, local, tx) => {
+              if (latest?.operationId === job.operationId)
+                tx.objectStore("pending").put({
+                  ...latest,
+                  blocked: true,
+                  error: error.message,
+                  current: error.current || null,
+                });
+            });
             onChange();
             continue;
           }
@@ -332,20 +336,29 @@
         }
       }
       const entries = await api("entries"),
-        jobs = await read("pending"),
-        local = await read("records"),
-        protectedIds = new Set(jobs.map((j) => j.id));
-      const changes = local
-        .filter((e) => !protectedIds.has(e.id))
-        .map((e) => ({ store: "records", remove: e.id }));
-      for (const e of entries)
-        if (!protectedIds.has(e.id))
-          changes.push({ store: "records", value: e });
-      changes.push({
-        store: "meta",
-        value: { key: "lastSync", value: new Date().toISOString() },
+        db = await open();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(["records", "pending", "meta"], "readwrite");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+        const jobs = tx.objectStore("pending").getAll();
+        jobs.onsuccess = () => {
+          const protectedIds = new Set(jobs.result.map((j) => j.id)),
+            records = tx.objectStore("records"),
+            local = records.getAll();
+          local.onsuccess = () => {
+            for (const e of local.result)
+              if (!protectedIds.has(e.id)) records.delete(e.id);
+            for (const e of entries)
+              if (!protectedIds.has(e.id)) records.put(e);
+            tx.objectStore("meta").put({
+              key: "lastSync",
+              value: new Date().toISOString(),
+            });
+          };
+        };
       });
-      await write(changes);
       onChange();
     })().finally(() => {
       flight = null;

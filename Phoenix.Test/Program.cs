@@ -9,12 +9,27 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Entry image refresh preserves original proposal evidence without reanalysis", FrozenEntryReviewTests.CurrentImageWithInitialEvidence);
+Run("Similarity sparse legacy and distant timeframe regression", SimilarityTests.SparseAndDistantHistoryRemainsComparable);
+Run("Proposal leverage displays raw, capped and unknown values without network calls", ProposalLeverageCacheTests.DisplayAndDailyRefresh);
+Run("Proposal leverage bulk refresh paginates and rejects invalid snapshots", ProposalLeverageCacheTests.PaginationAndFailure);
+
+Run("Staged protection follows 50/20 then 75/50/20 for Long and Short across restart", StagedRiskProtectionTests.BothDirections);
+Run("Staged protection handles gaps, failed market placement and unconfirmed cancellation", StagedRiskProtectionTests.GapsAndFailures);
+Run("Staged protection recovers duplicate acknowledgements and detects early fills", StagedRiskProtectionTests.DuplicateAndEarlyFill);
+
+Run("Scan performance preserves order and bounds overlapping candle requests", ScanPerformanceTests.OrderedFetch);
+Run("Scan performance deduplicates analysis candles and isolates cancelled waiters", ScanPerformanceTests.AnalysisFetchDeduplication);
+
 Run("Mobile signal events isolate owner/public routes and cover the lifecycle", MobilePushTests.SignalEvents);
 Run("Mobile push persists per-device retries without duplicate or historic delivery", MobilePushTests.DurableDelivery);
 
 Run("Personal workspace idempotent sync, version conflicts, references, decision provenance and media backup", Phoenix.Test.PersonalWorkspaceTests.Workspace);
 Run("Personal reports count car costs once and preserve missing data", Phoenix.Test.PersonalWorkspaceTests.Reports);
 Run("Observation outcomes track both directions, gaps, expiry and legacy policy", ObservationOutcomeTests.Transitions);
+
+Run("Orbit nested categories survive restart and reject invalid parents", Phoenix.Test.OrbitWorkspaceTests.Categories);
+Run("Orbit SMS drafts preserve source and stay out of reports until approved", Phoenix.Test.OrbitWorkspaceTests.Drafts);
 
 Run("Personal records persist across store instances and delete accurately", Phoenix.Test.PersonalStoreTests.Persistence);
 
@@ -700,27 +715,42 @@ Run("Bybit POST requests sign the exact JSON body", () =>
     Equal(64, request.Headers.GetValues("X-BAPI-SIGN").Single().Length);
 });
 
-Run("Bybit Demo limit orders include protection and return an order ID", () =>
+Run("Bybit market entries preserve Buy/Sell, quantity, identity and TP/SL without a limit price", () =>
 {
-    var handler = new StubHttpHandler(request =>
+    foreach (var side in new[] { "Buy", "Sell" })
     {
-        Equal("/v5/order/create", request.RequestUri!.AbsolutePath);
-        var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
-        True(body.Contains("\"orderType\":\"Limit\"", StringComparison.Ordinal));
-        True(body.Contains("\"takeProfit\":\"119000\"", StringComparison.Ordinal));
-        True(body.Contains("\"stopLoss\":\"118542\"", StringComparison.Ordinal));
-        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        var handler = new StubHttpHandler(request =>
         {
-            Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"demo-123\",\"orderLinkId\":\"phoenix-test\"}}")
-        };
-    });
-    var client = new BybitDemoClient(
-        new BybitDemoOptions("test-key", "test-secret"),
-        new HttpClient(handler),
-        () => 1_700_000_000_000);
-    var preview = new BybitOrderPreview("BTCUSDT", "Buy", 0.001m, 118764m, 119000m, 118542m, 118.764m);
-    var result = client.PlaceLimitOrderAsync(preview, "phoenix-test").GetAwaiter().GetResult();
-    Equal("demo-123", result.OrderId);
+            Equal(HttpMethod.Post, request.Method);
+            Equal("/v5/order/create", request.RequestUri!.AbsolutePath);
+            using var document = System.Text.Json.JsonDocument.Parse(
+                request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var body = document.RootElement;
+            Equal("Market", body.GetProperty("orderType").GetString()!);
+            Equal(side, body.GetProperty("side").GetString()!);
+            Equal("0.001", body.GetProperty("qty").GetString()!);
+            Equal("phoenix-test", body.GetProperty("orderLinkId").GetString()!);
+            Equal(side == "Buy" ? 1 : 2, body.GetProperty("positionIdx").GetInt32());
+            True(!body.GetProperty("reduceOnly").GetBoolean());
+            True(!body.TryGetProperty("price", out _));
+            True(!body.TryGetProperty("timeInForce", out _));
+            Equal("119000", body.GetProperty("takeProfit").GetString()!);
+            Equal("118542", body.GetProperty("stopLoss").GetString()!);
+            Equal("Market", body.GetProperty("tpOrderType").GetString()!);
+            Equal("Market", body.GetProperty("slOrderType").GetString()!);
+            Equal("Full", body.GetProperty("tpslMode").GetString()!);
+            return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"orderId\":\"demo-123\",\"orderLinkId\":\"phoenix-test\"}}")
+            };
+        });
+        var client = new BybitDemoClient(
+            new BybitDemoOptions("test-key", "test-secret"), new HttpClient(handler),
+            () => 1_700_000_000_000);
+        var preview = new BybitOrderPreview("BTCUSDT", side, 0.001m, 118764m, 119000m, 118542m, 118.764m);
+        var result = client.PlaceMarketOrderAsync(preview, "phoenix-test", side == "Buy" ? 1 : 2).GetAwaiter().GetResult();
+        Equal("demo-123", result.OrderId);
+    }
 });
 
 Run("Bybit leverage is read from the Demo position setting", () =>
@@ -848,10 +878,10 @@ Run("Bybit SL2 is a reduce-only conditional stop-limit order", () =>
     True(requests[1].Contains("\"triggerDirection\":1", StringComparison.Ordinal));
 });
 
-Run("Risk-free backup is a reduce-only stop-market at twenty-five percent", () =>
+Run("Risk-free backup is a reduce-only stop-market at twenty percent", () =>
 {
-    Near(102.5m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 110m));
-    Near(97.5m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 90m));
+    Near(102m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 110m));
+    Near(98m, DemoOrderWorker.RiskFreeStopMarketPrice(100m, 90m));
     var requests = new List<string>();
     var handler = new StubHttpHandler(request =>
     {

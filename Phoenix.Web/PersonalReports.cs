@@ -4,6 +4,7 @@ public static class PersonalReports
 {
     public static object Build(IReadOnlyList<PersonalEntry> entries, DateOnly from, DateOnly to)
     {
+        entries = entries.Where(e => !(e.Kind == "finance" && e.Details?.SourceId != null && e.Details.Status is "waiting" or "cancelled")).ToArray();
         var selected = entries.Where(e => e.Date >= from && e.Date <= to).ToArray();
         var length = to.DayNumber - from.DayNumber + 1;
         var previousFrom = from.AddDays(-length); var previousTo = from.AddDays(-1);

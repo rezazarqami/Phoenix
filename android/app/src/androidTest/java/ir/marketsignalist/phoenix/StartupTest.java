@@ -29,7 +29,7 @@ public class StartupTest {
         AtomicReference<String> login=new AtomicReference<>("false"),status=new AtomicReference<>("");
         AtomicReference<Boolean> revealed=new AtomicReference<>(false);
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
-            scenario.onActivity(app->{try{call(app,"verified");}catch(Throwable e){failure.set(e);}});
+            scenario.onActivity(app->{try{call(app,"unlock");}catch(Throwable e){failure.set(e);}});
             long deadline=System.currentTimeMillis()+25000;
             while(System.currentTimeMillis()<deadline&&!("true".equals(login.get())&&revealed.get())&&failure.get()==null){
                 scenario.onActivity(app->{try{
@@ -65,7 +65,7 @@ public class StartupTest {
                     @Override public void onPageFinished(WebView v,String url){client.onPageFinished(v,url);}
                     @Override public void onPageCommitVisible(WebView v,String url){client.onPageCommitVisible(v,url);}
                 });
-                call(app,"verified");
+                ((WebView)get(app,"browser")).reload();
             }catch(Throwable e){failure.set(e);}});
             // Poll the actual compositor/UI state, not a mocked completion callback.
             long deadline=System.currentTimeMillis()+5000;
@@ -76,7 +76,7 @@ public class StartupTest {
             }
             if(failure.get()!=null)throw new AssertionError(failure.get());
             assertTrue("Loaded HTML remained behind the native loading cover",shown.get());
-            scenario.onActivity(app->{try{call(app,"showLock");assertEquals(BuildConfig.PHOENIX_ONLY?View.VISIBLE:View.INVISIBLE,((View)get(app,"browser")).getVisibility());assertEquals(BuildConfig.PHOENIX_ONLY?View.GONE:View.VISIBLE,((View)get(app,"cover")).getVisibility());}catch(Throwable e){failure.set(e);}});
+            scenario.onActivity(app->{try{assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);}catch(Throwable e){failure.set(e);}});
             if(failure.get()!=null)throw new AssertionError(failure.get());
         }finally{instrument.removeMonitor(monitor);}
     }

@@ -48,7 +48,7 @@ Create the API keys while the main Bybit account is switched to Demo Trading, th
 
 Restart Visual Studio after setting the variables. Never commit, paste into source code, or share either value. The current milestone does not submit orders to Bybit; it only verifies public connectivity and authenticated Demo wallet access.
 
-Phoenix can submit a manually confirmed linear Limit order to Bybit Demo with full-position market TP/SL protection. It stores the returned order ID in memory so the same UI session can request cancellation. Mainnet is hard-disabled, Market entry orders are unavailable, and no order is submitted without a confirmation dialog.
+After manual signal confirmation, Phoenix waits for the entry price (Long: last trade at or below entry; Short: at or above entry), then submits a linear Market Buy/Sell order with full-position market TP/SL protection. Entry requests contain no limit price or GTC instruction. Both WebSocket entry detection and polling fallback, including Strategy 2, use this market-entry path. Exchange credentials and the environment-specific trading enable flag are required. The returned order ID is persisted for status synchronization; submission is not treated as a confirmed fill.
 
 ## Telegram notifications
 

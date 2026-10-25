@@ -7,7 +7,11 @@
     nf = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 });
   let entries = [],
     currentPage = "today",
-    experienceKind = "decision",
+    selectedDay = C.iso(),
+    calendarAnchor = C.iso(),
+    stripFrom = -28,
+    stripTo = 62,
+    categoryScope = "finance",
     visibleCount = 30,
     editing = null,
     editorKind = "journal",
@@ -59,10 +63,7 @@
   const fields = {
     task: [
       ["dueTime", "زمان قرار", "time"],
-      ["important", "جزو سه کار مهم روز", "checkbox"],
       ["status", "وضعیت", "status"],
-      ["goalId", "هدف مرتبط", "goal"],
-      ["projectId", "پروژهٔ مرتبط", "project"],
     ],
     goal: [
       ["expectedOutcome", "معیار رسیدن به هدف", "textarea", true],
@@ -221,10 +222,19 @@
       else n.removeAttribute("aria-current");
     });
     render();
+    if (page === "records") importSms();
     document.body.dataset.page = page;
     const heading = $("#page-" + page + " h1");
-    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
-    window.scrollTo({ top: 0, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+    window.scrollTo({
+      top: 0,
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+    });
   }
   async function loadLocal() {
     entries = await S.read("records");
@@ -248,7 +258,10 @@
     $("#offlineBanner").hidden = online;
   }
   async function synchronize() {
-    if (syncing) { syncAgain = true; return; }
+    if (syncing) {
+      syncAgain = true;
+      return;
+    }
     syncing = true;
     await syncStatus();
     try {
@@ -282,7 +295,10 @@
     } finally {
       syncing = false;
       await syncStatus();
-      if (syncAgain) { syncAgain = false; if (online) queueMicrotask(() => synchronize().catch(fail)); }
+      if (syncAgain) {
+        syncAgain = false;
+        if (online) queueMicrotask(() => synchronize().catch(fail));
+      }
     }
   }
   async function persist(values, existing) {
@@ -302,7 +318,7 @@
       throw Error("برای این روز سه کار مهم انتخاب کرده‌ای. یکی را تغییر بده.");
     const entry = await S.save(values, existing);
     await loadLocal();
-    if (["done","cancelled","archived"].includes(C.details(entry).status))
+    if (["done", "cancelled", "archived"].includes(C.details(entry).status))
       await cancelLinkedReminder(entry.id);
     notify("ثبت روی این گوشی ذخیره شد.");
     synchronize();
@@ -329,6 +345,16 @@
     );
   }
   async function deleteRecord(entry) {
+    if (entry.kind === "finance" && C.details(entry).sourceId) {
+      if (
+        !confirm(
+          "این تراکنش پیامکی نادیده گرفته شود؟ در اسکن دوباره اضافه نمی‌شود.",
+        )
+      )
+        return;
+      await update(entry, { details: { status: "cancelled" } });
+      return;
+    }
     if (!confirm("این ثبت به حذف‌شده‌ها منتقل شود؟")) return;
     await S.remove(entry);
     await cancelLinkedReminder(entry.id);
@@ -337,11 +363,21 @@
     synchronize();
   }
   async function cancelLinkedReminder(id) {
-    try { await window.OrbitMobile?.cancelForEntry(id); }
-    catch(error) { notify("ثبت ذخیره شد، اما لغو یادآور انجام نشد؛ از تنظیمات یادآور را حذف کن.", true); }
+    try {
+      await window.OrbitMobile?.cancelForEntry(id);
+    } catch (error) {
+      notify(
+        "ثبت ذخیره شد، اما لغو یادآور انجام نشد؛ از تنظیمات یادآور را حذف کن.",
+        true,
+      );
+    }
   }
   function reminderButton(entry) {
-    return button("یادآور", () => window.OrbitMobile.openForEntry(entry).catch(fail), "small-button");
+    return button(
+      "یادآور",
+      () => window.OrbitMobile.openForEntry(entry).catch(fail),
+      "small-button",
+    );
   }
   function recordCard(entry, options = {}) {
     const d = C.details(entry),
@@ -394,7 +430,10 @@
       button("جزئیات", () => openDetail(entry)),
       button("ویرایش", () => openEditor(entry.kind, entry)),
     );
-    if (window.OrbitMobile?.available() && !["done","cancelled","archived"].includes(d.status))
+    if (
+      window.OrbitMobile?.available() &&
+      !["done", "cancelled", "archived"].includes(d.status)
+    )
       actions.append(reminderButton(entry));
     if (entry.kind === "decision")
       actions.append(
@@ -445,6 +484,8 @@
         }).catch(fail),
       "check-button" + (d.status === "done" ? " completed" : ""),
     );
+    done.setAttribute("role", "checkbox");
+    done.setAttribute("aria-checked", String(d.status === "done"));
     done.setAttribute(
       "aria-label",
       d.status === "done"
@@ -469,7 +510,11 @@
       info,
       button("ویرایش", () => openEditor("task", entry), "small-button"),
     );
-    if (window.OrbitMobile?.available() && !["done","cancelled"].includes(d.status)) row.append(reminderButton(entry));
+    if (
+      window.OrbitMobile?.available() &&
+      !["done", "cancelled"].includes(d.status)
+    )
+      row.append(reminderButton(entry));
     return row;
   }
   function habitRow(habit) {
@@ -529,122 +574,182 @@
     return n;
   }
   function renderDayStrip() {
-    const today = C.iso();
-    $("#dayStrip").replaceChildren(...Array.from({ length: 7 }, (_, index) => {
-      const day = C.shift(today, index - 6), date = new Date(day + "T12:00:00");
-      const count = entries.filter(e => e.date === day).length;
-      const b = button("", () => {
-        $("#recordFrom").value = day; $("#recordTo").value = day;
-        $("#recordSearch").value = ""; $("#recordKind").value = "all";
-        visibleCount = 30; showPage("records");
-      }, "day-cell" + (day === today ? " is-today" : ""));
-      b.append(el("small", new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(date)),
-        el("strong", new Intl.DateTimeFormat("fa-IR", { day: "numeric" }).format(date)),
-        el("span", count ? "•" : "·", "day-dot"));
-      b.setAttribute("aria-label", dateLabel(day) + "، " + nf.format(count) + " ثبت؛ نمایش ثبت‌ها");
-      if (day === today) b.setAttribute("aria-current", "date");
-      return b;
-    }));
-  }
-  function renderToday() {
-    const today = C.iso(),
-      tasks = entries.filter(
-        (e) =>
-          e.kind === "task" &&
-          e.date === today &&
-          C.details(e).status !== "cancelled",
-      ),
-      important = tasks.filter((e) => C.details(e).important);
-    const completedImportant = important.filter(e => C.details(e).status === "done").length;
-    $("#orbitProgress").textContent = nf.format(completedImportant) + " / " + nf.format(important.length);
-    $("#heroSummary").textContent = important.length
-      ? (completedImportant === important.length ? "کارهای مهم امروزت انجام شد؛ برای خودت هم وقت بگذار." : nf.format(important.length - completedImportant) + " کار مهم مانده؛ قدم بعدی را خودت انتخاب کن.")
-      : "جا برای کارهای مهم، لحظه‌های کوچک و ایده‌های تازه.";
-    renderDayStrip();
-    $("#importantTasks").replaceChildren(
-      ...(important.length
-        ? important.map(taskRow)
-        : [
-            empty(
-              "سه کار مهم روزت را انتخاب کن.",
-              "یک کار اضافه کن و گزینهٔ «مهم» را بزن.",
-            ),
-          ]),
-    );
-    const other = tasks.filter((e) => !C.details(e).important);
-    $("#todayTasks").replaceChildren(
-      ...(other.length
-        ? other.map(taskRow)
-        : [el("p", "کار دیگری برای امروز ثبت نشده است.")]),
-    );
-    const overdue = entries.filter(
-      (e) =>
-        e.kind === "task" &&
-        e.date < today &&
-        ["todo", "waiting", "active"].includes(C.details(e).status),
-    );
-    $("#overdueCount").textContent = "(" + nf.format(overdue.length) + ")";
-    $("#overdueTasks").replaceChildren(...overdue.map(taskRow));
-    const checkin = entries.find(
-      (e) => e.kind === "checkin" && e.date === today,
-    );
-    $("#checkinButton").textContent = checkin ? "ویرایش وضعیت" : "ثبت وضعیت";
-    if (checkin) {
-      const grid = el("div", undefined, "checkin-values"),
-        d = C.details(checkin);
-      for (const name of ["energy", "focus", "mood"]) {
-        const n = el("div", undefined, "checkin-value");
-        n.append(
-          el("strong", d[name] == null ? "—" : nf.format(d[name])),
-          el("small", labels[name]),
+    const host = $("#dayStrip"),
+      today = C.iso();
+    const oldLeft = host.scrollLeft,
+      initialized = host.dataset.ready;
+    const desiredRange = stripFrom + ":" + stripTo;
+    if (host.dataset.range === desiredRange) {
+      all("#dayStrip button").forEach((node) => {
+        node.classList.toggle("selected", node.dataset.date === selectedDay);
+        node.setAttribute(
+          "aria-pressed",
+          String(node.dataset.date === selectedDay),
         );
-        grid.append(n);
-      }
-      $("#todayCheckin").replaceChildren(
-        grid,
-        el("p", checkin.notes || "وضعیت امروز ثبت شده است."),
-      );
-    } else
-      $("#todayCheckin").replaceChildren(
-        empty("امروز چطور گذشت؟", "انرژی، تمرکز، خواب و یک جملهٔ کوتاه."),
-      );
-    const habits = entries.filter(
-      (e) => e.kind === "habit" && C.details(e).status === "active",
-    );
-    $("#todayHabits").replaceChildren(
-      ...(habits.length
-        ? habits.map(habitRow)
-        : [el("p", "هنوز عادتی تعریف نکرده‌ای.")]),
-    );
-    const due = entries.filter(
-      (e) =>
-        e.kind === "decision" &&
-        C.details(e).reviewDate &&
-        C.details(e).reviewDate <= today &&
-        !C.details(e).reviewedDate,
-    );
-    fillList($("#dueDecisions"), due);
-    const data = C.report(entries, today, today);
-    $("#todayMetrics").replaceChildren(
-      metric("هزینهٔ ثبت‌شدهٔ امروز", data.totals.expenses, "تومان"),
-      metric("زمان ثبت‌شدهٔ امروز", data.totals.minutes, "دقیقه"),
-      metric(
-        "کارهای انجام‌شده",
-        entries.filter(
+        const count = entries.filter(
           (e) =>
             e.kind === "task" &&
-            C.details(e).status === "done" &&
-            (C.details(e).completedDate || e.date) === today,
-        ).length,
-        "کار",
-      ),
-      metric(
-        "عادت‌های کامل این دوره",
-        habits.filter((e) => C.habitProgress(e, entries).done).length,
-        "عادت",
-      ),
+            e.date === node.dataset.date &&
+            C.details(e).status !== "cancelled",
+        ).length;
+        node.lastElementChild.textContent = count
+          ? nf.format(count) + " کار"
+          : "—";
+      });
+      return;
+    }
+    host.dataset.range = desiredRange;
+    host.replaceChildren(
+      ...Array.from({ length: stripTo - stripFrom + 1 }, (_, i) => {
+        const day = C.shift(today, i + stripFrom),
+          date = new Date(day + "T12:00:00");
+        const tasks = entries.filter(
+          (e) =>
+            e.kind === "task" &&
+            e.date === day &&
+            C.details(e).status !== "cancelled",
+        );
+        const node = button(
+          "",
+          () => {
+            selectedDay = day;
+            calendarAnchor = day;
+            renderToday();
+          },
+          "day-cell" +
+            (day === today ? " is-today" : "") +
+            (day === selectedDay ? " selected" : ""),
+        );
+        node.dataset.date = day;
+        node.append(
+          el(
+            "small",
+            new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(date),
+          ),
+          el(
+            "strong",
+            new Intl.DateTimeFormat("fa-IR", {
+              day: "numeric",
+            }).format(date),
+          ),
+          el(
+            "small",
+            new Intl.DateTimeFormat("en-US", {
+              day: "numeric",
+            }).format(date),
+          ),
+          el("span", tasks.length ? nf.format(tasks.length) + " کار" : "—"),
+        );
+        node.setAttribute("aria-pressed", String(day === selectedDay));
+        if (day === today) node.setAttribute("aria-current", "date");
+        return node;
+      }),
     );
-    renderTimer();
+    host.dataset.ready = "1";
+    host.onpointerdown = () => {
+      host.dataset.userScroll = "1";
+    };
+    host.onwheel = () => {
+      host.dataset.userScroll = "1";
+    };
+    host.onkeydown = () => {
+      host.dataset.userScroll = "1";
+    };
+    host.onscroll = () => {
+      if (!host.dataset.userScroll) return;
+      const width =
+        host.querySelector("button")?.getBoundingClientRect().width || 0;
+      if (!width) return;
+      const stride = width + (window.innerWidth <= 700 ? 6 : 8);
+      if (host.scrollLeft < stride * 3) {
+        const old = host.scrollLeft;
+        stripFrom -= 28;
+        renderDayStrip();
+        host.scrollLeft = old + stride * 28;
+      } else if (
+        host.scrollLeft + host.clientWidth >
+        host.scrollWidth - stride * 3
+      ) {
+        stripTo += 28;
+        renderDayStrip();
+      }
+    };
+    if (initialized) host.scrollLeft = oldLeft;
+    else {
+      const position = () => {
+        delete host.dataset.userScroll;
+        host.scrollLeft = host.querySelector(
+          '[data-date="' + today + '"]',
+        ).offsetLeft;
+      };
+      requestAnimationFrame(position);
+      document.fonts?.ready.then(position);
+    }
+  }
+  function renderToday() {
+    const month = OrbitSimple.month(calendarAnchor),
+      today = C.iso();
+    $("#calendarMonth").textContent = new Intl.DateTimeFormat("fa-IR", {
+      month: "long",
+      year: "numeric",
+    }).format(new Date(calendarAnchor + "T12:00:00"));
+    const en = (day) =>
+      new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        year: "numeric",
+      }).format(new Date(day + "T12:00:00"));
+    $("#gregorianMonth").textContent = en(month.start) + " — " + en(month.end);
+    const grid = $("#monthGrid");
+    grid.replaceChildren();
+    for (let i = 0; i < month.offset; i++) grid.append(el("span"));
+    for (let day = month.start; day <= month.end; day = C.shift(day, 1)) {
+      const date = new Date(day + "T12:00:00"),
+        current = day;
+      const tasks = entries.filter(
+        (e) =>
+          e.kind === "task" &&
+          e.date === day &&
+          C.details(e).status !== "cancelled",
+      );
+      const cell = button(
+        "",
+        () => {
+          selectedDay = current;
+          renderToday();
+        },
+        "month-day" +
+          (day === today ? " is-today" : "") +
+          (day === selectedDay ? " selected" : ""),
+      );
+      cell.append(
+        el(
+          "strong",
+          new Intl.DateTimeFormat("fa-IR", { day: "numeric" }).format(date),
+        ),
+        el("small", String(date.getDate())),
+        el("span", tasks.length ? nf.format(tasks.length) + " کار" : ""),
+      );
+      cell.setAttribute(
+        "aria-label",
+        dateLabel(day) + "؛ " + nf.format(tasks.length) + " کار",
+      );
+      cell.setAttribute("aria-pressed", String(day === selectedDay));
+      if (day === today) cell.setAttribute("aria-current", "date");
+      grid.append(cell);
+    }
+    renderDayStrip();
+    $("#selectedDayTitle").textContent = dateLabel(selectedDay);
+    const tasks = entries.filter(
+      (e) =>
+        e.kind === "task" &&
+        e.date === selectedDay &&
+        C.details(e).status !== "cancelled",
+    );
+    $("#selectedDayTasks").replaceChildren(
+      ...(tasks.length
+        ? tasks.map(taskRow)
+        : [el("p", "کاری برای این روز ثبت نشده است.")]),
+    );
   }
   function renderTimer() {
     const host = $("#timerHost"),
@@ -788,12 +893,46 @@
     const filtered = sortRecords(
       entries.filter(
         (e) =>
-          e.kind !== "habit-log" &&
-          (kind === "all" || e.kind === kind) &&
+          e.kind === "finance" &&
+          !OrbitSimple.isDraft(e) &&
+          C.details(e).status !== "cancelled" &&
+          (kind === "all" || e.flow === kind) &&
           (!from || e.date >= from) &&
           (!to || e.date <= to) &&
           searchMatches(e, query),
       ),
+    );
+    const drafts = entries.filter(OrbitSimple.isDraft);
+    $("#draftCount").textContent =
+      nf.format(drafts.length) + " پیش‌نویس منتظر دسته‌بندی";
+    $("#financeDrafts").replaceChildren(
+      ...(drafts.length
+        ? drafts.map((e) => {
+            const row = el("div", undefined, "record");
+            row.append(
+              el("strong", nf.format(e.amount) + " تومان"),
+              el("p", dateLabel(e.date)),
+              button("تکمیل و ثبت", () => openEditor("finance", e), "primary"),
+              button(
+                "نادیده گرفتن",
+                () =>
+                  update(e, { details: { status: "cancelled" } }).catch(fail),
+                "quiet",
+              ),
+            );
+            return row;
+          })
+        : [el("p", "پیامک دسته‌بندی‌نشده‌ای نداری.")]),
+    );
+    const expense = filtered
+        .filter((e) => e.flow === "expense")
+        .reduce((v, e) => v + (e.amount || 0), 0),
+      income = filtered
+        .filter((e) => e.flow === "income")
+        .reduce((v, e) => v + (e.amount || 0), 0);
+    $("#financeMetrics").replaceChildren(
+      metric("هزینه", expense, "تومان"),
+      metric("درآمد", income, "تومان"),
     );
     $("#recordCount").textContent = nf.format(filtered.length) + " ثبت";
     fillList($("#recordList"), filtered.slice(0, visibleCount));
@@ -826,30 +965,44 @@
         : [empty()]),
     );
   }
-  function renderExperience() {
-    const hints = {
-      decision:
-        "دلیل و انتظار اولیه پس از ثبت حفظ می‌شود. نتیجه را در «مرور نتیجه» اضافه کن.",
-      craft:
-        "روش، مواد، مشاهده و نتیجه را نگه دار؛ برای مقایسه، عکس و صدای قبل و بعد را پیوست کن.",
-      experiment:
-        "یک تغییر مشخص، دو بازهٔ جدا و یک شاخص انتخاب کن. نتیجه از وضعیت‌های روزانهٔ ثبت‌شده محاسبه می‌شود.",
-    };
-    $("#experienceHint").textContent = hints[experienceKind];
-    $("#newExperience").textContent = "＋ " + C.titles[experienceKind];
-    const list = entries.filter(
-      (e) =>
-        e.kind === experienceKind &&
-        searchMatches(e, $("#experienceSearch").value),
+  function categories(scope) {
+    return entries.filter((e) => e.kind === "category" && e.category === scope);
+  }
+  function openCategories(scope) {
+    categoryScope = scope;
+    $("#categoryError").textContent = "";
+    const select = $("#categoryForm [name=parent]");
+    select.replaceChildren(new Option("دستهٔ اصلی", ""));
+    categories(scope).forEach((e) => select.append(new Option(e.title, e.id)));
+    $("#categoryList").replaceChildren(
+      ...categories(scope).map((e) => el("p", e.title)),
     );
-    $("#experienceList").replaceChildren(
-      ...(list.length
-        ? list.map((e) => {
-            const card = recordCard(e);
-            if (e.kind === "experiment") card.append(experimentView(e));
-            return card;
+    if (!$("#categoryDialog").open) $("#categoryDialog").showModal();
+  }
+  function renderTasks() {
+    const tasks = entries.filter(
+      (e) =>
+        e.kind === "task" &&
+        C.details(e).status !== "cancelled" &&
+        ($("#showDoneTasks").checked || C.details(e).status !== "done") &&
+        searchMatches(e, $("#taskSearch").value),
+    );
+    const groups = [
+      ...new Set(tasks.map((e) => e.category || "بدون دسته")),
+    ].sort();
+    $("#taskGroups").replaceChildren(
+      ...(groups.length
+        ? groups.map((name) => {
+            const panel = el("section", undefined, "panel");
+            panel.append(
+              el("h2", name),
+              ...tasks
+                .filter((e) => (e.category || "بدون دسته") === name)
+                .map(taskRow),
+            );
+            return panel;
           })
-        : [empty()]),
+        : [el("p", "کاری در این فهرست نیست؛ یک کار جدید اضافه کن.")]),
     );
   }
   function experimentView(entry) {
@@ -1204,7 +1357,7 @@
     if (currentPage === "today") renderToday();
     if (currentPage === "records") renderRecords();
     if (currentPage === "path") renderPath();
-    if (currentPage === "experience") renderExperience();
+    if (currentPage === "tasks") renderTasks();
     if (currentPage === "review") renderReport();
   }
   function formField(name, label, type, value, required = false, min, max) {
@@ -1266,7 +1419,14 @@
         ];
       if (type === "kind")
         options = Object.entries(C.titles).filter(
-          ([key]) => key !== "habit-log",
+          ([key]) =>
+            ![
+              "habit-log",
+              "category",
+              "decision",
+              "craft",
+              "experiment",
+            ].includes(key),
         );
       for (const [k, v] of options) input.append(new Option(v, k));
       input.value = value ?? "";
@@ -1301,7 +1461,7 @@
     const host = $("#editorFields"),
       d = C.details(values);
     host.replaceChildren();
-    if (!editing) {
+    if (!editing && !["finance", "task"].includes(editorKind)) {
       const kindField = formField("kind", "نوع ثبت", "kind", editorKind, true);
       kindField.querySelector("select").addEventListener("change", (event) => {
         const current = readForm();
@@ -1325,8 +1485,35 @@
         values.date || C.iso(),
         true,
       ),
-      formField("category", "دسته‌بندی", "text", values.category || ""),
     );
+    if (["finance", "task"].includes(editorKind)) {
+      const wrap = el("label", "دسته‌بندی"),
+        select = el("select");
+      select.name = "category";
+      select.append(new Option("بدون دسته", ""));
+      const names = [
+        ...new Set(
+          [
+            ...categories(editorKind).map((e) => e.title),
+            values.category,
+          ].filter(Boolean),
+        ),
+      ].sort();
+      names.forEach((name) => select.append(new Option(name, name)));
+      select.value = values.category || "";
+      wrap.append(select);
+      host.append(
+        wrap,
+        button(
+          "＋ دسته یا زیرمجموعه",
+          () => openCategories(editorKind),
+          "quiet",
+        ),
+      );
+    } else
+      host.append(
+        formField("category", "دسته‌بندی", "text", values.category || ""),
+      );
     if (["finance", "vehicle"].includes(editorKind))
       host.append(
         formField(
@@ -1446,6 +1633,10 @@
     ])
       d[k] = d[k] || "";
     d.attachmentIds = editorFiles.map((f) => f.id);
+    if (editorKind === "finance" && d.sourceId) {
+      if (!data.category) throw Error("دستهٔ این هزینه را انتخاب کن.");
+      d.status = "active";
+    }
     if (editorKind === "task") {
       if (d.status === "done") d.completedDate = d.completedDate || C.iso();
       else d.completedDate = null;
@@ -1794,47 +1985,156 @@
     $("#captureStatus").textContent = "";
     $("#captureDialog").showModal();
   });
-  $("#capturePrompt").addEventListener("click", () => $("#quickButton").click());
+  $("#capturePrompt")?.addEventListener("click", () =>
+    $("#quickButton").click(),
+  );
   window.OrbitRecords = {
-    available: id => entries.some(e => e.id === id && !["done","cancelled","archived"].includes(C.details(e).status)),
+    available: (id) =>
+      entries.some(
+        (e) =>
+          e.id === id &&
+          !["done", "cancelled", "archived"].includes(C.details(e).status),
+      ),
     settings: () => openSettings(),
     async open(id) {
-      const entry = entries.find(e => e.id === id);
-      if (!entry) throw Error("ثبت مرتبط روی این دستگاه پیدا نشد؛ همگام‌سازی را بررسی کن.");
+      const entry = entries.find((e) => e.id === id);
+      if (!entry)
+        throw Error(
+          "ثبت مرتبط روی این دستگاه پیدا نشد؛ همگام‌سازی را بررسی کن.",
+        );
       $("#settingsDialog").close();
       await openDetail(entry);
-    }
+    },
   };
-  $("#profileButton").addEventListener("click", () => openSettings().catch(fail));
-  $("#craftShortcut").addEventListener("click", () => {
-    experienceKind = "craft";
-    all("#experienceTabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.kind === experienceKind)));
-    showPage("experience");
-  });
-  $("#reviewShortcut").addEventListener("click", () => { $("#reportRange").value = "week"; setupReportRange(); showPage("review"); });
-  $("#checkinButton").addEventListener("click", () =>
-    openEditor(
-      "checkin",
-      entries.find((e) => e.kind === "checkin" && e.date === C.iso()) || null,
-    ).catch(fail),
+  $("#profileButton").addEventListener("click", () =>
+    openSettings().catch(fail),
   );
-  $("#weeklyReview").addEventListener("click", () =>
+  $("#previousMonth").addEventListener("click", () => {
+    calendarAnchor = OrbitSimple.month(
+      C.shift(OrbitSimple.month(calendarAnchor).start, -1),
+    ).start;
+    renderToday();
+  });
+  $("#nextMonth").addEventListener("click", () => {
+    calendarAnchor = C.shift(OrbitSimple.month(calendarAnchor).end, 1);
+    renderToday();
+  });
+  $("#goToday").addEventListener("click", () => {
+    selectedDay = calendarAnchor = C.iso();
+    stripFrom = -28;
+    stripTo = 62;
+    delete $("#dayStrip").dataset.ready;
+    delete $("#dayStrip").dataset.range;
+    renderToday();
+  });
+  $("#addSelectedTask").addEventListener("click", () =>
+    openEditor("task", null, {
+      values: {
+        kind: "task",
+        date: selectedDay,
+        details: { ...C.defaults, status: "todo" },
+      },
+    }).catch(fail),
+  );
+  $("#taskSearch").addEventListener("input", renderTasks);
+  $("#showDoneTasks").addEventListener("change", renderTasks);
+  $("#financeCategories").addEventListener("click", () =>
+    openCategories("finance"),
+  );
+  $("#taskCategories").addEventListener("click", () => openCategories("task"));
+  $("#categoryForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const saveButton = event.currentTarget.querySelector("button");
+    if (saveButton.disabled) return;
+    saveButton.disabled = true;
+    try {
+      const form = event.currentTarget,
+        name = form.elements.title.value.trim(),
+        parent = entries.find((e) => e.id === form.elements.parent.value);
+      const path = (parent ? parent.title + " / " : "") + name;
+      if (!name || path.length > 100)
+        throw Error("نام دسته لازم است؛ مسیر حداکثر ۱۰۰ حرف است.");
+      if (categories(categoryScope).some((e) => e.title === path))
+        throw Error("این دسته از قبل هست.");
+      await persist({
+        kind: "category",
+        title: path,
+        category: categoryScope,
+        date: C.iso(),
+        details: { ...C.defaults, parentId: parent?.id || null },
+      });
+      form.elements.title.value = "";
+      openCategories(categoryScope);
+      if ($("#editorDialog").open) {
+        const select = $("#editorFields [name=category]");
+        if (select) {
+          select.append(new Option(path, path));
+          select.value = path;
+        }
+      }
+    } catch (error) {
+      $("#categoryError").textContent = error.message;
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+  let importingSms = false;
+  async function importSms(requestPermission = false) {
+    if (importingSms || !window.OrbitMobile?.available()) return;
+    importingSms = true;
+    try {
+      const result = await window.OrbitMobile.readSms(requestPermission);
+      if (!result.granted) {
+        $("#smsStatus").textContent =
+          "برای دریافت پیش‌نویس، اجازهٔ خواندن پیامک را از دکمهٔ بالا فعال کن.";
+        return;
+      }
+      let count = 0;
+      for (const sms of result.messages) {
+        const sourceId = "sms:" + sms.id + ":" + sms.at;
+        if (entries.some((e) => C.details(e).sourceId === sourceId)) continue;
+        const draft = OrbitSimple.parseSms(sms.body);
+        if (!draft) continue;
+        const date = new Date(sms.at),
+          day = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 10);
+        await S.save({
+          kind: "finance",
+          title: "برداشت بانکی",
+          date: day,
+          amount: draft.toman,
+          flow: "expense",
+          category: "",
+          notes: sms.body,
+          details: { ...C.defaults, status: "waiting", sourceId },
+        });
+        entries = await S.read("records");
+        count++;
+      }
+      await loadLocal();
+      synchronize();
+      $("#smsStatus").textContent =
+        nf.format(count) + " پیش‌نویس جدید؛ پیامک‌های ۳۰ روز اخیر بررسی شد.";
+    } catch (error) {
+      $("#smsStatus").textContent = error.message;
+    } finally {
+      importingSms = false;
+    }
+  }
+  $("#readSms").addEventListener("click", () => {
+    if (!window.OrbitMobile?.available()) {
+      $("#smsStatus").textContent =
+        "خواندن پیامک نیاز به نسخهٔ اندروید جدید دارد.";
+      return;
+    }
+    importSms(true);
+  });
+  window.addEventListener("orbit-native-resume", () => importSms());
+  $("#weeklyReview")?.addEventListener("click", () =>
     openEditor("review").catch(fail),
   );
-  $("#printReport").addEventListener("click", () => window.print());
-  $("#newExperience").addEventListener("click", () =>
-    openEditor(experienceKind).catch(fail),
-  );
-  all("#experienceTabs button").forEach((b) =>
-    b.addEventListener("click", () => {
-      experienceKind = b.dataset.kind;
-      all("#experienceTabs button").forEach((n) =>
-        n.setAttribute("aria-pressed", String(n === b)),
-      );
-      renderExperience();
-    }),
-  );
-  $("#experienceSearch").addEventListener("input", renderExperience);
+  $("#printReport")?.addEventListener("click", () => window.print());
   for (const id of ["recordSearch", "recordKind", "recordFrom", "recordTo"])
     $("#" + id).addEventListener(
       id === "recordSearch" ? "input" : "change",
@@ -2229,6 +2529,7 @@
         )?.postMessage({ type: "PERSONAL_CACHE_SHELL" });
       }
       await synchronize();
+      await importSms();
     } catch (error) {
       fail(error);
     }

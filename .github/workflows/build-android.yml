@@ -45,7 +45,7 @@ jobs:
           PHOENIX_FIREBASE_PROJECT_ID: ${{ vars.PHOENIX_FIREBASE_PROJECT_ID }}
           PHOENIX_FIREBASE_SENDER_ID: ${{ vars.PHOENIX_FIREBASE_SENDER_ID }}
         run: gradle :app:testOrbitDebugUnitTest :app:testPhoenixDebugUnitTest :app:assembleOrbitDebug :app:assemblePhoenixDebug --no-daemon
-      - name: Verify standalone update signing compatibility
+      - name: Verify standalone identity and signing certificate
         if: github.ref == 'refs/heads/personal/phoenix-standalone' || github.head_ref == 'personal/phoenix-standalone'
         run: |
           curl -L --fail --retry 3 -o previous-phoenix.apk https://github.com/rezazarqami/Phoenix/releases/download/personal-android-483cbf71/phoenix-android.apk
@@ -56,7 +56,9 @@ jobs:
           "$signer" verify --print-certs android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk
           printf 'Previous certificate: %s\nCurrent certificate: %s\n' "$previous" "$current"
           test "$previous" = "7db9bc3b9579b8b8692b648b5c161c8e1a24beb29f0c441bd5f0f2c5631e4147"
-          test "$current" = "$previous" || { echo "Standalone signing key differs from the installed release; refusing publication."; exit 1; }
+          test "$current" = "96bd3f3ff205158e20c8d695840854f5c38679ad9b1842496e169a3d873baf5c"
+          aapt="$(find "$ANDROID_HOME/build-tools" -name aapt | sort -V | tail -1)"
+          "$aapt" dump badging android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk | grep "package: name='ir.marketsignalist.phoenix.standalone.capture'"
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -72,7 +74,9 @@ jobs:
           script: |
             if [ -f previous-phoenix.apk ]; then
               adb install previous-phoenix.apk
-              adb install -r android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk
+              adb install android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk
+              adb shell pm path ir.marketsignalist.phoenix.standalone
+              adb shell pm path ir.marketsignalist.phoenix.standalone.capture
             fi
             cd android && gradle :app:connectedOrbitDebugAndroidTest :app:connectedPhoenixDebugAndroidTest --no-daemon
       - name: Save Android test reports

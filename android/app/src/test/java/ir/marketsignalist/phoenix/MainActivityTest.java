@@ -24,7 +24,7 @@ public class MainActivityTest {
     @Test public void verifiedUnlockStartsRealPageBehindLoadingCover()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
         set(app,"resumed",true);call(app,"unlock");
-        assertEquals("https://marketsignalist.ir/",shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
+        assertEquals("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"),shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
         assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
         assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
@@ -37,22 +37,30 @@ public class MainActivityTest {
         assertTrue((Boolean)get(app,"unlocked"));assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
         assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
+    @Test public void resumeClearsScreenshotRestriction()throws Exception{
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create().start().resume();
+        MainActivity app=controller.get();
+        controller.pause();
+        app.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        controller.resume();
+        assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
+    }
     @Test public void finishedDocumentDoesNotWaitForVisualCallback()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"));
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
         ((Runnable)get(app,"loadTimeout")).run();assertFalse((Boolean)get(app,"pageFailed"));
     }
     @Test public void committedDocumentIsShownBeforeAllResourcesFinish()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"));
         assertFalse((Boolean)get(app,"pageLoading"));assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
     }
     @Test public void failureCannotBeOverwrittenByFinishCallback()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"unlock");
         Method error=MainActivity.class.getDeclaredMethod("pageError",String.class);error.setAccessible(true);error.invoke(app,"HTTP 403");
-        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir/");
-        web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir/");
+        WebView web=(WebView)get(app,"browser");web.getWebViewClient().onPageFinished(web,"https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"));
+        web.getWebViewClient().onPageCommitVisible(web,"https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"));
         assertTrue((Boolean)get(app,"pageFailed"));assertEquals(View.VISIBLE,((View)get(app,"retry")).getVisibility());
     }
     @Test public void timeoutIsVisibleAndRetryLoadsAgainWithoutRemovingLock()throws Exception{

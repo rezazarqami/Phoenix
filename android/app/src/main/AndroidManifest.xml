@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <application android:name=".OrbitApplication" android:label="مدار و فونیکس" android:icon="@drawable/phoenix_logo"
+    <application android:name=".OrbitApplication" android:label="${clientLabel}" android:icon="@drawable/phoenix_logo"
         android:roundIcon="@drawable/phoenix_logo" android:theme="@style/OrbitTheme"
         android:usesCleartextTraffic="false" android:allowBackup="false" android:fullBackupContent="false">
         <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />

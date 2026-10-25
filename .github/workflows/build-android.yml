@@ -43,7 +43,7 @@ jobs:
           PHOENIX_FIREBASE_API_KEY: ${{ vars.PHOENIX_FIREBASE_API_KEY }}
           PHOENIX_FIREBASE_PROJECT_ID: ${{ vars.PHOENIX_FIREBASE_PROJECT_ID }}
           PHOENIX_FIREBASE_SENDER_ID: ${{ vars.PHOENIX_FIREBASE_SENDER_ID }}
-        run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
+        run: gradle :app:testOrbitDebugUnitTest :app:testPhoenixDebugUnitTest :app:assembleOrbitDebug :app:assemblePhoenixDebug --no-daemon
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -56,7 +56,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon
+          script: cd android && gradle :app:connectedOrbitDebugAndroidTest :app:connectedPhoenixDebugAndroidTest --no-daemon
       - name: Save Android test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,12 +69,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: phoenix-android-test-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/*/debug/*.apk
       - name: Publish installable integrated client
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/personal/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="personal-android-${GITHUB_SHA:0:8}"
-          cp android/app/build/outputs/apk/debug/app-debug.apk orbit-android.apk
-          gh release create "$tag" orbit-android.apk --target "$GITHUB_SHA" --prerelease --title "Orbit Android ${GITHUB_SHA:0:8}" --notes-file docs/android-install-preview.md
+          cp android/app/build/outputs/apk/orbit/debug/app-orbit-debug.apk orbit-android.apk
+          cp android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk phoenix-android.apk
+          gh release create "$tag" orbit-android.apk phoenix-android.apk --target "$GITHUB_SHA" --prerelease --title "Phoenix and Orbit Android ${GITHUB_SHA:0:8}" --notes-file docs/android-install-preview.md

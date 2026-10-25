@@ -21,6 +21,7 @@ import java.util.UUID;
 
 public final class MainActivity extends Activity {
     private static final String HOME="https://marketsignalist.ir";
+    private static final String START_ROUTE=BuildConfig.PHOENIX_ONLY?"/phoenix":"/";
     private WebView browser;
     private FrameLayout root;
     private TextView pageStatus;
@@ -33,10 +34,10 @@ public final class MainActivity extends Activity {
     private final Handler ui=new Handler(Looper.getMainLooper());
     private boolean pageLoading=false, pageFailed=false;
     private long navigation=0;
-    private String lastUrl=HOME+"/";
+    private String lastUrl=HOME+START_ROUTE;
     private final Runnable loadTimeout=()->{if(pageLoading){pageError("باز شدن صفحه کامل نشد. مرحله: "+loadStage+"؛ پیشرفت: "+loadProgress+"٪. در حال بررسی مستقل اتصال گوشی…");checkConnection();}};
     private boolean unlocked=true, initialLoaded=false;
-    private String requestedRoute="/";
+    private String requestedRoute=START_ROUTE;
     private boolean openReminders=false;
     private boolean resumed=false;
     private JavaScriptReplyProxy smsReply;
@@ -53,7 +54,7 @@ public final class MainActivity extends Activity {
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(245,243,248));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.8");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.9");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView view,int progress){loadProgress=progress;}
@@ -156,13 +157,13 @@ public final class MainActivity extends Activity {
     private void unlock(){
         if(isFinishing())return;
         unlocked=true;browser.setVisibility(View.VISIBLE);browser.onResume();browser.requestLayout();
-        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?"/":requestedRoute;loadPage(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
+        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?START_ROUTE:requestedRoute;loadPage(HOME+route+(openReminders&&"/".equals(route)?"?reminders=1":""));initialLoaded=true;requestedRoute=null;openReminders=false;}
         renderPageState();
         browser.evaluateJavascript("window.dispatchEvent(new Event('orbit-native-resume'))",null);
     }
-    private void readIntent(Intent intent){if(intent==null)return;requestedRoute=TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
+    private void readIntent(Intent intent){if(intent==null)return;requestedRoute=BuildConfig.PHOENIX_ONLY?START_ROUTE:TrustedNavigation.route(intent.getStringExtra("route"));openReminders=intent.getBooleanExtra("reminders",false);}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);unlock();}
-    @Override protected void onResume(){super.onResume();resumed=true;unlock();}
+    @Override protected void onResume(){super.onResume();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;unlock();}
     @Override protected void onPause(){resumed=false;CookieManager.getInstance().flush();browser.onPause();super.onPause();}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);

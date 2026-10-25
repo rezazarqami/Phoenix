@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 9
-        versionName '1.8-orbit'
+        versionCode 10
+        versionName '1.9-screenshots'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
             def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''
@@ -19,7 +19,22 @@ android {
     }
     // Keep the test signing key at the exact location persisted by CI.
     signingConfigs { debug { storeFile file(System.getProperty('user.home') + '/.android/debug.keystore') } }
-    buildTypes { debug { applicationIdSuffix '.orbit'; versionNameSuffix '-test' } }
+    flavorDimensions 'client'
+    productFlavors {
+        orbit {
+            dimension 'client'
+            applicationIdSuffix '.orbit'
+            manifestPlaceholders = [clientLabel: 'مدار و فونیکس']
+            buildConfigField 'boolean', 'PHOENIX_ONLY', 'false'
+        }
+        phoenix {
+            dimension 'client'
+            applicationIdSuffix '.standalone'
+            manifestPlaceholders = [clientLabel: 'Phoenix']
+            buildConfigField 'boolean', 'PHOENIX_ONLY', 'true'
+        }
+    }
+    buildTypes { debug { versionNameSuffix '-test' } }
     buildFeatures { buildConfig true }
     testOptions { unitTests.includeAndroidResources = true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

@@ -24,7 +24,7 @@ public class MainActivityTest {
     @Test public void verifiedUnlockStartsRealPageBehindLoadingCover()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
         set(app,"resumed",true);call(app,"unlock");
-        assertEquals("https://marketsignalist.ir/",shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
+        assertEquals("https://marketsignalist.ir"+(BuildConfig.PHOENIX_ONLY?"/phoenix":"/"),shadowOf((WebView)get(app,"browser")).getLastLoadedUrl());
         assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
         assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
         assertEquals(View.VISIBLE,((View)get(app,"pageCover")).getVisibility());
@@ -35,6 +35,14 @@ public class MainActivityTest {
         assertTrue((Boolean)get(app,"unlocked"));
         controller.pause().stop().restart().start().resume();
         assertTrue((Boolean)get(app,"unlocked"));assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
+        assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
+    }
+    @Test public void resumeClearsScreenshotRestriction()throws Exception{
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create().start().resume();
+        MainActivity app=controller.get();
+        controller.pause();
+        app.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        controller.resume();
         assertEquals(0,app.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
     }
     @Test public void finishedDocumentDoesNotWaitForVisualCallback()throws Exception{

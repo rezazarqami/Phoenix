@@ -46,12 +46,12 @@ jobs:
           PHOENIX_FIREBASE_SENDER_ID: ${{ vars.PHOENIX_FIREBASE_SENDER_ID }}
         run: gradle :app:testOrbitDebugUnitTest :app:testPhoenixDebugUnitTest :app:assembleOrbitDebug :app:assemblePhoenixDebug --no-daemon
       - name: Verify standalone update signing compatibility
-        if: github.ref == 'refs/heads/personal/phoenix-standalone'
+        if: github.ref == 'refs/heads/personal/phoenix-standalone' || github.head_ref == 'personal/phoenix-standalone'
         run: |
           curl -L --fail --retry 3 -o previous-phoenix.apk https://github.com/rezazarqami/Phoenix/releases/download/personal-android-483cbf71/phoenix-android.apk
           signer="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
-          previous="$($signer verify --print-certs previous-phoenix.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-          current="$($signer verify --print-certs android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          previous="$($signer verify --print-certs previous-phoenix.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | sort -u)"
+          current="$($signer verify --print-certs android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | sort -u)"
           "$signer" verify --print-certs previous-phoenix.apk
           "$signer" verify --print-certs android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk
           printf 'Previous certificate: %s\nCurrent certificate: %s\n' "$previous" "$current"

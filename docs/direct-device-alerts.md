@@ -18,7 +18,7 @@ Long-poll responses never rewrite WebView cookies, avoiding restoring a logged-o
 
 Created, NearEntry (also direct entry if the approach sample was skipped), Opened, FirstProtection, RiskFreeReached (second stage), Target, StopLoss, RiskFree, Expired, Cancelled and ManualClosed. The new first-stage timestamp is recorded when its actual order placement is acknowledged, not inferred retrospectively from the protection stage. RiskFree notifications include the actual first-limit/second-limit/safety-market exit label from the filled-order metadata.
 
-Both the server feed and Telegram read persisted lifecycle facts independently. The direct feed does not wait for Telegram publication or Firebase delivery. Native monitoring uses Android's declared `specialUse` foreground service with a user-visible ongoing notification, explicit start/stop, a non-exported service and the documented subtype property. Platform reference: https://developer.android.com/develop/background-work/services/fgs/service-types#special-use .
+Trading outcomes are persisted before awaiting protective-order cleanup or private Telegram/wallet network work. A blocked-wallet regression verifies that the direct feed can deliver a target while Telegram-side work is still blocked. Both the server feed and Telegram read persisted lifecycle facts independently. The direct feed does not wait for Telegram publication or Firebase delivery. Native monitoring uses Android's declared `specialUse` foreground service with a user-visible ongoing notification, explicit start/stop, a non-exported service and the documented subtype property. Platform reference: https://developer.android.com/develop/background-work/services/fgs/service-types#special-use .
 
 ## Validation
 

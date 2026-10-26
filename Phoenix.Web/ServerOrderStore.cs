@@ -211,11 +211,34 @@ public sealed class ServerOrderStore
             signal.ProposalEvidence = signals[index].ProposalEvidence ?? signal.ProposalEvidence;
             signal.EntryTechnicalFeatures ??= signals[index].EntryTechnicalFeatures;
             signal.EntryTriggeredAtUtc ??= signals[index].EntryTriggeredAtUtc;
+            // Notification metadata has its own writer. A stale trading snapshot must
+            // never erase an acknowledged publication or its reserved number.
+            signal.PublicTelegramMessageId ??= signals[index].PublicTelegramMessageId;
+            signal.PublicSignalNumber ??= signals[index].PublicSignalNumber;
+            signal.PublicReviewImageSentAtUtc ??= signals[index].PublicReviewImageSentAtUtc;
             signals[index] = Clone(signal);
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "SignalUpdated", token);
         }
         finally { _gate.Release(); }
+    }
+
+    internal async Task SavePublicDeliveryAsync(Guid id,int messageId,bool hasImage,
+        CancellationToken token=default)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals=await LoadUnsafeAsync(token);
+            var signal=signals.SingleOrDefault(s=>s.Id==id);
+            if(signal is null)return;
+            signal.PublicTelegramMessageId??=messageId;
+            if(hasImage)signal.PublicReviewImageSentAtUtc??=DateTime.UtcNow;
+            await SaveUnsafeAsync(signals,token);
+            // Works for terminal records, without touching any trading field.
+            await _history.UpsertAsync(signal,"PublicSignalDelivered",token);
+        }
+        finally{_gate.Release();}
     }
 
     public async Task SaveEntryTechnicalFeaturesAsync(Guid id, TechnicalFeatureSnapshot features,
@@ -340,14 +363,26 @@ public sealed class ServerOrderStore
         try
         {
             var signals = await LoadUnsafeAsync(token);
-            var signal = signals.Single(x => x.Id == id);
+            var signal = signals.SingleOrDefault(x => x.Id == id);
+            if (signal is null)
+            {
+                signal=(await _history.NotificationSignalsAsync(DateTime.MinValue,token)).Single(x=>x.Id==id);
+                return await _history.ReservePublicNumberAsync(signal,token);
+            }
             if (signal.PublicSignalNumber is { } existing) return existing;
-            signal.PublicSignalNumber = signals.Max(x => x.PublicSignalNumber ?? 0) + 1;
+            signal.PublicSignalNumber = await _history.ReservePublicNumberAsync(signal,token);
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "PublicSignalReserved", token);
             return signal.PublicSignalNumber.Value;
         }
         finally { _gate.Release(); }
+    }
+
+    internal async Task<IReadOnlyList<ServerSignal>> NotificationSignalsAsync(DateTime since,CancellationToken token)
+    {
+        var live=await GetAllAsync(token);
+        var archived=await _history.NotificationSignalsAsync(since,token);
+        return live.Concat(archived).DistinctBy(s=>s.Id).ToArray();
     }
 
     internal Task<IReadOnlyList<SignalHistoryItem>> GetLearningHistoryAsync(CancellationToken token = default) =>

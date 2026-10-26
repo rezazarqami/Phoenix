@@ -71,6 +71,47 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
+    internal async Task<IReadOnlyList<ServerSignal>> NotificationSignalsAsync(DateTime since,CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection=await OpenAsync(token);
+            var command=connection.CreateCommand();
+            command.CommandText="SELECT payload FROM signals WHERE removed_at_utc IS NOT NULL AND updated_at_utc >= $since";
+            Add(command,"$since",since.ToString("O"));
+            var result=new List<ServerSignal>();
+            await using var reader=await command.ExecuteReaderAsync(token);
+            while(await reader.ReadAsync(token))
+                if(JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0),JsonOptions) is { } signal)result.Add(signal);
+            return result;
+        }
+        finally{_gate.Release();}
+    }
+
+    internal async Task<int> ReservePublicNumberAsync(ServerSignal signal,CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection=await OpenAsync(token);
+            var existing=await ReadSnapshotAsync(connection,signal.Id,token);
+            if(existing?.PublicSignalNumber is { } number)return number;
+            var command=connection.CreateCommand();
+            command.CommandText="SELECT COALESCE(MAX(CAST(json_extract(payload,'$.publicSignalNumber') AS INTEGER)),0) FROM signals";
+            number=Convert.ToInt32(await command.ExecuteScalarAsync(token))+1;
+            if(existing is not null)
+            {
+                existing.PublicSignalNumber=number;
+                command=connection.CreateCommand();command.CommandText="UPDATE signals SET payload=$payload WHERE id=$id";
+                Add(command,"$payload",JsonSerializer.Serialize(existing,JsonOptions));Add(command,"$id",signal.Id.ToString());
+                await command.ExecuteNonQueryAsync(token);
+            }
+            return number;
+        }
+        finally{_gate.Release();}
+    }
+
     public async Task MarkRemovedAsync(ServerSignal signal, CancellationToken token = default)
     {
         await _gate.WaitAsync(token);

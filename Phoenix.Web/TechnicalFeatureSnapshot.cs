@@ -32,7 +32,13 @@ public sealed record TechnicalFeatureSnapshot(
 {
     // Exact distances at observation; absent in legacy records, never backfilled.
     public TradeGeometrySnapshot? TradeGeometry { get; init; }
+    public TechnicalLevelContext? LevelContext { get; init; }
 }
+
+public sealed record TechnicalLevelGeometry(decimal? SupportDistanceAtr,decimal? ResistanceDistanceAtr,
+    decimal CloudDistanceAtr,int NearbyPivots);
+public sealed record TechnicalLevelContext(TechnicalLevelGeometry Entry,TechnicalLevelGeometry Stop,
+    TechnicalLevelGeometry Target);
 
 public sealed record TradeGeometrySnapshot(decimal AtrPrice, decimal StopDistanceAtr,
     decimal TargetDistanceAtr, decimal RewardRisk, decimal EntryDistanceAtr);
@@ -72,6 +78,15 @@ public static class TechnicalFeatureExtractor
         // actual trade level; absent historical fields remain missing, not zero.
         decimal Strength(decimal level) => atr <= 0m ? 0m :
             Clamp(swings.Count(x => Math.Abs(x - level) <= atr * 0.5m) / 4m, 0m, 1m);
+        TechnicalLevelGeometry LevelAt(decimal level)
+        {
+            var below=swingLows.Where(p=>p<=level).Select(p=>(decimal?)p).Max();
+            var above=swingHighs.Where(p=>p>=level).Select(p=>(decimal?)p).Min();
+            return new(below.HasValue && atr>0 ? (level-below.Value)/atr:null,
+                above.HasValue && atr>0 ? (above.Value-level)/atr:null,
+                atr>0 ? (level-(cloudTop+cloudBottom)/2m)/atr:0m,
+                atr>0 ? swings.Count(p=>Math.Abs(p-level)<=atr*.5m):0);
+        }
         decimal CloudAt(decimal level) => atr <= 0m ? 0m :
             Clamp((level - (cloudTop + cloudBottom) / 2m) / atr / 3m, -1m, 1m);
 
@@ -122,6 +137,7 @@ public static class TechnicalFeatureExtractor
             StructureBreakScore: events.Break,
             StructureRetestScore: events.Retest)
         {
+            LevelContext=atr>0 ? new(LevelAt(candidate.EntryPrice),LevelAt(candidate.StopLoss),LevelAt(candidate.TakeProfit)):null,
             TradeGeometry = atr > 0m && (candidate.EntryPrice-candidate.StopLoss)*direction > 0m &&
                 (candidate.TakeProfit-candidate.EntryPrice)*direction > 0m
                 ? new(atr, Math.Abs(candidate.EntryPrice-candidate.StopLoss)/atr,

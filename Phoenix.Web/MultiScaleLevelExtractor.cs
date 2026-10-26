@@ -7,7 +7,10 @@ namespace Phoenix.Web;
 public sealed record MultiScaleLevelSnapshot(string Interval, int Window,
     decimal FibonacciEntry, decimal FibonacciStop, decimal FibonacciTarget,
     decimal EntryStrength, decimal StopStrength, decimal TargetStrength,
-    decimal CloudEntry, decimal CloudStop, decimal CloudTarget, decimal CloudBias);
+    decimal CloudEntry, decimal CloudStop, decimal CloudTarget, decimal CloudBias)
+{
+    public TechnicalLevelContext? LevelContext { get; init; }
+}
 
 public static class MultiScaleLevelExtractor
 {
@@ -43,7 +46,7 @@ public static class MultiScaleLevelExtractor
                 features.EntryLevelStrength ?? 0m, features.StopLevelStrength ?? 0m,
                 features.TargetLevelStrength ?? 0m,
                 features.IchimokuEntryPosition ?? 0m, features.IchimokuStopPosition ?? 0m,
-                features.IchimokuTargetPosition ?? 0m, features.IchimokuCloudBias));
+                features.IchimokuTargetPosition ?? 0m, features.IchimokuCloudBias){LevelContext=features.LevelContext});
         }
         return result;
     }

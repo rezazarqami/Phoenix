@@ -8,6 +8,7 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Device history persists, paginates and isolates event deep links", MobileHistoryTests.History);
 Run("In-app review persists, enforces capacity and isolates owners", InAppQueueTests.CapacityAndRestart);
 Run("Notification policy excludes registration and only expires near signals", InAppQueueTests.AlertPolicy);
 Run("Similarity accepts a moderate contextual difference without hiding contradictions", InAppQueueTests.SimilarityRadius);

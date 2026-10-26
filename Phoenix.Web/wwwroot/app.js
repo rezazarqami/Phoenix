@@ -5,7 +5,7 @@ function similaritySupport(e) {
   if (e.comparisonVersion >= 2 && !(e.comparableTargets + e.comparableStops + e.comparableRiskFree)) return '<small>نمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.</small>';
   const n = v => fa.format(v ?? 0);
   const stageNote = e.queryStage !== e.referenceStage ? ' (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)' : '';
-  return `<small>نزدیکِ هم‌تایم‌فریم${stageNote}: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ / ${n(e.sameTimeframeNearbyRiskFree)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ / ${n(e.otherTimeframeNearbyRiskFree)} ریسک‌فری</small>`;
+  return `<small>نزدیکِ هم‌تایم‌فریم${stageNote}${e.comparisonVersion>=4?` (از ${n(e.sameTimeframeComparable)} نمونه)`:""}: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ / ${n(e.sameTimeframeNearbyRiskFree)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها${e.comparisonVersion>=4?` (از ${n(e.otherTimeframeComparable)} نمونه)`:""}: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ / ${n(e.otherTimeframeNearbyRiskFree)} ریسک‌فری</small>`;
 }
 function outcomeSummary(s) {
   return '';

@@ -7,7 +7,7 @@ let marketLimit = 50;
 let marketLoading = false;
 
 document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
-<details class="results-report"><summary>آرشیو تأیید و رد پیشنهادها — خروجی برای تحلیل</summary>
+<details class="results-report" id="market-pane-archive" role="tabpanel" aria-labelledby="market-tab-archive" hidden open><summary>آرشیو تأیید و رد پیشنهادها — خروجی برای تحلیل</summary>
 <div class="results-body"><p class="results-note">همه پیشنهادهای جدید با عکس، کندل‌ها، تایم‌فریم و پاسخ شما ذخیره می‌شوند. بدون پاسخ، رد محسوب نمی‌شود. این آرشیو مستقل از نتایج معاملات است و فعلاً هیچ فیلتر هوش مصنوعی فعال نیست. خروجی فقط برای مدیر قابل دریافت است.</p>
 <div class="results-filters"><label>از تاریخ<input id="reviewFrom" type="date"></label><label>تا تاریخ<input id="reviewTo" type="date"></label><button id="exportReviews" type="button">دریافت آرشیو ZIP</button></div>
 <p id="reviewMessage" role="status" class="results-message"></p></div></details>`);
@@ -39,7 +39,7 @@ document.querySelector('#exportReviews').addEventListener('click', async () => {
 });
 
 document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
-<details class="results-report" open><summary>داده‌های تاریخی سیگنال‌ها</summary>
+<details class="results-report" id="market-pane-history" role="tabpanel" aria-labelledby="market-tab-history" hidden open><summary>داده‌های تاریخی سیگنال‌ها</summary>
 <div class="results-body"><p id="learningStatus" class="results-note" role="status">در حال دریافت تعداد سوابق…</p><p class="results-note">می‌توانید داده‌ها را همین‌جا مشاهده و کپی کنید یا فایل ZIP بگیرید. بازه بر اساس تاریخ ایجاد سیگنال است. دریافت فقط برای مدیر مجاز است.</p>
 <div class="results-filters"><label>از تاریخ<input id="evaluationFrom" type="date"></label><label>تا تاریخ<input id="evaluationTo" type="date"></label><button id="showEvaluation" type="button">نمایش داده‌ها بدون دانلود</button><button id="exportEvaluation" type="button">دانلود مستقیم ZIP</button></div>
 <p id="evaluationMessage" role="status" class="results-message"></p>
@@ -147,7 +147,6 @@ async function loadMarket() {
     marketAssets = data.assets || [];
     document.querySelector('#assetCount').textContent = faMarket.format(marketAssets.length);
     document.querySelector('#activeCount').textContent = faMarket.format(marketAssets.reduce((sum, asset) => sum + asset.activeCount, 0));
-    document.querySelector('#freeCount').textContent = faMarket.format(marketAssets.filter(asset => asset.activeCount === 0).length);
     renderMarket();
   } catch (error) { rows.innerHTML = '<div class="market-loading error">دریافت اطلاعات ناموفق بود.</div>'; document.querySelector('#marketMessage').textContent = error.name === 'AbortError' ? 'دریافت بازار طول کشید؛ به‌روزرسانی را بزنید.' : error.message; }
   finally { clearTimeout(timeout); marketLoading = false; }

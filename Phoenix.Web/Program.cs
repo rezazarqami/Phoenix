@@ -116,7 +116,7 @@ app.Use(async (context, next) =>
         return;
     }
     var analysisAsset = context.Request.Path.StartsWithSegments("/analysis-assets") ||
-        path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/professional-ui.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or "/signal-batch-controls.js" or
+        path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/professional-ui.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or "/crypto-ice.css" or "/crypto-ice.js" or "/signal-batch-controls.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -157,7 +157,7 @@ app.Use(async (context, next) =>
         await next();
         return;
     }
-    var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login.js" or
+    var publicPath = path is "/login" or "/login.html" or "/login.css" or "/login-ice.css" or "/login.js" or
         "/login-analysis-link.css" or "/login-gold.css" or "/viewer-mode.js" or "/api/auth/login" or
         "/analysis-login.css" or "/analysis-login.js" or
         "/manifest.webmanifest" or "/sw.js" ||

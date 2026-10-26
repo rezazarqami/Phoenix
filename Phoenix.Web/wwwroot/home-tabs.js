@@ -56,6 +56,8 @@
         panel.append(frame);
       }
     }
+    document.body.classList.toggle('crypto-market-open', name === 'crypto');
+    document.querySelector('.market-card').hidden = name !== 'home';
     if (updateHash && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
     window.dispatchEvent(new CustomEvent('phoenix-tab-changed', { detail: name }));
   }
@@ -80,6 +82,8 @@
     frame.src = routes.signal + '&symbol=' + encodeURIComponent(symbol);
   });
   activate(location.hash.slice(1), false);
+
+  document.getElementById('returnHomeButton').addEventListener('click', () => activate('home'));
 
   function closeSettings() {
     settingsMenu.hidden = true;

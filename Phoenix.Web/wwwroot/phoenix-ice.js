@@ -33,7 +33,8 @@
   function applyViewerMode(){if(document.body.classList.contains('viewer-only')&&document.getElementById('signal-tab-new').getAttribute('aria-selected')==='true')showSignalTab('active');}
   new MutationObserver(applyViewerMode).observe(document.body,{attributes:true,attributeFilter:['class']});applyViewerMode();
   const notificationToggle=document.getElementById('notificationToggle'),notificationMenu=document.getElementById('notificationMenu');
-  notificationToggle.addEventListener('click',()=>{notificationMenu.hidden=!notificationMenu.hidden;notificationToggle.setAttribute('aria-expanded',String(!notificationMenu.hidden));});
+  notificationToggle.addEventListener('click',()=>{document.getElementById('settingsMenu').hidden=true;document.getElementById('settingsToggle').setAttribute('aria-expanded','false');notificationMenu.hidden=!notificationMenu.hidden;notificationToggle.setAttribute('aria-expanded',String(!notificationMenu.hidden));});
+  document.getElementById('settingsToggle').addEventListener('click',()=>{notificationMenu.hidden=true;notificationToggle.setAttribute('aria-expanded','false');});
   document.getElementById('notificationShowActive').addEventListener('click',()=>{document.getElementById('tab-home').click();showSignalTab('active');notificationMenu.hidden=true;notificationToggle.setAttribute('aria-expanded','false');});
   function updateNotifications(){const count=document.getElementById('count').textContent;document.getElementById('notificationSummary').textContent=`${count} سیگنال در انتظار یا فعال دارید.`;notificationToggle.querySelector('i').hidden=!count.replace(/[۰٠0\s]/g,'');}
   new MutationObserver(updateNotifications).observe(document.getElementById('count'),{childList:true,subtree:true,characterData:true});updateNotifications();
@@ -62,7 +63,7 @@
       document.getElementById('marketArea').setAttribute('d',`${path} L316,98 L4,98 Z`);
       baseline=values[0];livePrice=livePrice||values.at(-1);change();status.textContent='';
       document.getElementById('marketSparkline').setAttribute('aria-label',`نمودار بیت‌کوین؛ ${values.length} کندل، تایم‌فریم ${interval}`);
-    }catch(error){if(error.name!=='AbortError'){status.textContent='دادهٔ نمودار در دسترس نیست';baseline=null;document.getElementById('marketLine').removeAttribute('d');document.getElementById('marketArea').removeAttribute('d');document.getElementById('marketChangePercent').textContent='—';document.getElementById('marketChangeAmount').textContent='—';}}
+    }catch(error){if(signal.aborted)return;if(error.name!=='AbortError'){status.textContent='دادهٔ نمودار در دسترس نیست';baseline=null;document.getElementById('marketLine').removeAttribute('d');document.getElementById('marketArea').removeAttribute('d');document.getElementById('marketChangePercent').textContent='—';document.getElementById('marketChangeAmount').textContent='—';}}
   }
   document.querySelectorAll('[data-market-interval]').forEach(button=>button.addEventListener('click',()=>{
     interval=button.dataset.marketInterval;document.querySelectorAll('[data-market-interval]').forEach(b=>{const active=b===button;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});loadChart();

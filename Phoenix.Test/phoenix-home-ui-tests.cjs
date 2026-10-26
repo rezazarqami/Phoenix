@@ -27,7 +27,8 @@ const flush=()=>new Promise(r=>setImmediate(r));
  w.dispatchEvent(new w.CustomEvent('phoenix-market-price',{detail:105}));assert.equal(d.querySelector('#marketChangePercent').textContent,'+5.00%');
  d.querySelector('[data-market-interval=D]').click();await flush();assert.ok(requests.includes('/api/market/overview?interval=D'));
  fail=true;d.querySelector('[data-market-interval=W]').click();await flush();assert.equal(d.querySelector('#marketChangePercent').textContent,'—');assert.ok(d.querySelector('#marketChartStatus').textContent.includes('دسترس'));
- for(const target of ['home','crypto','elliott','signal','statistics','strategy'])assert.ok(d.querySelector('#tab-'+target));
+ for(const target of ['home','crypto','elliott','signal','statistics','strategy']){d.querySelector('#tab-'+target).click();assert.equal(d.querySelector('.market-card').hidden,target!=='home','BTC is home-only: '+target);}
+ d.querySelector('#returnHomeButton').click();assert.equal(d.querySelector('.market-card').hidden,false);assert.equal(d.body.classList.contains('crypto-market-open'),false);
  assert.equal(d.querySelector('.home-brand-logo').getAttribute('src'),'/analysis-assets/phoenix-ice-logo.png');
  d.body.classList.add('viewer-only');await flush();assert.deepEqual(visible(),['signal-pane-active']);d.querySelector('#signal-tab-new').click();assert.deepEqual(visible(),['signal-pane-active']);
  dom.window.close();console.log('PASS Phoenix home: exclusive tabs, keyboard navigation, form preservation, notifications, real market ranges and missing-data state.');

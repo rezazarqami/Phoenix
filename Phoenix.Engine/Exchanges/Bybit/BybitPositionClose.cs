@@ -2,7 +2,14 @@ using System.Text.Json;
 
 namespace Phoenix.Engine.Exchanges.Bybit;
 
-public sealed record BybitOpenPosition(string Symbol, string Side, int PositionIndex, decimal Size);
+public sealed record BybitOpenPosition(string Symbol, string Side, int PositionIndex, decimal Size,
+    decimal? AveragePrice = null, decimal? MarkPrice = null, decimal? UnrealisedPnl = null,
+    decimal? InitialMargin = null, decimal? Leverage = null, decimal? LiquidationPrice = null,
+    decimal? TakeProfit = null, decimal? StopLoss = null)
+{
+    public decimal? ReturnPercent => InitialMargin is > 0m && UnrealisedPnl.HasValue
+        ? UnrealisedPnl.Value / InitialMargin.Value * 100m : null;
+}
 
 public sealed partial class BybitDemoClient
 {
@@ -26,7 +33,11 @@ public sealed partial class BybitDemoClient
                 var side = p.GetProperty("side").GetString();
                 if (size > 0m && side is "Buy" or "Sell")
                     result.Add(new(p.GetProperty("symbol").GetString()!, side,
-                        p.GetProperty("positionIdx").GetInt32(), size));
+                        p.GetProperty("positionIdx").GetInt32(), size,
+                        TryReadDecimal(p, "avgPrice"), TryReadDecimal(p, "markPrice"),
+                        TryReadDecimal(p, "unrealisedPnl"), TryReadDecimal(p, "positionIM"),
+                        TryReadDecimal(p, "leverage"), TryReadDecimal(p, "liqPrice"),
+                        TryReadDecimal(p, "takeProfit"), TryReadDecimal(p, "stopLoss")));
             }
             cursor = data.TryGetProperty("nextPageCursor", out var next) ? next.GetString() : null;
         } while (!string.IsNullOrEmpty(cursor));

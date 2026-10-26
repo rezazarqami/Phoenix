@@ -39,7 +39,7 @@ with tempfile.TemporaryDirectory() as tmp:
   assert request(owner,'/api/analysis/auth/me')[0]==200
   assert json.loads(request(owner,'/api/users')[1])==[]
   for c in previous:
-   for path in ['/api/auth/me','/api/signals','/api/analysis/auth/me','/api/mobile/status']:
+   for path in ['/api/auth/me','/api/positions/live','/api/signals','/api/analysis/auth/me','/api/mobile/status']:
     assert request(c,path)[0]==401, 'Stale non-owner session accepted'
    assert request(c,'/phoenix')[2].endswith('/login')
   for name in ['fixture-editor','fixture-viewer']:

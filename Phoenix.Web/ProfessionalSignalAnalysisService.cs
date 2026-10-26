@@ -93,7 +93,7 @@ public sealed class ProfessionalSignalAnalysisService(
             StructureBreakScore = Weighted(f => f.StructureBreakScore!.Value),
             StructureRetestScore = Weighted(f => f.StructureRetestScore!.Value),
             MultiScaleLevels = MultiScaleLevelExtractor.Calculate(histories, candidate),
-            SimilarityContextVersion = 3 // Both proposal and entry use only closed candles.
+            SimilarityContextVersion = 4 // Closed candles, plus uncapped per-trade-level geometry.
         };
     }
 

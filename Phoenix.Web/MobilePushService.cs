@@ -156,7 +156,17 @@ public static class MobileEndpoints
             catch (ArgumentException e) { return Results.BadRequest(new { error = e.Message }); }
         });
         static string Owner(HttpRequest request) { PhoenixSessionAuth.TryGetIdentity(request, out var user); return user.Username; }
-        group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
+        group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, directFeed = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
+        group.MapGet("/feed", async (long? after,int? wait,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>{
+            var until=DateTime.UtcNow.AddSeconds(Math.Clamp(wait??0,0,20));
+            DeviceSignalPage page;
+            do
+            {
+                page=await feed.ReadAsync(Owner(request),after,ct);
+                if(after is null || page.Events.Count>0 || DateTime.UtcNow>=until)return Results.Ok(page);
+                await Task.Delay(1000,ct);
+            }while(true);
+        });
         group.MapPost("/devices", async (MobileRegistration input, HttpRequest request, MobilePushService service, CancellationToken ct) => { await service.RegisterAsync(Owner(request), input, ct); return Results.Ok(new { registered = true }); });
         group.MapDelete("/devices/{id:guid}", async (Guid id, HttpRequest request, MobilePushService service, CancellationToken ct) => { await service.RemoveAsync(Owner(request), id, ct); return Results.NoContent(); });
         group.MapPost("/test", async (HttpRequest request, MobilePushService service, CancellationToken ct) => {

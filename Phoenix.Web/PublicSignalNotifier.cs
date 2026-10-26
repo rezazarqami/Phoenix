@@ -35,6 +35,30 @@ public sealed class PublicSignalNotifier
         _httpClient = httpClient;
     }
 
+    internal DateTime? RetryAfterUtc { get; private set; }
+    private void ReadRetryAfter(string body)
+    {
+        try
+        {
+            using var document=JsonDocument.Parse(body);
+            if(document.RootElement.TryGetProperty("parameters",out var parameters) &&
+                parameters.TryGetProperty("retry_after",out var delay) && delay.TryGetInt32(out var seconds) && seconds>0)
+                RetryAfterUtc=DateTime.UtcNow.AddSeconds(Math.Min(seconds,86400));
+        }
+        catch(JsonException){ }
+    }
+
+    private string? dedicatedChatOverride;
+    private IReadOnlyList<string> DedicatedChatIds => dedicatedChatOverride is { } chat ? [chat] : _dedicatedOptions.GetChatIds();
+
+    internal IReadOnlyList<(string Key,PublicSignalNotifier Notifier)> Destinations(ServerSignal signal)
+    {
+        if(IsDedicatedSignal(signal))return _dedicatedOptions.GetChatIds().Select(chat=>
+            ("dedicated:"+chat,new PublicSignalNotifier(_options,_dedicatedOptions,_logger,_httpClient)
+                {dedicatedChatOverride=chat})).ToArray();
+        return _options.IsConfigured ? [("public:"+_options.ChatId,new PublicSignalNotifier(_options,_dedicatedOptions,_logger,_httpClient))] : [];
+    }
+
     public bool IsDedicatedSignal(ServerSignal signal) =>
         _dedicatedOptions.Owns(signal.RequestedByUsername);
 
@@ -88,7 +112,7 @@ public sealed class PublicSignalNotifier
     public async Task<int?> PublishAsync(ServerSignal signal, CancellationToken token)
         => await PublishAsync(signal, null, token);
 
-    public async Task<int?> PublishAsync(ServerSignal signal, byte[]? image, CancellationToken token)
+    public async Task<int?> PublishAsync(ServerSignal signal, byte[]? image, CancellationToken token,bool currentImage=false)
     {
         if (signal.PublicSignalNumber is null) return null;
         if (IsDedicatedSignal(signal) ? !_dedicatedOptions.IsConfigured : !_options.IsConfigured) return null;
@@ -115,6 +139,9 @@ public sealed class PublicSignalNotifier
 
             (‌1%- از کل سرمایه)
             """;
+        if(signal.CompletedAtUtc is not null)
+            text+="\n⏱ ارسال با تأخیر؛ نتیجهٔ ثبت‌شده پس از این پیام ارسال می‌شود.";
+        if(image is not null)text+="\n🖼 "+(currentImage?"تصویر شرایط فعلی":"تصویر ثبت‌شده هنگام پیشنهاد سیگنال");
         var scores = SignalReviewText.Outcome(signal.TargetOutcomePercent, signal.StopOutcomePercent, signal.OutcomeValidationCount) + SignalReviewText.Support(signal.SimilarityEvidence);
         if (image is not null)
             return IsDedicatedSignal(signal)
@@ -171,12 +198,12 @@ public sealed class PublicSignalNotifier
         ReplyAsync(signal, $"▶️ معامله {signal.Symbol} باز شد.", token);
 
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) =>
-        ReplyAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.", token);
+        ReplyAsync(signal, $"✅ معامله {signal.Symbol} با {RiskFreeExit.Title(signal)} بسته شد.\n{RiskFreeExit.Detail(signal)}", token);
 
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, byte[]? image, bool current,
         CancellationToken token) => image is null
             ? RiskFreeClosedAsync(signal, token)
-            : ReplyPhotoAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.\n🖼 " +
+            : ReplyPhotoAsync(signal, $"✅ معامله {signal.Symbol} با {RiskFreeExit.Title(signal)} بسته شد.\n{RiskFreeExit.Detail(signal)}\n🖼 " +
                 (current ? "تصویر شرایط نزدیک زمان بسته‌شدن است." : "تصویر مربوط به لحظه صدور سیگنال است."),
                 image, token);
 
@@ -223,7 +250,7 @@ public sealed class PublicSignalNotifier
     private async Task<int?> SendDedicatedAsync(string text, CancellationToken token)
     {
         int? firstMessageId = null;
-        foreach (var chatId in _dedicatedOptions.GetChatIds())
+        foreach (var chatId in DedicatedChatIds)
         {
             var messageId = await SendAsync(
                 new PublicSignalTelegramOptions(_dedicatedOptions.BotToken, chatId), text, null, token);
@@ -235,7 +262,7 @@ public sealed class PublicSignalNotifier
     private async Task<int?> SendDedicatedPhotoAsync(string text, byte[] image, CancellationToken token)
     {
         int? firstMessageId = null;
-        foreach (var chatId in _dedicatedOptions.GetChatIds())
+        foreach (var chatId in DedicatedChatIds)
         {
             var messageId = await SendPhotoAsync(
                 new PublicSignalTelegramOptions(_dedicatedOptions.BotToken, chatId), text, image, null, token);
@@ -248,7 +275,7 @@ public sealed class PublicSignalNotifier
         CancellationToken token)
     {
         int? firstMessageId = null;
-        foreach (var chatId in _dedicatedOptions.GetChatIds())
+        foreach (var chatId in DedicatedChatIds)
         {
             var messageId = await SendSignalPhotoAsync(
                 new PublicSignalTelegramOptions(_dedicatedOptions.BotToken, chatId), text, image, signalId, null, token);
@@ -270,7 +297,7 @@ public sealed class PublicSignalNotifier
                 new[] { new { text = "🚫 لغو سیگنال", callback_data = $"public:cancel:{signalId:N}" } }
             } })), "reply_markup");
             if (replyToMessageId is { } replyId)
-                content.Add(new StringContent(JsonSerializer.Serialize(new { message_id = replyId })), "reply_parameters");
+                content.Add(new StringContent(JsonSerializer.Serialize(new { message_id = replyId, allow_sending_without_reply = true })), "reply_parameters");
             var photo = new ByteArrayContent(image); photo.Headers.ContentType = new("image/png");
             content.Add(photo, "photo", $"signal-{signalId:N}.png");
             using var response = await (_httpClient ?? Client).PostAsync(
@@ -278,6 +305,7 @@ public sealed class PublicSignalNotifier
             var body = await response.Content.ReadAsStringAsync(token);
             if (!response.IsSuccessStatusCode)
             {
+                ReadRetryAfter(body);
                 _logger.LogWarning("Public Telegram signal photo failed: {Status} {Body}", response.StatusCode, body);
                 return null;
             }
@@ -312,14 +340,14 @@ public sealed class PublicSignalNotifier
             content.Add(new StringContent(caption), "caption");
             content.Add(new StringContent("HTML"), "parse_mode");
             if (replyToMessageId is { } messageId)
-                content.Add(new StringContent(JsonSerializer.Serialize(new { message_id = messageId })), "reply_parameters");
+                content.Add(new StringContent(JsonSerializer.Serialize(new { message_id = messageId, allow_sending_without_reply = true })), "reply_parameters");
             var photo = new ByteArrayContent(image);
             photo.Headers.ContentType = new("image/png");
             content.Add(photo, "photo", "signal-result.png");
             using var response = await (_httpClient ?? Client).PostAsync(
                 $"https://api.telegram.org/bot{destination.BotToken}/sendPhoto", content, token);
             var body = await response.Content.ReadAsStringAsync(token);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode){ReadRetryAfter(body);return null;}
             using var document = JsonDocument.Parse(body);
             return document.RootElement.GetProperty("result").GetProperty("message_id").GetInt32();
         }
@@ -342,12 +370,13 @@ public sealed class PublicSignalNotifier
                 ["text"] = text
             };
             if (replyToMessageId is { } messageId)
-                payload["reply_parameters"] = new { message_id = messageId };
+                payload["reply_parameters"] = new { message_id = messageId, allow_sending_without_reply = true };
             using var response = await (_httpClient ?? Client).PostAsJsonAsync(
                 $"https://api.telegram.org/bot{destination.BotToken}/sendMessage", payload, token);
             var body = await response.Content.ReadAsStringAsync(token);
             if (!response.IsSuccessStatusCode)
             {
+                ReadRetryAfter(body);
                 _logger.LogWarning("Public Telegram signal failed: {Status} {Body}", response.StatusCode, body);
                 return null;
             }

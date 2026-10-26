@@ -38,8 +38,12 @@ with tempfile.TemporaryDirectory() as tmp:
     c=client();assert request(c,'/api/auth/login',{'username':username,'password':password})[0]==200
     assert request(c,'/phoenix')[0]==200
     assert request(c,'/api/mobile/status')[0]==403
+    assert request(c,'/api/mobile/feed')[0]==403
     assert request(c,'/api/personal/entries')[0]==404
    assert request(client(),'/api/signals')[0]==401
    assert request(client(),'/api/mobile/status')[0]==401
+   assert request(client(),'/api/mobile/feed')[0]==401
+   status,body,_=request(owner,'/api/mobile/feed');assert status==200 and 'cursor' in json.loads(body)
+   assert request(owner,'/api/mobile/feed?after=-1')[0]==400
    print('PASS Phoenix-only: root/login routing, removed workspace and assets, owner-only mobile endpoints, preserved editor/viewer sessions.')
   finally:process.terminate();process.wait(timeout=10)

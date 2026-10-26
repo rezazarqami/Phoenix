@@ -20,7 +20,11 @@ public sealed class StagedRiskProtection(BybitDemoClient client, ServerOrderStor
         foreach (var id in OrderIds(order))
         {
             var status = await client.GetOrderStatusAsync(id, token);
-            if (status?.Status == "Filled") return status;
+            if (status?.Status == "Filled")
+            {
+                RiskFreeExit.Record(order,status.OrderId);
+                return status;
+            }
         }
         return null;
     }
@@ -53,6 +57,7 @@ public sealed class StagedRiskProtection(BybitDemoClient client, ServerOrderStor
                     $"early-{order.Id:N}"[..36], positionIndex, false, token);
                 order.EarlyStopLimit = result.Price;
                 order.EarlyStopLimitOrderId = result.OrderId;
+                order.EarlyProtectionAtUtc ??= DateTime.UtcNow;
                 await store.UpdateAsync(order, token);
             }
             return false;

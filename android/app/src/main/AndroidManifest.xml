@@ -3,6 +3,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <application android:name=".PhoenixApplication" android:label="${clientLabel}" android:icon="${clientIcon}"
         android:roundIcon="${clientIcon}" android:theme="@style/PhoenixTheme"
         android:usesCleartextTraffic="false" android:allowBackup="false" android:fullBackupContent="false">
@@ -11,6 +14,10 @@
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
+        <receiver android:name=".PhoenixAlertBootReceiver" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /></intent-filter></receiver>
+        <service android:name=".PhoenixAlertService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-initiated continuous monitoring of time-critical trading signal events from the first-party server where cloud messaging is unavailable; persistent visible connection notification and user stop action." />
+        </service>
         <service android:name=".PhoenixMessagingService" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter></service>
     </application>
 </manifest>

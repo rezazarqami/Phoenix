@@ -29,7 +29,7 @@ public sealed class Strategy2TelegramNotifier(
     public async Task StopAsync(ServerSignal s, CancellationToken token) => await SendAsync(
         $"🛑 Strategy 2 به استاپ‌لاس رسید\n{Describe(s)}" + await WalletNotification.ReadAsync(runtime.Client, token), token);
     public async Task ClosedRiskFreeAsync(ServerSignal s, CancellationToken token) => await SendAsync(
-        $"💚 Strategy 2 با ریسک‌فری بسته شد\n{Describe(s)}" + await WalletNotification.ReadAsync(runtime.Client, token), token);
+        $"💚 Strategy 2 با {RiskFreeExit.Title(s)} بسته شد\n{RiskFreeExit.Detail(s)}\n{Describe(s)}" + await WalletNotification.ReadAsync(runtime.Client, token), token);
     public Task ErrorAsync(ServerSignal s, CancellationToken token) => SendAsync(
         $"⚠️ خطای Strategy 2\n{Describe(s)}\n{s.Error}", token);
 

@@ -8,8 +8,6 @@ public sealed class DemoOrderWorker(
     ServerState state,
     ServerOrderStore store,
     TelegramNotifier telegram,
-    EntrySignalReviewService entryReview,
-    PublicSignalNotifier publicSignals,
     ILogger<DemoOrderWorker> logger) : BackgroundService
 {
     public static bool IsTradingEnabled(BybitDemoOptions options) =>
@@ -27,8 +25,11 @@ public sealed class DemoOrderWorker(
                 var orders = await store.GetAllAsync(stoppingToken);
                 var symbols = orders.Where(x => x.Status is "Pending" or "Submitted" or "Filled").Select(x => x.Symbol)
                     .Append("BTCUSDT").Distinct(StringComparer.OrdinalIgnoreCase);
+                string? marketError=null;
                 foreach (var symbol in symbols)
                 {
+                    try
+                    {
                     var ticker = await client.GetLastPriceAsync(symbol, stoppingToken);
                     if (symbol == "BTCUSDT")
                     {
@@ -68,9 +69,16 @@ public sealed class DemoOrderWorker(
                         // Never keep entry detection locked while talking to Bybit or Telegram.
                         if (claimed is not null) await SubmitAsync(claimed, stoppingToken);
                     }
+                    }
+                    catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested){throw;}
+                    catch(Exception exception)
+                    {
+                        marketError=exception.Message;
+                        logger.LogWarning(exception,"Phoenix monitoring failed for {Symbol}; other symbols continue",symbol);
+                    }
                 }
-                state.PublicApiConnected = true;
-                state.Error = null;
+                state.PublicApiConnected = marketError is null;
+                state.Error = marketError;
 
                 if (options.HasCredentials && !state.DemoAuthenticated)
                     state.DemoAuthenticated = (await client.CheckConnectionAsync(stoppingToken)).Authenticated;
@@ -111,7 +119,7 @@ public sealed class DemoOrderWorker(
             // Persist the activation immediately and never block entry detection on
             // multi-timeframe analysis, chart rendering, or Telegram delivery.
             await store.UpdateAsync(order, token);
-            _ = Task.Run(() => PublishPublicSignalAsync(order.Id), CancellationToken.None);
+            // The durable notification worker publishes/retries from this persisted activation.
         }
 
         if (order.ExpireStage == "Target")
@@ -122,43 +130,6 @@ public sealed class DemoOrderWorker(
         }
 
         await store.UpdateAsync(order, token);
-    }
-
-    private async Task PublishPublicSignalAsync(Guid signalId)
-    {
-        try
-        {
-            var current = (await store.GetAllAsync()).SingleOrDefault(x => x.Id == signalId);
-            if (current is null || current.PublicTelegramMessageId is > 0 || current.CompletedAtUtc is not null) return;
-            byte[]? chart = null;
-            try { chart = (await entryReview.BuildCurrentAsync(current, CancellationToken.None)).Image; }
-            catch (Exception exception)
-            {
-                logger.LogWarning(exception, "Background public chart failed for {Symbol}", current.Symbol);
-            }
-            var messageId = await publicSignals.PublishAsync(current, chart, CancellationToken.None);
-            if (messageId is > 0)
-            {
-                // Chart generation can take longer than the remaining expiry window.
-                // Merge only delivery metadata into the latest trading snapshot.
-                await store.ExecutionGate.WaitAsync();
-                try
-                {
-                    var latest = (await store.GetAllAsync()).SingleOrDefault(x => x.Id == signalId);
-                    if (latest is not null)
-                    {
-                        latest.PublicTelegramMessageId = messageId;
-                        if (chart is not null) latest.PublicReviewImageSentAtUtc = DateTime.UtcNow;
-                        await store.UpdateAsync(latest);
-                    }
-                }
-                finally { store.ExecutionGate.Release(); }
-            }
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Background public signal publishing failed for {SignalId}", signalId);
-        }
     }
 
     private static bool InitialExpiryReached(ServerSignal order, decimal price) => order.Direction switch

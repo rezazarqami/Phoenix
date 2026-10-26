@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 14
-        versionName '1.9.4-ice'
+        versionCode 15
+        versionName '1.9.5-ice'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
             def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''

@@ -83,7 +83,7 @@ jobs:
         run: |
           tag="phoenix-android-${GITHUB_SHA:0:8}"
           cp android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk phoenix-android.apk
-          gh release create "$tag" phoenix-android.apk --target "$GITHUB_SHA" --prerelease --title "Phoenix 1.9.4" --notes-file docs/android-install-preview.md
+          gh release create "$tag" phoenix-android.apk --target "$GITHUB_SHA" --prerelease --title "Phoenix 1.9.5" --notes-file docs/android-install-preview.md
       - name: Remove retired combined-client release files
         if: github.event_name == 'push' && github.ref == 'refs/heads/personal/phoenix-standalone'
         env:

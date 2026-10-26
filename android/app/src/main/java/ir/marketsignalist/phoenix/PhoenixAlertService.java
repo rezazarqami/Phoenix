@@ -28,6 +28,7 @@ public final class PhoenixAlertService extends Service {
         if(intent!=null&&"stop".equals(intent.getAction())){disable(this);return START_NOT_STICKY;}
         if(!prefs(this).getBoolean("enabled",false)||!PhoenixNotifications.allowed(this)){stopSelf();return START_NOT_STICKY;}
         NotificationChannel channel=new NotificationChannel(CHANNEL,"اتصال زندهٔ اعلان فونیکس",NotificationManager.IMPORTANCE_MIN);
+        channel.setSound(null,null);channel.enableVibration(false);channel.setShowBadge(false);
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
         if(Build.VERSION.SDK_INT>=34)startForeground(ID,ongoing("در حال اتصال به فونیکس…"),ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(ID,ongoing("در حال اتصال به فونیکس…"));
@@ -38,7 +39,7 @@ public final class PhoenixAlertService extends Service {
     private Notification ongoing(String text){
         PendingIntent open=PendingIntent.getActivity(this,61001,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stop=PendingIntent.getService(this,61002,new Intent(this,PhoenixAlertService.class).setAction("stop"),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
-        return new Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_notification_p).setContentTitle("Phoenix").setContentText("اعلان سیگنال فعال است").setSilent(true).setShowWhen(false).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(new Notification.Action.Builder(null,"توقف اعلان زنده",stop).build()).build();
+        return new Notification.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_notification_p).setContentTitle("Phoenix").setContentText("اعلان سیگنال فعال است").setSound(null).setVibrate(new long[0]).setShowWhen(false).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).addAction(new Notification.Action.Builder(null,"توقف اعلان زنده",stop).build()).build();
     }
     private void state(String text){prefs(this).edit().putString("state",text).apply();}
     private void monitor(){

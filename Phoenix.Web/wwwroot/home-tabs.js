@@ -56,6 +56,7 @@
         panel.append(frame);
       }
     }
+    if(name!=='crypto')document.body.classList.remove('review-focus-host');
     document.body.classList.toggle('crypto-market-open', name === 'crypto');
     document.querySelector('.market-card').hidden = name !== 'home';
     if (updateHash && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
@@ -71,6 +72,11 @@
       tabs[next].focus();
       activate(tabs[next].dataset.panel);
     });
+  });
+  window.addEventListener('message', event => {
+    const frame=document.querySelector('#panel-crypto iframe');
+    if(event.origin!==location.origin || !frame || event.source!==frame.contentWindow || event.data?.type!=='phoenix-review-focus')return;
+    if(!document.getElementById('panel-crypto').hidden)document.body.classList.toggle('review-focus-host',event.data.active===true);
   });
   window.addEventListener('hashchange', () => activate(location.hash.slice(1), false));
   window.addEventListener('message', event => {

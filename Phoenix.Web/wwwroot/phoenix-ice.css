@@ -30,3 +30,15 @@ button:focus-visible,a:focus-visible{outline:3px solid #289bff;outline-offset:3p
 body.crypto-market-open .home-tabs{display:none}body.crypto-market-open #panel-crypto{margin-top:-45px;position:relative}body.crypto-market-open .home-content-frame{border:0;border-radius:0;background:transparent}
 
 #deviceAlertsDialog{max-width:520px;width:calc(100% - 28px);border-radius:24px;padding:20px}#deviceAlertsDialog .dialog-head{display:flex;align-items:center;justify-content:space-between;background:transparent}#deviceAlertsDialog h2{font-size:21px}#deviceAlertsDialog p{font-size:13px;line-height:1.9}#deviceAlertsDialog .device-alert-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}#deviceAlertsDialog button{font:inherit;border:1px solid #d6e8f6;border-radius:12px;background:#e8f5ff;color:#1473b6;padding:12px;cursor:pointer}#deviceAlertsDialog #enableDeviceAlerts{background:linear-gradient(110deg,#29b9ed,#087fff);color:#fff;border:0}#deviceAlertsDialog #disableDeviceAlerts{color:#d24d65;background:#fff2f5}#deviceAlertsDialog button:disabled{opacity:.5;cursor:default}#deviceAlertsDialog .device-alert-note{font-size:11px;color:#7892a6;border-top:1px solid #e1edf4;padding-top:15px}#deviceAlertsMessage{color:#b83b58}#deviceAlertsState{font-weight:700;color:#157cac}
+
+/* Dedicated popover rows avoid inherited generic security-button positioning. */
+.header-actions #notificationMenu{display:grid;gap:9px;max-width:calc(100vw - 24px);width:290px;padding:15px;border-radius:19px;text-align:right;isolation:isolate}
+.header-actions #notificationMenu[hidden]{display:none!important}
+#notificationMenu>b{display:block;margin:0;padding:0;font-size:14px;line-height:1.6;color:#203d58}
+#notificationMenu .notification-history-link{display:flex;align-items:center;justify-content:space-between;position:static;float:none;width:100%;margin:0;padding:11px 12px;border:1px solid #d9ebf9;border-radius:11px;background:#eff8ff;color:#137bc2;text-decoration:none;font:500 12px/1.7 PhoenixVazir,Tahoma,sans-serif}
+#notificationMenu .notification-history-link:after{content:'‹';font:22px Arial;color:#4097cf}
+#notificationMenu p{margin:0;font-size:11px;line-height:1.8}
+#notificationMenu button{font-size:12px;line-height:1.6}
+body.review-focus-host{overflow:hidden!important}
+body.review-focus-host #panel-crypto{position:fixed!important;inset:0!important;z-index:200!important;padding:0!important;margin:0!important;background:#f3f9ff!important;height:100dvh!important;overflow:hidden!important}
+body.review-focus-host #panel-crypto iframe{display:block!important;width:100%!important;height:100dvh!important;min-height:0!important;border:0!important}

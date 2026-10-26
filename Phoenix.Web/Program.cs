@@ -117,7 +117,7 @@ app.Use(async (context, next) =>
         return;
     }
     var analysisAsset = context.Request.Path.StartsWithSegments("/analysis-assets") ||
-        path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/professional-ui.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or "/crypto-ice.css" or "/crypto-ice.js" or "/signal-batch-controls.js" or
+        path is "/analysis.css" or "/analysis.js" or "/lab-nav.css" or "/analysis-brand.css" or "/professional-ui.css" or "/signal-lab.css" or "/signal-range.css" or "/signal-symbol.css" or "/signal-loading.css" or "/signal-drawing.css" or "/signal-drawing.js" or "/signal-lab.js" or "/crypto-market.css" or "/batch-timed.css" or "/results-report.css" or "/crypto-market.js" or "/crypto-ice.css" or "/crypto-ice.js" or "/in-app-review.js" or "/in-app-review.css" or "/signal-batch-controls.js" or
         "/vendor/lightweight-charts.standalone.production.js";
     var analysisPath = context.Request.Path.StartsWithSegments("/analysis") ||
                        context.Request.Path.StartsWithSegments("/api/analysis") || analysisAsset;
@@ -530,6 +530,22 @@ app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderS
     return image is null ? Results.NotFound() : Results.File(image, "image/png");
 });
 
+app.MapGet("/api/analysis/proposals", async (HttpRequest request, SignalBatchService batches, CancellationToken ct) => {
+    PhoenixSessionAuth.TryGetIdentity(request,out var identity);
+    var items=await batches.PendingAsync(identity.Username ?? "",ct);
+    return Results.Ok(items.Select(x=>new {x.Key,x.Caption,x.CreatedAt,x.State,x.Error,evidence=x.Analysis.Prediction.Evidence,symbol=x.Candidate.Symbol,
+        image="/api/analysis/proposals/"+x.Key+"/image"}));
+});
+app.MapGet("/api/analysis/proposals/{key}/image", async (string key,HttpRequest request,SignalBatchService batches,CancellationToken ct)=>{
+    PhoenixSessionAuth.TryGetIdentity(request,out var identity);
+    var item=(await batches.PendingAsync(identity.Username ?? "",ct)).SingleOrDefault(x=>x.Key==key);
+    return item is null?Results.NotFound():Results.File(item.Image,"image/png");
+});
+app.MapPost("/api/analysis/proposals/{key}/decision", async (string key,InAppDecisionRequest decision,HttpRequest request,SignalBatchService batches,CancellationToken ct)=>{
+    PhoenixSessionAuth.TryGetIdentity(request,out var identity);
+    var error=await batches.DecideInAppAsync(identity.Username ?? "",key,decision.Action,decision.Reason,ct);
+    return error is null?Results.Ok():Results.Conflict(new {error});
+});
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
 app.MapGet("/api/analysis/learning", async (SignalLearningService learning, HttpContext context, CancellationToken token) =>
 {

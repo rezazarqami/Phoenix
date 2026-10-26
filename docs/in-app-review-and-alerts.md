@@ -17,3 +17,13 @@ Allowed: near entry, confirmed exchange fill, protection steps, target, stop, ri
 Four bundled WAV tones have independent Android notification channels: crystal, pulse, beacon, soft. The in-app picker selects a channel and sends a preview; Android channel settings remain accessible. Signal and service small icons use a monochrome P. The foreground connection channel is silent/minimal, and routine connection changes update in-app state without reposting the notification. Android requires a foreground-service notification for this monitoring approach; the in-app connection-settings button opens the separate channel so users can hide it using system settings without disabling signal alerts. Existing channel importance is controlled by Android/user settings.
 
 The APK build remains on the existing CI signing key and identity. This PR does not publish, deploy or merge automatically.
+
+
+## Result journal and live positions
+
+- Results are displayed newest first, with older pages appended below. Selected notification links still scroll to the selected event. New events insert above, and reading an older event preserves the scroll position.
+- New main-account Target and RiskFree results store a USDT wallet balance snapshot after terminal persistence, independently of Telegram configuration. A failed balance read leaves the result intact. Archived results without a captured balance display “ثبت نشده”; they are never assigned the current balance. The journal updates a previously inserted card when its wallet snapshot becomes available.
+- Signal Center → معاملات باز reads the main real account's `/v5/position/list` (all USDT linear positions, paginated), with the existing owner/admin session required. It displays exchange unrealisedPnl, mark/average prices, size, leverage, margin, liquidation, TP/SL and Phoenix protection stage. It refreshes every five seconds while the pane is visible, with no trading actions.
+- Return percentage is exchange unrealisedPnl divided by exchange positionIM × 100; unknown or zero margin produces an unavailable percentage. This basis is labeled in the UI and may differ from Bybit views configured to use another price/margin basis. Reference: https://bybit-exchange.github.io/docs/v5/position
+- A symbol/side position is an exchange aggregate: multiple matching live Phoenix signals are labeled aggregate rather than assigned a fabricated protection stage. On network errors the previous snapshot stays visible with its last-success time.
+- Web-only update; no APK or Android signing changes. Prepare the pull request, then deploy by merging to master.

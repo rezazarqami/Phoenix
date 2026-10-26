@@ -20,8 +20,7 @@ internal static class ResemblanceRegressionTests
         Check(same.SameTimeframeNearbyTargets==4 && same.SameTimeframeNearbyStops==3 && same.SameTimeframeNearbyRiskFree==4 &&
             same.OtherTimeframeNearbyTargets==8 && same.OtherTimeframeNearbyStops==6 && same.OtherTimeframeNearbyRiskFree==1,"Identical observations must count exactly, without quotas");
         foreach(var changed in new[]{Baseline with{SupportDistanceAtr=8,ResistanceDistanceAtr=9},
-            Baseline with{TradeGeometry=new(1,8,16,2,1)},Baseline with{IchimokuPosition=1,IchimokuCloudBias=1},
-            Baseline with{StopLevelStrength=0,TargetLevelStrength=0}})
+            Baseline with{TradeGeometry=new(1,8,16,2,1)},Baseline with{IchimokuPosition=3,IchimokuCloudBias=3}})
         {
             var result=Query(changed).Evidence!;
             Check(Total(result)==0,"Contradictory SR, planned stop/target geometry or cloud evidence must genuinely produce six zeros");

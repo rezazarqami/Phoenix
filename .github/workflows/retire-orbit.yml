@@ -1,0 +1,21 @@
+name: Remove retired workspace branches
+on:
+  push:
+    branches: [master]
+    paths: [".github/workflows/retire-orbit.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  remove-retired-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove only the retired workspace development branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for branch in personal/life-workspace personal/orbit-simple-calendar personal/reminders diagnostics/orbit-original-live diagnostics/orbit-webview-startup; do
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}"
+            fi
+          done

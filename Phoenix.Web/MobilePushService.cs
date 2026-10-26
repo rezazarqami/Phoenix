@@ -22,8 +22,9 @@ public sealed partial class MobilePushService
     {
         http = factory.CreateClient("MobilePush");
         var queue = Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH") ?? Path.Combine(AppContext.BaseDirectory, "data", "server-signals.json");
-        var personal = Environment.GetEnvironmentVariable("PERSONAL_DATABASE_PATH") ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(queue))!, "personal.db");
-        var path = Path.GetFullPath(personal) + ".mobile.db";
+        // Keep the existing notification database location for installed devices.
+        var legacyStore = Environment.GetEnvironmentVariable("PERSONAL_DATABASE_PATH") ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(queue))!, "personal.db");
+        var path = Path.GetFullPath(legacyStore) + ".mobile.db";
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         connectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
     }
@@ -76,7 +77,7 @@ public sealed partial class MobilePushService
         // Deliberately generic notification content: private records are fetched
         // only after the user opens and unlocks the app.
         if (kind is not ("signal" or "test")) throw new ArgumentException("نوع اعلان معتبر نیست.");
-        var destination = kind == "signal" ? "/phoenix" : "/";
+        var destination = "/phoenix";
         if (!Configured) return new(0, 0, false);
         var tokens = new List<(Guid Id, string Token)>();
         await gate.WaitAsync(ct);
@@ -147,7 +148,9 @@ public static class MobileEndpoints
 {
     public static void MapMobileEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/personal/mobile").AddEndpointFilter(async (context, next) => {
+        foreach (var route in new[] { "/api/mobile", "/api/personal/mobile" })
+        {
+        var group = app.MapGroup(route).AddEndpointFilter(async (context, next) => {
             if (!PhoenixSessionAuth.TryGetIdentity(context.HttpContext.Request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);
             try { return await next(context); }
             catch (ArgumentException e) { return Results.BadRequest(new { error = e.Message }); }
@@ -157,8 +160,9 @@ public static class MobileEndpoints
         group.MapPost("/devices", async (MobileRegistration input, HttpRequest request, MobilePushService service, CancellationToken ct) => { await service.RegisterAsync(Owner(request), input, ct); return Results.Ok(new { registered = true }); });
         group.MapDelete("/devices/{id:guid}", async (Guid id, HttpRequest request, MobilePushService service, CancellationToken ct) => { await service.RemoveAsync(Owner(request), id, ct); return Results.NoContent(); });
         group.MapPost("/test", async (HttpRequest request, MobilePushService service, CancellationToken ct) => {
-            try { return Results.Ok(await service.SendAsync(Owner(request), "test", "/", ct)); }
+            try { return Results.Ok(await service.SendAsync(Owner(request), "test", "/phoenix", ct)); }
             catch (Exception e) when (e is HttpRequestException or JsonException or CryptographicException or InvalidOperationException or IOException or KeyNotFoundException) { return Results.Json(new { error = "ارسال اعلان انجام نشد؛ تنظیم Push سرور نیاز به بررسی دارد." }, statusCode: 503); }
         }).RequireRateLimiting("account-login");
+        }
     }
 }

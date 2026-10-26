@@ -1,4 +1,4 @@
-# Activate Orbit / Phoenix signal notifications
+# Activate Phoenix signal notifications
 
 The code path is implemented, but live delivery must not be reported active until Firebase configuration and a real device delivery test pass.
 

@@ -16,21 +16,17 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build and run complete Phoenix regression suite
         run: dotnet run --project Phoenix.Test/Phoenix.Test.csproj --configuration Release
-      - name: Verify private workspace and shared authentication
-        run: python3 Phoenix.Test/personal-access-tests.py
+      - name: Verify Phoenix-only routes and authentication
+        run: python3 Phoenix.Test/phoenix-only-access-tests.py
       - name: Verify owner-only account removal and session revocation
         run: python3 Phoenix.Test/owner-only-access-tests.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Verify personal domain and offline UI behavior
+      - name: Verify Phoenix interface
         run: |
-          node Phoenix.Test/orbit-simple-tests.cjs
-          node Phoenix.Test/personal-core-tests.cjs
-          node Phoenix.Test/personal-worker-tests.cjs
           npm ci --prefix Phoenix.Test/ui --ignore-scripts --no-audit --no-fund
           npm test --prefix Phoenix.Test/ui
-          node Phoenix.Test/mobile-ui-tests.cjs
       - name: Verify Android-compatible cancellation controls
         run: node Phoenix.Test/cancellation-ui-tests.cjs
       - name: Verify batch controls under delayed responses

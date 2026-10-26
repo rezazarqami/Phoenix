@@ -27,7 +27,7 @@ public final class PushRegistrationWorker extends Worker {
             // The HttpOnly session remains in WebView's private cookie store. Never copy it to JS or logs.
             String cookie=CookieManager.getInstance().getCookie("https://marketsignalist.ir");
             if(cookie==null)return Result.failure();
-            connection=(HttpsURLConnection)new URL("https://marketsignalist.ir/api/personal/mobile/devices").openConnection();
+            connection=(HttpsURLConnection)new URL("https://marketsignalist.ir/api/mobile/devices").openConnection();
             connection.setConnectTimeout(15000);connection.setReadTimeout(15000);connection.setInstanceFollowRedirects(false);connection.setRequestMethod("POST");connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type","application/json");connection.setRequestProperty("Cookie",cookie);
             byte[] body=new JSONObject().put("deviceId",device).put("token",token).put("enrollmentId",preferences.getString("push-enrollment",null)).toString().getBytes(StandardCharsets.UTF_8);

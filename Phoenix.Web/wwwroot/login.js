@@ -8,7 +8,7 @@
       const values=Object.fromEntries(new FormData(form));
       const response=await fetch('/api/auth/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});
       const data=await response.json();if(!response.ok)throw new Error(response.status===429?'تلاش‌های ورود زیاد شده؛ یک دقیقه بعد دوباره امتحان کن.':data.error||'ورود ناموفق بود.');
-      password.value='';location.replace(data.isAdmin?'/':'/phoenix');
+      password.value='';location.replace('/phoenix');
     }catch(error){message.textContent=error.message;button.disabled=false;}
   });
 })();

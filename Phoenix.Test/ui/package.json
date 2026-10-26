@@ -1,12 +1,11 @@
 {
-  "name": "phoenix-personal-ui-tests",
+  "name": "phoenix-ui-tests",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node ../personal-ui-tests.cjs"
+    "test": "node ../phoenix-home-ui-tests.cjs"
   },
   "devDependencies": {
-    "fake-indexeddb": "6.2.5",
     "jsdom": "30.1.2"
   }
 }

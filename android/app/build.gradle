@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 13
-        versionName '1.9.3-phoenix-only'
+        versionCode 14
+        versionName '1.9.4-ice'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
             def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''
@@ -21,12 +21,6 @@ android {
     signingConfigs { debug { storeFile file(System.getProperty('user.home') + '/.android/debug.keystore') } }
     flavorDimensions 'client'
     productFlavors {
-        orbit {
-            dimension 'client'
-            applicationIdSuffix '.orbit'
-            manifestPlaceholders = [clientLabel: 'مدار و فونیکس', clientIcon: '@drawable/phoenix_logo']
-            buildConfigField 'boolean', 'PHOENIX_ONLY', 'false'
-        }
         phoenix {
             dimension 'client'
             applicationIdSuffix '.standalone.capture'

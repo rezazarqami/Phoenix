@@ -1,5 +1,5 @@
 <resources>
-    <style name="OrbitTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="PhoenixTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">#f5f3f8</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>

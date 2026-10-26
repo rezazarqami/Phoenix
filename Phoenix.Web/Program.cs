@@ -34,7 +34,6 @@ builder.Services.AddSingleton(provider => new MarketCapCatalog(
     provider.GetRequiredService<BybitInstrumentCatalog>(), provider.GetRequiredService<ServerOrderStore>()));
 builder.Services.AddSingleton<PhoenixCredentialStore>();
 builder.Services.AddSingleton<PhoenixUserStore>();
-builder.Services.AddSingleton<PersonalStore>();
 builder.Services.AddSingleton<TelegramAccessStore>();
 builder.Services.AddSingleton<ElliottWaveAnalyzer>();
 builder.Services.AddSingleton<ElliottCountStore>();
@@ -97,6 +96,19 @@ app.Use(async (context, next) =>
 {
     var users = context.RequestServices.GetRequiredService<PhoenixUserStore>();
     var path = context.Request.Path.Value;
+    if (path is "/" or "/index.html")
+    {
+        context.Response.Redirect("/phoenix");
+        return;
+    }
+    if ((context.Request.Path.StartsWithSegments("/api/personal") &&
+        !context.Request.Path.StartsWithSegments("/api/personal/mobile")) ||
+        path is "/personal.css" or "/personal.js" or "/personal-core.js" or "/personal-storage.js" or "/orbit-simple.js" or "/mobile.js")
+    {
+        context.Response.StatusCode = 404;
+        return;
+    }
+
     if (path is "/analysis/login" or "/analysis/login.html" or "/analysis-login.html")
     {
         context.Response.Headers.CacheControl = "no-store";
@@ -171,15 +183,6 @@ app.Use(async (context, next) =>
             context.Response.Redirect("/login");
         return;
     }
-    var personalPath = path is "/" or "/index.html" ||
-        context.Request.Path.StartsWithSegments("/api/personal");
-    if (personalPath && !phoenixIdentity.IsAdmin)
-    {
-        if (context.Request.Path.StartsWithSegments("/api"))
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        else context.Response.Redirect("/phoenix");
-        return;
-    }
     context.Response.Headers.CacheControl = "no-store";
     PhoenixSessionAuth.RenewSessionCookie(context, phoenixIdentity);
     if (phoenixIdentity.ViewerOnly && context.Request.Method is not ("GET" or "HEAD") &&
@@ -194,8 +197,9 @@ app.Use(async (context, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+app.MapGet("/", () => Results.Redirect("/phoenix"));
+app.MapGet("/index.html", () => Results.Redirect("/phoenix"));
 app.MapGet("/phoenix", () => Results.File(Path.Combine(app.Environment.WebRootPath, "phoenix.html"), "text/html; charset=utf-8"));
-app.MapPersonalEndpoints();
 app.MapMobileEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
@@ -313,6 +317,21 @@ app.MapDelete("/api/telegram/access/{userId:long}", async (long userId, HttpRequ
         return Results.Forbid();
     return await access.DeleteAsync(userId, token) ? Results.Ok(new { deleted = true }) : Results.NotFound();
 });
+// Lightweight homepage sparkline: fetch candles without running Elliott analysis.
+app.MapGet("/api/market/overview", async (string? interval, BybitDemoClient bybit, CancellationToken token) =>
+{
+    interval ??= "60";
+    if (interval is not ("1" or "60" or "D" or "W"))
+        return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
+    try
+    {
+        var candles = await bybit.GetKlinesAsync("BTCUSDT", interval, 50, token);
+        return Results.Ok(new { interval, closes = candles.Select(x => x.Close).ToArray() });
+    }
+    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+    catch { return Results.Json(new { error = "دادهٔ نمودار در دسترس نیست." }, statusCode: 503); }
+});
+
 app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => Results.Ok(new
 {
     publicApiConnected = state.PublicApiConnected,

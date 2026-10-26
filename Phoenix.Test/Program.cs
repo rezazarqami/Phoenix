@@ -24,14 +24,9 @@ Run("Scan performance deduplicates analysis candles and isolates cancelled waite
 Run("Mobile signal events isolate owner/public routes and cover the lifecycle", MobilePushTests.SignalEvents);
 Run("Mobile push persists per-device retries without duplicate or historic delivery", MobilePushTests.DurableDelivery);
 
-Run("Personal workspace idempotent sync, version conflicts, references, decision provenance and media backup", Phoenix.Test.PersonalWorkspaceTests.Workspace);
-Run("Personal reports count car costs once and preserve missing data", Phoenix.Test.PersonalWorkspaceTests.Reports);
 Run("Observation outcomes track both directions, gaps, expiry and legacy policy", ObservationOutcomeTests.Transitions);
 
-Run("Orbit nested categories survive restart and reject invalid parents", Phoenix.Test.OrbitWorkspaceTests.Categories);
-Run("Orbit SMS drafts preserve source and stay out of reports until approved", Phoenix.Test.OrbitWorkspaceTests.Drafts);
 
-Run("Personal records persist across store instances and delete accurately", Phoenix.Test.PersonalStoreTests.Persistence);
 
 Run("Responsiveness interrupts active Elliott CPU and preserves results", ResponsivenessTests.ActiveCancellation);
 Run("Responsiveness isolates symbols and reuses higher tiers without stale target bars", ResponsivenessTests.IndependentSymbolsAndCache);

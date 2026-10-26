@@ -6,7 +6,7 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import org.json.JSONObject;
 
-final class OrbitFirebase {
+final class PhoenixFirebase {
     static void initialize(Context context){
         if(!FirebaseApp.getApps(context).isEmpty())return;
         SharedPreferences p=context.getSharedPreferences("orbit-firebase",Context.MODE_PRIVATE);

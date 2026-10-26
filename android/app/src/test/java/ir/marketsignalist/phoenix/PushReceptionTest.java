@@ -17,7 +17,7 @@ import static org.robolectric.Shadows.shadowOf;
 public class PushReceptionTest {
     private RemoteMessage message(String kind){return new RemoteMessage.Builder("fixture").addData("kind",kind).addData("eventId","signal-id:Target").addData("eventKind","Target").build();}
     @Test public void receivedPushIsPrivateRoutedThroughActivityAndDeduplicatedAfterDismissal(){
-        OrbitMessagingService service=Robolectric.buildService(OrbitMessagingService.class).create().get();
+        PhoenixMessagingService service=Robolectric.buildService(PhoenixMessagingService.class).create().get();
         service.getSharedPreferences("orbit-device",Context.MODE_PRIVATE).edit().putBoolean("push-enabled",true).commit();
         service.onMessageReceived(message("signal"));
         NotificationManager manager=service.getSystemService(NotificationManager.class);
@@ -31,7 +31,7 @@ public class PushReceptionTest {
         assertEquals("Retry must not resurface a dismissed notification",0,shadowOf(manager).getAllNotifications().size());
     }
     @Test public void disabledOrUnrecognizedPushCannotDisplayNotification(){
-        OrbitMessagingService service=Robolectric.buildService(OrbitMessagingService.class).create().get();
+        PhoenixMessagingService service=Robolectric.buildService(PhoenixMessagingService.class).create().get();
         NotificationManager manager=service.getSystemService(NotificationManager.class);
         service.onMessageReceived(message("signal"));assertEquals(0,shadowOf(manager).getAllNotifications().size());
         service.getSharedPreferences("orbit-device",Context.MODE_PRIVATE).edit().putBoolean("push-enabled",true).commit();

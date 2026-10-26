@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Phoenix.Web;
 
-public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null);
+public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null, decimal? WalletBalanceUsdt=null);
 public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<DeviceSignalAlert> Events,DateTime ServerTimeUtc);
 
 // First-party authenticated feed. No Telegram, Firebase, third-party account or device secret is needed.

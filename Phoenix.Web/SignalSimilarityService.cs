@@ -47,7 +47,9 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             nearby.Count(x=>x.Pattern.Outcome=="StopLoss"),Used("Target"),Used("StopLoss"),
             Close("Target",true),Close("StopLoss",true))
         {
-            ComparisonVersion=3,Metric=TechnicalResemblance.Metric,
+            SameTimeframeComparable=usable.Count(x=>Same(x.Pattern)),
+            OtherTimeframeComparable=usable.Count(x=>!Same(x.Pattern) && !string.IsNullOrWhiteSpace(x.Pattern.Signal.Timeframe)),
+            ComparisonVersion=4,Metric=TechnicalResemblance.Metric,
             ComparableRiskFree=Used("RiskFree"),
             InsufficientFeatureCount=compared.Length-usable.Length,
             SameTimeframeNearbyRiskFree=Close("RiskFree",true),

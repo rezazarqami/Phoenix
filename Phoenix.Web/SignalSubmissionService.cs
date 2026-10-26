@@ -25,7 +25,7 @@ public sealed class SignalSubmissionService(
     }
 
     public async Task<SignalSubmissionOutcome> QueueAsync(SignalRequest request, CancellationToken token,
-        SignalEvidence? evidence = null, string? requestedByUsername = null)
+        SignalEvidence? evidence = null, string? requestedByUsername = null, bool notifyTelegram = true)
     {
         var error = request.Validate();
         if (error is not null) return new(null, error);
@@ -64,7 +64,7 @@ public sealed class SignalSubmissionService(
             queued.StopOutcomePercent = similarityResult.StopOutcomePercent;
             queued.OutcomeValidationCount = similarityResult.OutcomeValidationCount;
             await store.AddAsync(queued, token, evidence);
-            await telegram.SignalQueuedAsync(queued, token);
+            if (notifyTelegram) await telegram.SignalQueuedAsync(queued, token);
 
             if (strategy2.Options.Enabled)
             {
@@ -78,7 +78,7 @@ public sealed class SignalSubmissionService(
                 strategy2Signal.Timeframe = evidence?.Timeframe;
                 strategy2Signal.ChartMode = evidence?.ChartMode;
                 await strategy2.Store.AddAsync(strategy2Signal, token);
-                await strategy2Telegram.QueuedAsync(strategy2Signal, token);
+                if (notifyTelegram) await strategy2Telegram.QueuedAsync(strategy2Signal, token);
             }
             return new(queued, null);
         }

@@ -77,6 +77,7 @@ public sealed partial class MobilePushService
         {
             await using var db = await OpenAsync(ct); using var cmd = db.CreateCommand();
             cmd.CommandText = """
+                DELETE FROM mobile_delivery WHERE kind IN ('Created','Cancelled','ManualClosed');
                 SELECT n.owner,n.device_id,n.event_id,n.kind,n.attempts FROM mobile_delivery n
                 JOIN mobile_devices d ON d.owner=n.owner AND d.device_id=n.device_id AND d.enabled_since<=n.event_at
                 WHERE n.sent=0 AND n.next_attempt<=$now AND n.event_at>=$since ORDER BY n.event_at LIMIT 50
@@ -116,19 +117,19 @@ public sealed partial class MobilePushService
 public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService push, MobileSignalFeed feed, DedicatedTelegramOptions dedicated,
     ILogger<MobileSignalWorker> logger) : BackgroundService
 {
-    public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "Created", "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "Cancelled", "ManualClosed" };
+    public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired" };
     public static IEnumerable<MobileSignalEvent> Events(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated)
     {
         var own = string.Equals(signal.RequestedByUsername, owner, StringComparison.OrdinalIgnoreCase);
         if (!own && (signal.PublicSignalNumber is null || dedicated.Owns(signal.RequestedByUsername))) yield break;
-        yield return new($"{signal.Id}:Created", "Created", signal.CreatedAtUtc);
         if ((signal.ExpireAdjustedAtUtc ?? signal.EntryTriggeredAtUtc) is { } near)
             yield return new($"{signal.Id}:NearEntry","NearEntry",near);
         if(signal.EarlyProtectionAtUtc is { } first)
             yield return new($"{signal.Id}:FirstProtection","FirstProtection",first);
         if (signal.FilledAtUtc is { } opened) yield return new($"{signal.Id}:Opened", "Opened", opened);
         if (signal.RiskFreeReachedAtUtc is { } riskFree) yield return new($"{signal.Id}:RiskFreeReached", "RiskFreeReached", riskFree);
-        if (signal.CompletedAtUtc is { } end && signal.Outcome is { } outcome && Kinds.Contains(outcome))
+        if (signal.CompletedAtUtc is { } end && signal.Outcome is { } outcome && Kinds.Contains(outcome) &&
+            (outcome != "Expired" || signal.ExpireAdjustedAtUtc is not null || signal.EntryTriggeredAtUtc is not null))
             yield return new($"{signal.Id}:{outcome}", outcome, end);
     }
     protected override async Task ExecuteAsync(CancellationToken ct)

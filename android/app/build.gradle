@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 16
-        versionName '1.9.6-alerts'
+        versionCode 17
+        versionName '1.9.7-review'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
             def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''
@@ -44,3 +44,32 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-messaging'
 }
+
+// Deterministic bundled PCM notification tones; generated for every local/CI build.
+def toneResources = layout.buildDirectory.dir('generated/notificationTones')
+android.sourceSets.main.res.srcDir(toneResources)
+tasks.register('generateNotificationTones') {
+    outputs.dir(toneResources)
+    doLast {
+        def raw = new File(toneResources.get().asFile, 'raw')
+        raw.mkdirs()
+        [crystal:[1046,1568,2093], pulse:[660,660,880], beacon:[880,1175,880], soft:[523,659,784]].each { name, notes ->
+            def output = new ByteArrayOutputStream()
+            def little = { value, bytes -> (0..<bytes).each { output.write((int)((value >> (it*8)) & 255)) } }
+            int length = notes.size()*4400*2
+            output.write('RIFF'.getBytes('US-ASCII')); little(length+36,4)
+            output.write('WAVEfmt '.getBytes('US-ASCII')); little(16,4); little(1,2); little(1,2)
+            little(22050,4); little(44100,4); little(2,2); little(16,2)
+            output.write('data'.getBytes('US-ASCII')); little(length,4)
+            notes.each { frequency ->
+                (0..<4400).each { i ->
+                    double envelope=Math.pow(Math.sin(Math.PI*i/4400),2)
+                    int sample=(int)(8500*envelope*Math.sin(2*Math.PI*frequency*i/22050))
+                    little(sample,2)
+                }
+            }
+            new File(raw,"tone_${name}.wav").bytes=output.toByteArray()
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn('generateNotificationTones') }

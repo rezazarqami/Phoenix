@@ -13,8 +13,10 @@ internal static class SignalReviewText
         if (e.ComparableTargets + e.ComparableStops + e.ComparableRiskFree == 0)
             return "\nنمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.";
         var stageNote = e.QueryStage != e.ReferenceStage ? " (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)" : "";
-        return $"\nنزدیکِ هم‌تایم‌فریم{stageNote}: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
-            $"\nنزدیکِ سایر تایم‌فریم‌ها: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
+        var sameDenominator=e.ComparisonVersion>=4?$" (از {e.SameTimeframeComparable} نمونه)":"";
+        var otherDenominator=e.ComparisonVersion>=4?$" (از {e.OtherTimeframeComparable} نمونه)":"";
+        return $"\nنزدیکِ هم‌تایم‌فریم{stageNote}{sameDenominator}: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
+            $"\nنزدیکِ سایر تایم‌فریم‌ها{otherDenominator}: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
     }
     internal static string Window(OutcomeWindowEvidence? w)
     {

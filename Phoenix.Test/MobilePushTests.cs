@@ -11,13 +11,13 @@ public static class MobilePushTests
         var dedicated = new DedicatedTelegramOptions("arman", null, null);
         var signal = new ServerSignal { Id=Guid.NewGuid(), RequestedByUsername="owner", CreatedAtUtc=now, FilledAtUtc=now.AddSeconds(1), RiskFreeReachedAtUtc=now.AddSeconds(2), CompletedAtUtc=now.AddSeconds(3), Outcome="Target" };
         var events = MobileSignalWorker.Events(signal,"owner",dedicated).ToArray();
-        Check(events.Select(e=>e.Kind).SequenceEqual(new[]{"Created","Opened","RiskFreeReached","Target"}),"Missing signal lifecycle events.");
-        Check(events.Select(e=>e.Id).Distinct().Count()==4,"Lifecycle ids must be stable and distinct.");
+        Check(events.Select(e=>e.Kind).SequenceEqual(new[]{"Opened","RiskFreeReached","Target"}),"Missing signal lifecycle events.");
+        Check(events.Select(e=>e.Id).Distinct().Count()==3,"Lifecycle ids must be stable and distinct.");
         Check(events.SequenceEqual(MobileSignalWorker.Events(signal,"owner",dedicated)),"Re-reading signals changed event ids.");
         signal.RequestedByUsername="editor";
         Check(!MobileSignalWorker.Events(signal,"owner",dedicated).Any(),"Another user's private signal leaked.");
         signal.PublicSignalNumber=123;
-        Check(MobileSignalWorker.Events(signal,"owner",dedicated).Count()==4,"Public events must not depend on Telegram delivery.");
+        Check(MobileSignalWorker.Events(signal,"owner",dedicated).Count()==3,"Public events must not depend on Telegram delivery.");
         signal.RequestedByUsername="arman";
         Check(!MobileSignalWorker.Events(signal,"owner",dedicated).Any(),"Dedicated private route leaked.");
     }
@@ -32,7 +32,7 @@ public static class MobilePushTests
             using var doc=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());var message=doc.RootElement.GetProperty("message");
             var token=message.GetProperty("token").GetString()!;var data=message.GetProperty("data");var id=data.GetProperty("eventId").GetString()!;
             Check(data.GetProperty("destination").GetString()=="/phoenix","Signal destination escaped the allowlist.");
-            Check(data.GetProperty("eventKind").GetString()=="Created","Missing event kind.");
+            Check(data.GetProperty("eventKind").GetString()=="NearEntry","Missing event kind.");
             Check(!message.TryGetProperty("notification",out _),"Private fields must not become background notification content.");
             calls.Add((token,id));
             return token.StartsWith("token-a")&&calls.Count(x=>x.Token==token)==1
@@ -49,7 +49,7 @@ public static class MobilePushTests
             service.RegisterAsync("owner",new(a,"token-a-12345678901234567890"),default).GetAwaiter().GetResult();
             service.RegisterAsync("owner",new(b,"token-b-12345678901234567890"),default).GetAwaiter().GetResult();
             var at=DateTime.UtcNow.AddSeconds(1);var now=new DateTimeOffset(at.AddSeconds(1));
-            var e=new MobileSignalEvent(Guid.NewGuid()+":Created","Created",at);
+            var e=new MobileSignalEvent(Guid.NewGuid()+":Created","NearEntry",at);
             service.QueueAsync("someone-else",new[]{e},now,default).GetAwaiter().GetResult();
             service.DeliverPendingAsync(now,default).GetAwaiter().GetResult();Check(calls.Count==0,"Owner isolation failed.");
             service.QueueAsync("owner",new[]{e,e with{Id="old-event",At=at.AddHours(-1)},e with{Id="pre-enrollment",At=at.AddMinutes(-1)}},now,default).GetAwaiter().GetResult();

@@ -8,6 +8,9 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("In-app review persists, enforces capacity and isolates owners", InAppQueueTests.CapacityAndRestart);
+Run("Notification policy excludes registration and only expires near signals", InAppQueueTests.AlertPolicy);
+Run("Similarity accepts a moderate contextual difference without hiding contradictions", InAppQueueTests.SimilarityRadius);
 
 Run("Direct device terminal alerts do not wait for Telegram-side network work", MobileFeedTests.TerminalEventPrecedesTelegram);
 Run("Direct device feed persists event cursors, privacy and full lifecycle independently of push providers", MobileFeedTests.DurablePrivateFeed);

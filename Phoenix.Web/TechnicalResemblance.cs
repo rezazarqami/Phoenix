@@ -5,8 +5,12 @@ namespace Phoenix.Web;
 internal sealed record TechnicalResemblance(double Score, bool Comparable,
     IReadOnlyDictionary<string, double> Distances)
 {
-    internal const string Metric = "technical-neighborhood-v3";
-    internal bool Nearby => Comparable && Distances.Values.All(distance => distance <= 1d);
+    internal const string Metric = "technical-neighborhood-v4";
+    // Overall technical radius, with explicit vetoes only for major contradictions.
+    // The old intersection of every independent group shrank as context was added.
+    internal bool Nearby => Comparable && Score >= Math.Exp(-.5d) &&
+        Distances.Where(x => x.Key is "support-resistance" or "level-geometry" or "ichimoku" or "trade-geometry")
+            .All(x => x.Value <= 2d);
 
     internal static TechnicalResemblance Compare(ServerSignal a, ServerSignal b,
         TechnicalFeatureSnapshot x, TechnicalFeatureSnapshot y)

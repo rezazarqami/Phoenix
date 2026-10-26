@@ -214,6 +214,13 @@ public final class MainActivity extends Activity {
             }
             if(command.equals("disableDirect")){PhoenixAlertService.disable(this);reply(proxy,id,status(),null);return;}
             if(command.equals("testDirect")){if(!PhoenixNotifications.allowed(this))throw new IllegalStateException("اجازهٔ اعلان را فعال کن.");if(!PhoenixAlertDelivery.deliver(this,"test-"+UUID.randomUUID(),"Test",null,null,0))throw new IllegalStateException("کانال اعلان فونیکس غیرفعال است.");reply(proxy,id,status(),null);return;}
+            if(command.equals("setSound")){
+                String tone=input.getString("tone");if(!java.util.Arrays.asList("crystal","pulse","beacon","soft").contains(tone))throw new IllegalArgumentException("صدای معتبر انتخاب کن.");
+                getSharedPreferences("phoenix-sounds",0).edit().putString("tone",tone).commit();PhoenixNotifications.channels(this);reply(proxy,id,status(),null);return;
+            }
+            if(command.equals("soundSettings")||command.equals("connectionSettings")){
+                startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID,command.equals("connectionSettings")?PhoenixAlertService.CHANNEL:PhoenixNotifications.selectedChannel(this)));reply(proxy,id,status(),null);return;
+            }
             if(command.equals("batterySettings")){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));reply(proxy,id,status(),null);return;}
             if(command.equals("configurePush")){PhoenixFirebase.configure(this,input.getJSONObject("config"));reply(proxy,id,status(),null);return;}
             if(command.equals("status")){reply(proxy,id,status(),null);return;}

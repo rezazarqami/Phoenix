@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node ../phoenix-home-ui-tests.cjs && node ../ice-market-login-ui-tests.cjs && node ../device-alert-ui-tests.cjs"
+    "test": "node ../phoenix-home-ui-tests.cjs && node ../ice-market-login-ui-tests.cjs && node ../device-alert-ui-tests.cjs && node ../in-app-review-ui-tests.cjs"
   },
   "devDependencies": {
     "jsdom": "30.1.2"

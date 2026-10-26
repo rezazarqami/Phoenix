@@ -23,7 +23,7 @@ internal static class MobileFeedTests
             await store.AddAsync(signal);
             foreach(var (user,pub) in new[]{("other",(int?)null),("arman",(int?)1)})await store.AddAsync(new ServerSignal{Id=Guid.NewGuid(),Symbol="PRIVATEUSDT",Direction="Long",RequestedByUsername=user,PublicSignalNumber=pub,CreatedAtUtc=now});
             var page=await Feed().ReadAsync("owner",bootstrap.Cursor,default);
-            Check(page.Events.Select(e=>e.Kind).SequenceEqual(new[]{"Created","NearEntry","Opened","FirstProtection","RiskFreeReached","RiskFree"}),"Feed must cover the full real lifecycle in timestamp order");
+            Check(page.Events.Select(e=>e.Kind).SequenceEqual(new[]{"NearEntry","Opened","FirstProtection","RiskFreeReached","RiskFree"}),"Feed must cover the full real lifecycle in timestamp order");
             Check(page.Events.All(e=>e.Symbol=="BTCUSDT"),"Private/dedicated signals must not leak into owner's feed");
             Check(page.Events.Last().ExitKind=="SecondStepLimit","Risk-free exit metadata must reach native clients");
             await store.RemoveAsync(signal.Id);

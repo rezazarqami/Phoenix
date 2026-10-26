@@ -25,6 +25,9 @@ const flush=()=>new Promise(r=>setImmediate(r));
  d.querySelector('#notificationShowActive').click();assert.deepEqual(visible(),['signal-pane-active']);assert.equal(d.querySelector('#notificationToggle').getAttribute('aria-expanded'),'false');
  assert.ok(d.querySelector('#marketLine').getAttribute('d').startsWith('M'));
  w.dispatchEvent(new w.CustomEvent('phoenix-market-price',{detail:105}));assert.equal(d.querySelector('#marketChangePercent').textContent,'+5.00%');
+ w.dispatchEvent(new w.CustomEvent('phoenix-market-price',{detail:95}));assert.equal(d.querySelector('#marketChangePercent').textContent,'-5.00%');assert.equal(d.querySelector('#marketChange [data-icon]').dataset.icon,'fall');assert.ok(d.querySelector('#marketChange').classList.contains('negative'));
+ w.dispatchEvent(new w.CustomEvent('phoenix-market-price',{detail:105}));assert.equal(d.querySelector('#marketChange [data-icon]').dataset.icon,'rise');
+ w.dispatchEvent(new w.CustomEvent('phoenix-market-price',{detail:100}));assert.equal(d.querySelector('#marketChange [data-icon]').dataset.icon,'flat');
  d.querySelector('[data-market-interval=D]').click();await flush();assert.ok(requests.includes('/api/market/overview?interval=D'));
  fail=true;d.querySelector('[data-market-interval=W]').click();await flush();assert.equal(d.querySelector('#marketChangePercent').textContent,'—');assert.ok(d.querySelector('#marketChartStatus').textContent.includes('دسترس'));
  for(const target of ['home','crypto','elliott','signal','statistics','strategy']){d.querySelector('#tab-'+target).click();assert.equal(d.querySelector('.market-card').hidden,target!=='home','BTC is home-only: '+target);}

@@ -24,6 +24,7 @@ public sealed class ServerSignal
     public decimal StopLoss { get; set; }
     public int ProtectionStage { get; set; }
     public decimal? EarlyStopLimit { get; set; }
+    public DateTime? EarlyProtectionAtUtc { get; set; }
     public string? EarlyStopLimitOrderId { get; set; }
     public DateTime? EarlyStopLimitCancelledAtUtc { get; set; }
     public decimal? StopLoss2 { get; set; }
@@ -47,6 +48,8 @@ public sealed class ServerSignal
     public DateTime? TargetReachedAtUtc { get; set; }
     public DateTime? RiskFreeReachedAtUtc { get; set; }
     public DateTime? RiskFreeClosedAtUtc { get; set; }
+    public string? RiskFreeCloseKind { get; set; }
+    public string? RiskFreeCloseOrderId { get; set; }
     public string? StopLoss2OrderId { get; set; }
     public string? RiskFreeStopMarketOrderId { get; set; }
     public DateTime? StopLossReachedAtUtc { get; set; }
@@ -488,6 +491,7 @@ public sealed class ServerOrderStore
         ExpiryPriceTrail = signal.ExpiryPriceTrail?.ToList() ?? [],
         ExpireStage = signal.ExpireStage,
         ProtectionStage = signal.ProtectionStage, EarlyStopLimit = signal.EarlyStopLimit,
+        EarlyProtectionAtUtc = signal.EarlyProtectionAtUtc,
         EarlyStopLimitOrderId = signal.EarlyStopLimitOrderId,
         EarlyStopLimitCancelledAtUtc = signal.EarlyStopLimitCancelledAtUtc,
         StopLoss2 = signal.StopLoss2, RiskFreeStopMarket = signal.RiskFreeStopMarket,
@@ -501,6 +505,8 @@ public sealed class ServerOrderStore
         ExecutedQuantity = signal.ExecutedQuantity,
         TargetReachedAtUtc = signal.TargetReachedAtUtc, RiskFreeReachedAtUtc = signal.RiskFreeReachedAtUtc,
         RiskFreeClosedAtUtc = signal.RiskFreeClosedAtUtc,
+        RiskFreeCloseKind = signal.RiskFreeCloseKind,
+        RiskFreeCloseOrderId = signal.RiskFreeCloseOrderId,
         StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
         ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc,
         Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason

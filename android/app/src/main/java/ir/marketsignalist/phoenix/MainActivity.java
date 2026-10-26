@@ -177,8 +177,9 @@ public final class MainActivity extends Activity {
     }
     private void readIntent(Intent intent){requestedRoute=START_ROUTE;}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);unlock();}
-    @Override protected void onResume(){super.onResume();getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;unlock();}
+    @Override protected void onResume(){super.onResume();if(PhoenixAlertService.prefs(this).getBoolean("enabled",false))try{PhoenixAlertService.start(this);}catch(Exception ignored){}getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;unlock();}
     @Override protected void onPause(){resumed=false;CookieManager.getInstance().flush();browser.onPause();super.onPause();}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(browser!=null)browser.evaluateJavascript("window.dispatchEvent(new Event('phoenix-native-resume'))",null);}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==43&&files!=null){java.util.ArrayList<Uri> values=new java.util.ArrayList<>();if(result==RESULT_OK&&data!=null){if(data.getClipData()!=null)for(int i=0;i<data.getClipData().getItemCount();i++)values.add(data.getClipData().getItemAt(i).getUri());else if(data.getData()!=null)values.add(data.getData());}files.onReceiveValue(values.isEmpty()?null:values.toArray(new Uri[0]));files=null;}
@@ -186,11 +187,13 @@ public final class MainActivity extends Activity {
     private JSONObject status() throws JSONException {
         PhoenixNotifications.channels(this);
         String id=getPreferences().getString("device-id",null);if(id==null){id=UUID.randomUUID().toString();getPreferences().edit().putString("device-id",id).apply();}
-        return new JSONObject().put("deviceId",id).put("deviceLock",deviceSecure()).put("notifications",PhoenixNotifications.allowed(this)).put("signalChannel",PhoenixNotifications.channelAllowed(this,PhoenixNotifications.SIGNALS)).put("pushConfigured",!FirebaseApp.getApps(this).isEmpty()).put("enrollmentId",getPreferences().getString("push-enrollment",null)).put("pushEnabled",getPreferences().getBoolean("push-enabled",false)).put("token",getPreferences().getBoolean("push-enabled",false)?getPreferences().getString("push-token",null):JSONObject.NULL);
+        return new JSONObject().put("deviceId",id).put("directSupported",true).put("directEnabled",PhoenixAlertService.prefs(this).getBoolean("enabled",false)).put("directRunning",PhoenixAlertService.prefs(this).getBoolean("running",false)).put("directState",PhoenixAlertService.prefs(this).getString("state","غیرفعال")).put("lastConnected",PhoenixAlertService.prefs(this).getLong("lastConnected",0)).put("deviceLock",deviceSecure()).put("notifications",PhoenixNotifications.allowed(this)).put("signalChannel",PhoenixNotifications.channelAllowed(this,PhoenixNotifications.SIGNALS)).put("pushConfigured",!FirebaseApp.getApps(this).isEmpty()).put("enrollmentId",getPreferences().getString("push-enrollment",null)).put("pushEnabled",getPreferences().getBoolean("push-enabled",false)).put("token",getPreferences().getBoolean("push-enabled",false)?getPreferences().getString("push-token",null):JSONObject.NULL);
     }
     private android.content.SharedPreferences getPreferences(){return getSharedPreferences("orbit-device",MODE_PRIVATE);}
     private void reply(JavaScriptReplyProxy proxy,String id,JSONObject value,String error){try{JSONObject out=new JSONObject().put("id",id).put("ok",error==null);if(value!=null)out.put("value",value);if(error!=null)out.put("error",error);proxy.postMessage(out.toString());}catch(Exception ignored){}}
     private void resetDevice() throws JSONException {
+        PhoenixAlertService.disable(this);
+        PhoenixAlertService.prefs(this).edit().clear().apply();
         getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").remove("push-enrollment").apply();
         androidx.work.WorkManager.getInstance(this).cancelUniqueWork("orbit-push-registration");
         if(!FirebaseApp.getApps(this).isEmpty()){FirebaseMessaging.getInstance().setAutoInitEnabled(false);FirebaseMessaging.getInstance().deleteToken();}
@@ -201,6 +204,17 @@ public final class MainActivity extends Activity {
             if(raw==null||raw.length()>10000)throw new IllegalArgumentException("درخواست معتبر نیست.");
             JSONObject input=new JSONObject(raw);id=input.getString("id");if(id.length()>100)throw new IllegalArgumentException("شناسه معتبر نیست.");
             String command=input.getString("command");
+            if(command.equals("enableDirect")){
+                if(!PhoenixNotifications.channelAllowed(this,PhoenixNotifications.SIGNALS))throw new IllegalStateException("ابتدا اجازهٔ اعلان فونیکس را بده.");
+                long cursor=input.getLong("cursor");String account=input.getString("account");
+                if(cursor<0||account.isEmpty()||account.length()>200)throw new IllegalArgumentException("اطلاعات اتصال معتبر نیست.");
+                PhoenixAlertService.prefs(this).edit().putLong("cursor",cursor).putString("account",account).putBoolean("enabled",true).commit();
+                try{PhoenixAlertService.start(this);}catch(Exception e){PhoenixAlertService.disable(this);throw new IllegalStateException("شروع سرویس اعلان انجام نشد؛ برنامه را باز نگه دار و دوباره امتحان کن.");}
+                reply(proxy,id,status(),null);return;
+            }
+            if(command.equals("disableDirect")){PhoenixAlertService.disable(this);reply(proxy,id,status(),null);return;}
+            if(command.equals("testDirect")){if(!PhoenixNotifications.allowed(this))throw new IllegalStateException("اجازهٔ اعلان را فعال کن.");if(!PhoenixAlertDelivery.deliver(this,"test-"+UUID.randomUUID(),"Test",null,null,0))throw new IllegalStateException("کانال اعلان فونیکس غیرفعال است.");reply(proxy,id,status(),null);return;}
+            if(command.equals("batterySettings")){startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));reply(proxy,id,status(),null);return;}
             if(command.equals("configurePush")){PhoenixFirebase.configure(this,input.getJSONObject("config"));reply(proxy,id,status(),null);return;}
             if(command.equals("status")){reply(proxy,id,status(),null);return;}
             if(command.equals("requestNotifications")){
@@ -216,6 +230,7 @@ public final class MainActivity extends Activity {
                     try{if(!unlocked||!TrustedNavigation.trusted(browser.getUrl())){reply(proxy,requestId,null,"برنامه قفل شده؛ دوباره امتحان کن.");return;}String enrollment=getPreferences().getString("push-enrollment",null);if(enrollment==null)enrollment=UUID.randomUUID().toString();getPreferences().edit().putString("push-enrollment",enrollment).putBoolean("push-enabled",true).putString("push-token",task.getResult()).apply();reply(proxy,requestId,status().put("token",task.getResult()),null);}catch(Exception e){reply(proxy,requestId,null,"فعال‌سازی اعلان انجام نشد.");}});return;
             }
             if(command.equals("disablePush")||command.equals("logout")){
+                if(command.equals("logout"))PhoenixAlertService.disable(this);
                 getPreferences().edit().putBoolean("push-enabled",false).remove("push-token").remove("push-enrollment").apply();
         androidx.work.WorkManager.getInstance(this).cancelUniqueWork("orbit-push-registration");
                 if(!FirebaseApp.getApps(this).isEmpty()){FirebaseMessaging.getInstance().setAutoInitEnabled(false);FirebaseMessaging.getInstance().deleteToken();}

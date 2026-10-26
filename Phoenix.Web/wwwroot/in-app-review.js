@@ -32,7 +32,7 @@
   const response=await fetch('/api/analysis/proposals/'+encodeURIComponent(key)+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,reason})});
   if(!response.ok){const body=await response.json();throw Error(body.error||'ثبت پاسخ ناموفق بود.');}
   status.textContent='پاسخ ثبت شد.';
- }catch(error){status.textContent=error.message;}finally{busy=false;await refresh();}}
+ }catch(error){status.textContent=error.message;}finally{busy=false;await refresh();render();}}
  document.getElementById('market-tab-review').addEventListener('click',refresh);
  document.getElementById('startBatch').addEventListener('click',()=>setTimeout(()=>document.getElementById('market-tab-review').click(),500));
  setInterval(()=>{if(!document.hidden)refresh();},2500);render();refresh();

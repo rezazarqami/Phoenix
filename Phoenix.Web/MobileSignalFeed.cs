@@ -43,6 +43,14 @@ public sealed class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOpt
             }
             using var clean=db.CreateCommand();clean.Transaction=tx;clean.CommandText="DELETE FROM device_signal_events WHERE at_utc<$before";
             clean.Parameters.AddWithValue("$before",now.AddDays(-7).ToString("O"));await clean.ExecuteNonQueryAsync(token);
+            using var filtered=db.CreateCommand();filtered.Transaction=tx;
+            filtered.CommandText="""
+                DELETE FROM device_signal_events WHERE json_extract(payload,'$.Kind') IN ('Created','Cancelled','ManualClosed')
+                OR (json_extract(payload,'$.Kind')='Expired' AND NOT EXISTS(
+                    SELECT 1 FROM device_signal_events near WHERE near.owner=device_signal_events.owner
+                    AND near.event_id=replace(device_signal_events.event_id,':Expired',':NearEntry')));
+                """;
+            await filtered.ExecuteNonQueryAsync(token);
             tx.Commit();refreshed=now;
         }
         finally{gate.Release();}

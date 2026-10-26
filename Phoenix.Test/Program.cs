@@ -9,6 +9,8 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Risk-free exit identifies actual filled order and persists all three types", StagedRiskProtectionTests.ExitKindsPersist);
+Run("Risk-free Telegram text and image label the exact exit type", RiskFreeExitMessageTests.AllExitTypes);
 Run("Public notification Telegram rate limits persist across restart", NotificationReliabilityTests.RateLimitSurvivesRestart);
 Run("Public notification photo errors fall back to text without false image acknowledgments", NotificationReliabilityTests.PhotoFailureFallsBackToText);
 Run("Market monitoring isolates one failing symbol from later signals", NotificationReliabilityTests.FailedMarketSymbolDoesNotStarveOtherSignals);

@@ -198,12 +198,12 @@ public sealed class PublicSignalNotifier
         ReplyAsync(signal, $"▶️ معامله {signal.Symbol} باز شد.", token);
 
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, CancellationToken token) =>
-        ReplyAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.", token);
+        ReplyAsync(signal, $"✅ معامله {signal.Symbol} با {RiskFreeExit.Title(signal)} بسته شد.\n{RiskFreeExit.Detail(signal)}", token);
 
     public Task<int?> RiskFreeClosedAsync(ServerSignal signal, byte[]? image, bool current,
         CancellationToken token) => image is null
             ? RiskFreeClosedAsync(signal, token)
-            : ReplyPhotoAsync(signal, $"✅ معامله {signal.Symbol} با ریسک‌فری بسته شد.\n🖼 " +
+            : ReplyPhotoAsync(signal, $"✅ معامله {signal.Symbol} با {RiskFreeExit.Title(signal)} بسته شد.\n{RiskFreeExit.Detail(signal)}\n🖼 " +
                 (current ? "تصویر شرایط نزدیک زمان بسته‌شدن است." : "تصویر مربوط به لحظه صدور سیگنال است."),
                 image, token);
 

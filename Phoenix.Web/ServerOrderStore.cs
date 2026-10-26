@@ -47,6 +47,8 @@ public sealed class ServerSignal
     public DateTime? TargetReachedAtUtc { get; set; }
     public DateTime? RiskFreeReachedAtUtc { get; set; }
     public DateTime? RiskFreeClosedAtUtc { get; set; }
+    public string? RiskFreeCloseKind { get; set; }
+    public string? RiskFreeCloseOrderId { get; set; }
     public string? StopLoss2OrderId { get; set; }
     public string? RiskFreeStopMarketOrderId { get; set; }
     public DateTime? StopLossReachedAtUtc { get; set; }
@@ -501,6 +503,8 @@ public sealed class ServerOrderStore
         ExecutedQuantity = signal.ExecutedQuantity,
         TargetReachedAtUtc = signal.TargetReachedAtUtc, RiskFreeReachedAtUtc = signal.RiskFreeReachedAtUtc,
         RiskFreeClosedAtUtc = signal.RiskFreeClosedAtUtc,
+        RiskFreeCloseKind = signal.RiskFreeCloseKind,
+        RiskFreeCloseOrderId = signal.RiskFreeCloseOrderId,
         StopLossReachedAtUtc = signal.StopLossReachedAtUtc,
         ExpireAdjustedAtUtc = signal.ExpireAdjustedAtUtc, ExpiredAtUtc = signal.ExpiredAtUtc,
         Outcome = signal.Outcome, CompletedAtUtc = signal.CompletedAtUtc, ExpireReason = signal.ExpireReason

@@ -15,6 +15,8 @@ public sealed class ServerSignal
     public string Direction { get; set; } = string.Empty;
     public decimal Ceiling { get; set; }
     public decimal Floor { get; set; }
+    public decimal? ResultWalletBalanceUsdt { get; set; }
+    public DateTime? ResultWalletAtUtc { get; set; }
     public decimal PositionSizeUsdt { get; set; }
     public decimal? Leverage { get; set; }
     public string? LeverageSource { get; set; }
@@ -242,6 +244,21 @@ public sealed class ServerOrderStore
             await _history.UpsertAsync(signal,"PublicSignalDelivered",token);
         }
         finally{_gate.Release();}
+    }
+
+    internal async Task SaveResultWalletAsync(Guid id, decimal balance, DateTime at, CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(s => s.Id == id);
+            if (signal is null || signal.Outcome is not ("Target" or "RiskFree") || signal.ResultWalletAtUtc is not null) return;
+            signal.ResultWalletBalanceUsdt = balance; signal.ResultWalletAtUtc = at;
+            await SaveUnsafeAsync(signals, token);
+            await _history.UpsertAsync(signal, "ResultWalletSnapshot", token);
+        }
+        finally { _gate.Release(); }
     }
 
     public async Task SaveEntryTechnicalFeaturesAsync(Guid id, TechnicalFeatureSnapshot features,
@@ -480,6 +497,7 @@ public sealed class ServerOrderStore
 
     private static ServerSignal Clone(ServerSignal signal) => new()
     {
+        ResultWalletBalanceUsdt = signal.ResultWalletBalanceUsdt, ResultWalletAtUtc = signal.ResultWalletAtUtc,
         RecoveryOriginalStatus = signal.RecoveryOriginalStatus,
         Id = signal.Id, Symbol = signal.Symbol, Direction = signal.Direction,
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,

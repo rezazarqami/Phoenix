@@ -775,6 +775,38 @@ app.MapPost("/api/signals/cancel-pending/{direction}", async (string direction, 
     try { return Results.Ok(new { cancelled = await store.CancelPendingAsync(direction, token) }); }
     finally { store.ExecutionGate.Release(); }
 });
+app.MapGet("/api/positions/live", async (HttpContext context, BybitDemoClient client,
+    ServerOrderStore store, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(context.Request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    context.Response.Headers.CacheControl = "no-store";
+    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+    timeout.CancelAfter(TimeSpan.FromSeconds(8));
+    try
+    {
+        var positions = await client.GetOpenPositionsAsync(timeout.Token);
+        var signals = await store.GetAllAsync(timeout.Token);
+        var items = positions.Select(p =>
+        {
+            var matches = signals.Where(s => s.Symbol.Equals(p.Symbol, StringComparison.OrdinalIgnoreCase)
+                && s.Direction == (p.Side == "Buy" ? "Long" : "Short")
+                && s.FilledAtUtc is not null && s.CompletedAtUtc is null).ToArray();
+            // Bybit aggregates each symbol/side. Do not attribute an aggregate to an arbitrary signal.
+            var signal = matches.Length == 1 ? matches[0] : null;
+            return new { position = p, signalId = signal?.Id, timeframe = signal?.Timeframe,
+                protectionStage = signal?.ProtectionStage, riskFreeReached = signal?.RiskFreeReachedAtUtc is not null,
+                firstProtection = signal?.EarlyProtectionAtUtc is not null, matchedSignals = matches.Length };
+        }).ToArray();
+        return Results.Ok(new { updatedAtUtc = DateTime.UtcNow, items });
+    }
+    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+    catch
+    {
+        return Results.Json(new { error = "دریافت معاملات باز از بای‌بیت ناموفق بود؛ دوباره تلاش کن." }, statusCode: 503);
+    }
+});
+
 app.MapPost("/api/positions/close-preview", async (HttpRequest request, BulkPositionService bulk, CancellationToken token) =>
 {
     if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);

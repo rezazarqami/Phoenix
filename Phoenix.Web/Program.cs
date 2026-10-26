@@ -181,7 +181,7 @@ app.Use(async (context, next) =>
         if (context.Request.Path.StartsWithSegments("/api"))
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         else
-            context.Response.Redirect("/login");
+            context.Response.Redirect(path == "/notifications" ? "/login?next="+Uri.EscapeDataString(context.Request.Path+context.Request.QueryString) : "/login");
         return;
     }
     context.Response.Headers.CacheControl = "no-store";
@@ -204,6 +204,7 @@ app.MapGet("/phoenix", () => Results.File(Path.Combine(app.Environment.WebRootPa
 app.MapMobileEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
+app.MapGet("/notifications", () => Results.File(Path.Combine(app.Environment.WebRootPath,"notifications.html"),"text/html; charset=utf-8"));
 app.MapGet("/login", () => Results.File(Path.Combine(app.Environment.WebRootPath, "login.html"), "text/html; charset=utf-8"));
 
 app.MapGet("/analysis", (HttpRequest request) => request.Query["v"] == "20260827-4"

@@ -175,7 +175,10 @@ public final class MainActivity extends Activity {
         renderPageState();
         browser.evaluateJavascript("window.dispatchEvent(new Event('phoenix-native-resume'))",null);
     }
-    private void readIntent(Intent intent){requestedRoute=START_ROUTE;}
+    private void readIntent(Intent intent){
+        String route=intent!=null&&"phoenix.open".equals(intent.getAction())?TrustedNavigation.route(intent.getStringExtra("route")):"/";
+        requestedRoute="/".equals(route)?START_ROUTE:route;
+    }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);unlock();}
     @Override protected void onResume(){super.onResume();if(PhoenixAlertService.prefs(this).getBoolean("enabled",false))try{PhoenixAlertService.start(this);}catch(Exception ignored){}getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;unlock();}
     @Override protected void onPause(){resumed=false;CookieManager.getInstance().flush();browser.onPause();super.onPause();}

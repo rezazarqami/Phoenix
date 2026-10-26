@@ -31,7 +31,7 @@ final class PhoenixNotifications {
     static void showText(Context c,String eventId,String text){
         channels(c);if(!channelAllowed(c,SIGNALS))return;
         String channel=selectedChannel(c);
-        Intent open=new Intent(c,MainActivity.class).setAction("phoenix.open").setData(android.net.Uri.parse("phoenix://notification/"+android.net.Uri.encode(eventId))).putExtra("route","/phoenix").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        Intent open=new Intent(c,MainActivity.class).setAction("phoenix.open").setData(android.net.Uri.parse("phoenix://notification/"+android.net.Uri.encode(eventId))).putExtra("route","/notifications?eventId="+android.net.Uri.encode(eventId)).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent content=PendingIntent.getActivity(c,0,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification publicVersion=new Notification.Builder(c,channel).setSmallIcon(R.drawable.ic_notification_p).setContentTitle("Phoenix").setContentText("اعلان جدید").build();
         Notification notification=new Notification.Builder(c,channel).setSmallIcon(R.drawable.ic_notification_p).setColor(Color.rgb(8,123,255)).setContentTitle("Phoenix").setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(content).setOnlyAlertOnce(true).setAutoCancel(true).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion).build();

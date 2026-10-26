@@ -3,11 +3,11 @@ using System.Text.Json;
 
 namespace Phoenix.Web;
 
-public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind);
+public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null);
 public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<DeviceSignalAlert> Events,DateTime ServerTimeUtc);
 
 // First-party authenticated feed. No Telegram, Firebase, third-party account or device secret is needed.
-public sealed class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated)
+public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated)
 {
     private readonly SemaphoreSlim gate=new(1,1);
     private DateTime refreshed=DateTime.MinValue;
@@ -19,6 +19,9 @@ public sealed class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOpt
         using var cmd=db.CreateCommand();cmd.CommandText="""
             CREATE TABLE IF NOT EXISTS device_signal_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,at_utc TEXT NOT NULL,UNIQUE(owner,event_id));
             CREATE INDEX IF NOT EXISTS device_signal_owner_seq ON device_signal_events(owner,seq);
+            CREATE TABLE IF NOT EXISTS device_signal_history(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,at_utc TEXT NOT NULL,UNIQUE(owner,event_id));
+            CREATE INDEX IF NOT EXISTS device_history_time ON device_signal_history(owner,at_utc,seq);
+            CREATE TABLE IF NOT EXISTS device_history_initialized(owner TEXT PRIMARY KEY);
             """;await cmd.ExecuteNonQueryAsync(token);return db;
     }
     public async Task CaptureAsync(string owner,CancellationToken token)
@@ -40,6 +43,7 @@ public sealed class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOpt
                 cmd.Parameters.AddWithValue("$owner",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
                 cmd.Parameters.AddWithValue("$payload",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));
                 await cmd.ExecuteNonQueryAsync(token);
+                await SaveHistoryAsync(db,tx,owner,s,e,token);
             }
             using var clean=db.CreateCommand();clean.Transaction=tx;clean.CommandText="DELETE FROM device_signal_events WHERE at_utc<$before";
             clean.Parameters.AddWithValue("$before",now.AddDays(-7).ToString("O"));await clean.ExecuteNonQueryAsync(token);

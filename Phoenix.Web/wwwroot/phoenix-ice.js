@@ -48,6 +48,10 @@
     document.getElementById('marketChangePercent').textContent=`${percent>=0?'+':''}${percent.toFixed(2)}%`;
     document.getElementById('marketChangeAmount').textContent=`${amount>=0?'+':''}${format.format(amount)}`;
     document.getElementById('marketChange').classList.toggle('negative',amount<0);
+    const arrow=document.querySelector('#marketChange [data-icon]');
+    arrow.dataset.icon=amount<0?'fall':amount>0?'rise':'flat';
+    arrow.setAttribute('aria-label',amount<0?'کاهش قیمت':amount>0?'افزایش قیمت':'بدون تغییر');
+    arrow.querySelector('path').setAttribute('d',amount<0?'M12 3v18M5 14l7 7 7-7':amount>0?paths.rise:'M4 12h16');
   }
   window.addEventListener('phoenix-market-price',event=>{livePrice=Number(event.detail);change();});
   async function loadChart(){

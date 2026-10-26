@@ -232,15 +232,16 @@ public sealed class DemoOrderWorker(
         if (filledProtection is not null)
         {
             Complete(order, "RiskFree", filledProtection.UpdatedAtUtc ?? DateTime.UtcNow);
+            await store.UpdateAsync(order, token);
             await CancelRiskFreeProtectionAsync(order, token, filledProtection.OrderId);
             await telegram.RiskFreeClosedAsync(order, token);
-            await store.UpdateAsync(order, token);
             return;
         }
 
         if (order.TargetReachedAtUtc is null && TargetReached(order, price))
         {
             Complete(order, "Target", DateTime.UtcNow);
+            await store.UpdateAsync(order, token);
             await CancelRiskFreeProtectionAsync(order, token);
             await telegram.TargetReachedAsync(order, token);
         }
@@ -262,6 +263,7 @@ public sealed class DemoOrderWorker(
         {
             Complete(order, "StopLoss", DateTime.UtcNow);
             order.FailureReason = ProfessionalSignalAnalysisService.ExplainStop(order.TechnicalFeatures);
+            await store.UpdateAsync(order, token);
             await CancelRiskFreeProtectionAsync(order, token);
             await telegram.StopLossReachedAsync(order, token);
         }

@@ -1,4 +1,8 @@
 using Phoenix.Web;
+using Phoenix.Engine.Exchanges.Bybit;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
+using System.Reflection;
 
 internal static class MobileFeedTests
 {
@@ -31,5 +35,34 @@ internal static class MobileFeedTests
         }
         finally{Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH",before);SignalHistoryStore.ClearConnectionPools();Directory.Delete(dir,true);}
     }
+    public static void TerminalEventPrecedesTelegram()=>PersistFirst().GetAwaiter().GetResult();
+    private static async Task PersistFirst()
+    {
+        var dir=Path.Combine(Path.GetTempPath(),"phoenix-before-telegram-"+Guid.NewGuid());Directory.CreateDirectory(dir);
+        var before=Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH");var queue=Path.Combine(dir,"queue.json");Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH",queue);
+        var release=new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var store=new ServerOrderStore(queue,Path.Combine(dir,"history.db"));
+            var signal=new ServerSignal{Id=Guid.NewGuid(),Symbol="BTCUSDT",Direction="Long",RequestedByUsername="owner",Status="Filled",EntryPrice=100,TakeProfit=110,StopLoss=90,CreatedAtUtc=DateTime.UtcNow.AddMinutes(-1),FilledAtUtc=DateTime.UtcNow.AddSeconds(-30)};
+            await store.AddAsync(signal);
+            var client=new BybitDemoClient(new("fixture","fixture"),new HttpClient(new BlockWallet(async request=>{
+                Check(request.RequestUri!.AbsolutePath.EndsWith("wallet-balance"),"Unexpected exchange call in persistence test");entered.TrySetResult();return await release.Task;
+            })));
+            var telegram=new TelegramNotifier(new(null,null),new(null,null),new TelegramAccessStore(),client,store,NullLogger<TelegramNotifier>.Instance);
+            using var worker=new DemoOrderWorker(client,new(null,null),new ServerState(),store,telegram,NullLogger<DemoOrderWorker>.Instance);
+            var tracking=(Task)typeof(DemoOrderWorker).GetMethod("TrackLevelsAsync",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(worker,[signal,110m,CancellationToken.None])!;
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Check(!tracking.IsCompleted,"Fixture must block the Telegram notification's wallet lookup");
+            var feed=await new MobileSignalFeed(store,new("arman",null,null)).ReadAsync("owner",0,default);
+            Check(feed.Events.Any(e=>e.Kind=="Target"),"Direct device alert must already see target before Telegram-side work finishes");
+            release.TrySetResult(new(HttpStatusCode.ServiceUnavailable));await tracking;
+        }
+        finally{release.TrySetResult(new(HttpStatusCode.ServiceUnavailable));Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH",before);SignalHistoryStore.ClearConnectionPools();Directory.Delete(dir,true);}
+    }
+    private sealed class BlockWallet(Func<HttpRequestMessage,Task<HttpResponseMessage>> send):HttpMessageHandler
+    {protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)=>send(request);}
+
     private static void Check(bool ok,string message){if(!ok)throw new Exception(message);}
 }

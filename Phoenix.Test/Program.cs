@@ -9,6 +9,7 @@ var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
 
+Run("Direct device terminal alerts do not wait for Telegram-side network work", MobileFeedTests.TerminalEventPrecedesTelegram);
 Run("Direct device feed persists event cursors, privacy and full lifecycle independently of push providers", MobileFeedTests.DurablePrivateFeed);
 Run("Risk-free exit identifies actual filled order and persists all three types", StagedRiskProtectionTests.ExitKindsPersist);
 Run("Risk-free Telegram text and image label the exact exit type", RiskFreeExitMessageTests.AllExitTypes);

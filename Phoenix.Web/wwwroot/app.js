@@ -79,7 +79,7 @@ async function refreshStatus() {
   try {
     const response = await fetch('/api/status', { cache: 'no-store' });
     const data = await response.json();
-    if (data.lastPrice) price.textContent = fa.format(data.lastPrice) + ' USDT';
+    if (data.lastPrice) { price.textContent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(data.lastPrice) + ' USDT'; window.dispatchEvent(new CustomEvent('phoenix-market-price', { detail: data.lastPrice })); }
     const connected = data.publicApiConnected;
     document.querySelector('#keyField').style.display = data.panelLocked ? 'block' : 'none';
     const environment = data.tradingEnvironment === 'Real' ? 'Real' : 'Demo';

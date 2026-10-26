@@ -313,6 +313,21 @@ app.MapDelete("/api/telegram/access/{userId:long}", async (long userId, HttpRequ
         return Results.Forbid();
     return await access.DeleteAsync(userId, token) ? Results.Ok(new { deleted = true }) : Results.NotFound();
 });
+// Lightweight homepage sparkline: fetch candles without running Elliott analysis.
+app.MapGet("/api/market/overview", async (string? interval, BybitDemoClient bybit, CancellationToken token) =>
+{
+    interval ??= "60";
+    if (interval is not ("1" or "60" or "D" or "W"))
+        return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
+    try
+    {
+        var candles = await bybit.GetKlinesAsync("BTCUSDT", interval, 50, token);
+        return Results.Ok(new { interval, closes = candles.Select(x => x.Close).ToArray() });
+    }
+    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+    catch { return Results.Json(new { error = "دادهٔ نمودار در دسترس نیست." }, statusCode: 503); }
+});
+
 app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => Results.Ok(new
 {
     publicApiConnected = state.PublicApiConnected,

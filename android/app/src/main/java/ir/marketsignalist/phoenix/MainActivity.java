@@ -177,6 +177,12 @@ public final class MainActivity extends Activity {
     }
     private void readIntent(Intent intent){
         String route=intent!=null&&"phoenix.open".equals(intent.getAction())?TrustedNavigation.route(intent.getStringExtra("route")):"/";
+        // Notifications already in the tray can retain the pre-history home route.
+        if(START_ROUTE.equals(route)&&intent!=null&&intent.getData()!=null){
+            Uri data=intent.getData();String id=data.getLastPathSegment();
+            if("phoenix".equals(data.getScheme())&&"notification".equals(data.getHost())&&id!=null&&id.matches("[A-Za-z0-9:_-]{1,120}"))
+                route="/notifications?eventId="+Uri.encode(id);
+        }
         requestedRoute="/".equals(route)?START_ROUTE:route;
     }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);unlock();}

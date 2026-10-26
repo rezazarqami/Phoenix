@@ -28,6 +28,8 @@ public class TrustedNavigationTest {
         assertEquals("/notifications?eventId=one%3ATarget",route.get(activity));
         read.invoke(activity,new android.content.Intent("phoenix.open").putExtra("route","/notifications?eventId=two%3ARiskFree"));
         assertEquals("/notifications?eventId=two%3ARiskFree",route.get(activity));
+        read.invoke(activity,new android.content.Intent("phoenix.open").setData(android.net.Uri.parse("phoenix://notification/legacy%3ATarget")).putExtra("route","/phoenix"));
+        assertEquals("/notifications?eventId=legacy%3ATarget",route.get(activity));
         read.invoke(activity,new android.content.Intent("untrusted").putExtra("route","/notifications"));assertEquals("/phoenix",route.get(activity));
     }
 

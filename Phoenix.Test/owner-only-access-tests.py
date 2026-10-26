@@ -35,11 +35,11 @@ with tempfile.TemporaryDirectory() as tmp:
   assert Path(tmp+'/users.json').stat().st_mode&0o777==0o600
   status=json.loads(Path(tmp+'/users.json.owner-only.json').read_text());assert status['removedOnStartup']==2 and status['additionalUsers']==0 and status['owner']=='rezazarqami'
   assert request(owner,'/api/auth/me')[0]==200,'Existing owner session was revoked'
-  assert request(owner,'/api/personal/entries')[0]==200
+  assert request(owner,'/api/personal/entries')[0]==404
   assert request(owner,'/api/analysis/auth/me')[0]==200
   assert json.loads(request(owner,'/api/users')[1])==[]
   for c in previous:
-   for path in ['/api/auth/me','/api/signals','/api/analysis/auth/me','/api/personal/entries']:
+   for path in ['/api/auth/me','/api/signals','/api/analysis/auth/me','/api/mobile/status']:
     assert request(c,path)[0]==401, 'Stale non-owner session accepted'
    assert request(c,'/phoenix')[2].endswith('/login')
   for name in ['fixture-editor','fixture-viewer']:
@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory() as tmp:
   assert request(owner,'/api/users',{'username':'replacement','password':password,'confirmPassword':password,'viewerOnly':False})[0]==403
   assert request(client(),'/api/auth/login',{'username':'rezazarqami','password':password})[0]==200
   start(True);assert request(owner,'/api/auth/me')[0]==200;assert json.loads(Path(tmp+'/users.json').read_text())==[]
-  print('PASS owner-only access: credentials removed, stale editor/viewer sessions denied across Phoenix/analysis/personal, owner retained, creation blocked and restart idempotent.')
+  print('PASS owner-only access: credentials removed, stale editor/viewer sessions denied across Phoenix/analysis/removed routes, owner retained, creation blocked and restart idempotent.')
  finally:
   if process:process.terminate();process.wait(timeout=10)
   log.close()

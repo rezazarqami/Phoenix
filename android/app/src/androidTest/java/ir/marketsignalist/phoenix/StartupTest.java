@@ -58,7 +58,7 @@ public class StartupTest {
                             try{Thread.sleep(8000);}catch(InterruptedException e){Thread.currentThread().interrupt();}
                             return new WebResourceResponse("image/png",null,new ByteArrayInputStream(new byte[0]));
                         }
-                        String html="<!doctype html><html><body style='background:white;color:black'><h1 id='ready'>Orbit ready</h1>"+(slowImage?"<img src='/slow-image'>":"")+"</body></html>";
+                        String html="<!doctype html><html><body style='background:white;color:black'><h1 id='ready'>Phoenix ready</h1>"+(slowImage?"<img src='/slow-image'>":"")+"</body></html>";
                         return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8)));
                     }
                     @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){client.onPageStarted(v,url,icon);}

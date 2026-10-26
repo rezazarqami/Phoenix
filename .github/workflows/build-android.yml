@@ -1,15 +1,13 @@
 name: Build Phoenix Android
-
 on:
   push:
-    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/orbit-simple.js", "docs/android-install-preview.md", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+    branches: ["personal/phoenix-standalone"]
+    paths: ["android/**", "docs/android-install-preview.md", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/analysis-assets/phoenix-ice-logo.png"]
   pull_request:
-    paths: ["android/**", "Phoenix.Web/wwwroot/personal*", "Phoenix.Web/wwwroot/orbit-simple.js", "docs/android-install-preview.md", "Phoenix.Web/wwwroot/mobile.js", "Phoenix.Web/wwwroot/index.html", "Phoenix.Web/wwwroot/login*", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png"]
+    paths: ["android/**", "docs/android-install-preview.md", ".github/workflows/build-android.yml", "Phoenix.Web/wwwroot/analysis-assets/phoenix-ice-logo.png"]
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -26,56 +24,70 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: orbit-debug-key-v2
-      - name: Ensure persistent test signing key
-        run: |
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
-          fi
-      - name: Add launcher logo
+      - name: Require the existing Phoenix signing key
+        run: test -f "$HOME/.android/debug.keystore"
+      - name: Add supplied blue Phoenix logo
         run: |
           mkdir -p android/app/src/main/res/drawable
-          cp Phoenix.Web/wwwroot/icons/phoenix-maskable-512.png android/app/src/main/res/drawable/phoenix_logo.png
-      - name: Build test APK
+          cp Phoenix.Web/wwwroot/analysis-assets/phoenix-ice-logo.png android/app/src/main/res/drawable/phoenix_standalone_logo.png
+      - name: Build and unit-test Phoenix
         working-directory: android
         env:
           PHOENIX_FIREBASE_APP_ID: ${{ vars.PHOENIX_FIREBASE_APP_ID }}
           PHOENIX_FIREBASE_API_KEY: ${{ vars.PHOENIX_FIREBASE_API_KEY }}
           PHOENIX_FIREBASE_PROJECT_ID: ${{ vars.PHOENIX_FIREBASE_PROJECT_ID }}
           PHOENIX_FIREBASE_SENDER_ID: ${{ vars.PHOENIX_FIREBASE_SENDER_ID }}
-        run: gradle :app:testOrbitDebugUnitTest :app:testPhoenixDebugUnitTest :app:assembleOrbitDebug :app:assemblePhoenixDebug --no-daemon
+        run: gradle :app:testPhoenixDebugUnitTest :app:assemblePhoenixDebug --no-daemon
+      - name: Verify update identity and signing certificate
+        run: |
+          curl -L --fail --retry 3 -o previous-phoenix.apk https://github.com/rezazarqami/Phoenix/releases/download/personal-android-30a720f2/phoenix-android.apk
+          signer="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
+          previous="$($signer verify --print-certs previous-phoenix.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | sort -u)"
+          current="$($signer verify --print-certs android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | sort -u)"
+          test "$previous" = "96bd3f3ff205158e20c8d695840854f5c38679ad9b1842496e169a3d873baf5c"
+          test "$current" = "$previous"
+          aapt="$(find "$ANDROID_HOME/build-tools" -name aapt | sort -V | tail -1)"
+          "$aapt" dump badging android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk | grep "package: name='ir.marketsignalist.phoenix.standalone.capture'"
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exercise startup in a real Android WebView
+      - name: Verify in-place update and real Phoenix WebView
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd android && gradle :app:connectedOrbitDebugAndroidTest :app:connectedPhoenixDebugAndroidTest --no-daemon
-      - name: Save Android test reports
+          script: |
+            bash android/verify-update.sh
+            cd android && gradle :app:connectedPhoenixDebugAndroidTest --no-daemon
+      - name: Save test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: orbit-android-test-reports
+          name: phoenix-android-test-reports
           path: |
             android/app/build/reports/androidTests
             android/app/build/reports/tests
             android/app/build/outputs/androidTest-results
       - uses: actions/upload-artifact@v4
         with:
-          name: phoenix-android-test-apk
-          path: android/app/build/outputs/apk/*/debug/*.apk
-      - name: Publish installable integrated client
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/personal/')
+          name: phoenix-android-apk
+          path: android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk
+      - name: Publish Phoenix update
+        if: github.event_name == 'push' && github.ref == 'refs/heads/personal/phoenix-standalone'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="personal-android-${GITHUB_SHA:0:8}"
-          cp android/app/build/outputs/apk/orbit/debug/app-orbit-debug.apk orbit-android.apk
+          tag="phoenix-android-${GITHUB_SHA:0:8}"
           cp android/app/build/outputs/apk/phoenix/debug/app-phoenix-debug.apk phoenix-android.apk
-          gh release create "$tag" orbit-android.apk phoenix-android.apk --target "$GITHUB_SHA" --prerelease --title "Phoenix and Orbit Android ${GITHUB_SHA:0:8}" --notes-file docs/android-install-preview.md
+          gh release create "$tag" phoenix-android.apk --target "$GITHUB_SHA" --prerelease --title "Phoenix 1.9.4" --notes-file docs/android-install-preview.md
+      - name: Remove retired combined-client release files
+        if: github.event_name == 'push' && github.ref == 'refs/heads/personal/phoenix-standalone'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].assets[] | select(.name == "orbit-android.apk") | .id' > retired-assets.txt
+          while read -r asset; do gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset}"; done < retired-assets.txt

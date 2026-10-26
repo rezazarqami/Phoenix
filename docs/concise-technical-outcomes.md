@@ -1,6 +1,6 @@
 # Concise technical evidence — 2026-10-16
 
-The owner uses historical analogues to support discretionary level selection. The review is now two outcome-estimate lines and two historical count lines (same timeframe / other timeframes), each containing target, stop and risk-free counts. Diagnostic windows, recent subsets, weighted counts, subgroup breakdowns, payoff and similarity percentages are no longer displayed in Telegram, Phoenix cards or chart footers. Orbit and account ownership changes remain untouched.
+The owner uses historical analogues to support discretionary level selection. The review is now two outcome-estimate lines and two historical count lines (same timeframe / other timeframes), each containing target, stop and risk-free counts. Diagnostic windows, recent subsets, weighted counts, subgroup breakdowns, payoff and similarity percentages are no longer displayed in Telegram, Phoenix cards or chart footers.
 
 ## Counts
 

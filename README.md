@@ -241,32 +241,7 @@ The limit is 1–100 rows per page, with an 8 MiB page-size guard; dataset range
 limits and privacy allowlist still apply. No public token or additional access
 is created. The existing login is required to read data directly.
 
-## Personal workspace
-
-The root `/` now opens the owner's private workspace with finance entries (toman),
-vehicle service records and journal entries. `/phoenix` opens the existing trading
-panel using the same `phoenix_session`; existing analysis and trading API paths
-are unchanged. The configured `PHOENIX_AUTH_USERNAME` / `PHOENIX_AUTH_PASSWORD`
-account is the owner. Other Phoenix accounts land on `/phoenix` and receive 403
-for every `/api/personal` operation. Personal records are never available to those
-accounts, including editor accounts.
-
-Records live in `personal.db` beside `PHOENIX_QUEUE_PATH`, or the explicit absolute
-`PERSONAL_DATABASE_PATH`. Use the existing persistent data volume and include this
-file in server backups; never commit personal data to this repository. JSON export
-is available inside the overview. Vehicle service costs are included once in total expenses and also shown as a
-separate subtotal. Month summaries use the Persian month; displayed dates use
-the Persian calendar.
-
-Personal API responses are not HTTP-cached. After verified owner access, the
-service worker stores the generic personal app shell for offline use and clears
-it on logout. Device records and pending operations use owner-scoped IndexedDB. Existing
-installed Android/PWA clients open the new workspace at their unchanged root URL.
-Deployment remains the existing `Deploy Phoenix` workflow on `master`, targeting
-server `91.216.104.210` through `/usr/local/sbin/deploy-phoenix`; no domain or
-separate application deployment is required.
-
-### Frozen proposal evidence
+## Frozen proposal evidence
 
 New analyzed approvals retain `proposalEvidence`: observed time, candidate levels,
 timeframe, technical features and the original review prediction. Main and
@@ -276,8 +251,3 @@ Legacy records keep it null; current or entry features are never relabeled as
 original proposal evidence. Capture time describes when analysis was observed;
 it does not claim all source candles were finalized. This is data provenance for
 future proposal-time validation, not a new probability model or trading rule.
-
-
-See [Personal life workspace](docs/personal-workspace.md) for the new capture,
-goals, decisions, craft, time, experiments, reports, offline sync and backup flows.
-This development is isolated in `personal/life-workspace` for a later release.

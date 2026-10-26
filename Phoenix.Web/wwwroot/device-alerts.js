@@ -38,6 +38,10 @@
  enable.addEventListener('click',activate);
  stop.addEventListener('click',async()=>{try{await native('disableDirect');message.textContent='اعلان زنده متوقف شد.';await refresh();}catch(error){message.textContent=error.message;}});
  test.addEventListener('click',async()=>{try{await native('testDirect');message.textContent='اعلان آزمایشی گوشی ارسال شد؛ این تست مجوز و نمایش گوشی را می‌سنجد. وضعیت اتصال سرور جداگانه نمایش داده می‌شود.';}catch(error){message.textContent=error.message;}});
+ document.getElementById('deviceAlertSound').addEventListener('change',async e=>{try{await native('setSound',{tone:e.target.value});localStorage.setItem('phoenix-alert-sound',e.target.value);await native('testDirect');}catch(error){message.textContent=error.message;}});
+ document.getElementById('deviceAlertSound').value=localStorage.getItem('phoenix-alert-sound')||'crystal';
+ document.getElementById('soundDeviceAlerts').addEventListener('click',()=>native('soundSettings').catch(error=>message.textContent=error.message));
+ document.getElementById('connectionDeviceAlerts').addEventListener('click',()=>native('connectionSettings').catch(error=>message.textContent=error.message));
  battery.addEventListener('click',()=>native('batterySettings').catch(error=>message.textContent=error.message));
  window.addEventListener('phoenix-native-resume',async()=>{const status=await refresh();if(permissionPending){permissionPending=false;if(status?.notifications&&status?.signalChannel)activate();}});
  document.getElementById('logoutButton').addEventListener('click',()=>{permissionPending=false;native('logout').catch(()=>{});},true);

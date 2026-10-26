@@ -14,6 +14,7 @@ builder.Services.AddRateLimiter(options => {
     options.OnRejected = async (context, token) => { context.HttpContext.Response.StatusCode = 429; context.HttpContext.Response.Headers.RetryAfter = "60"; await context.HttpContext.Response.WriteAsJsonAsync(new { error = "تلاش‌های ورود زیاد شده؛ یک دقیقه بعد دوباره امتحان کنید." }, token); };
 });
 builder.Services.AddSingleton<MobilePushService>();
+builder.Services.AddSingleton<MobileSignalFeed>();
 builder.Services.AddHostedService<MobileSignalWorker>();
 builder.Services.AddHttpClient("MobilePush", client => client.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddSingleton(BybitDemoOptions.FromEnvironment());

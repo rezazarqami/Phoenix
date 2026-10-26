@@ -86,6 +86,35 @@ internal static class StagedRiskProtectionTests
         Check(StagedRiskProtection.OrderIds(h.Signal).Single() == early);
     }
 
+    public static void ExitKindsPersist()=>CheckExitKinds().GetAwaiter().GetResult();
+    private static async Task CheckExitKinds()
+    {
+        foreach(var direction in new[]{"Long","Short"})
+        foreach(var kind in new[]{"FirstStepLimit","SecondStepLimit","SafetyStopMarket"})
+        {
+            using var h=new Harness(direction);await h.Save();
+            await h.Advance(h.Level(.50m));
+            if(kind!="FirstStepLimit")await h.Advance(h.Level(.75m));
+            var id=kind=="FirstStepLimit"?h.Signal.EarlyStopLimitOrderId:
+                kind=="SecondStepLimit"?h.Signal.StopLoss2OrderId:h.Signal.RiskFreeStopMarketOrderId;
+            h.Status[id!]="Filled";
+            Check((await h.Protection.FilledAsync(h.Signal,default))?.OrderId==id);
+            Check(h.Signal.RiskFreeCloseKind==kind && h.Signal.RiskFreeCloseOrderId==id);
+            await h.Save();h.Reload();
+            Check(h.Signal.RiskFreeCloseKind==kind && h.Signal.RiskFreeCloseOrderId==id);
+            Check(RiskFreeExit.Title(h.Signal)==(kind=="FirstStepLimit"?"پلهٔ اول ریسک‌فری":
+                kind=="SecondStepLimit"?"پلهٔ دوم ریسک‌فری":"محافظ ریسک‌فری"));
+        }
+        // Stage 2 being requested does not prove it was the order that closed the trade.
+        using var race=new Harness("Long");await race.Save();await race.Advance(race.Level(.50m));
+        race.FillOnCancel=true;await ExpectFailure(()=>race.Advance(race.Level(.75m)));
+        Check(race.Signal.ProtectionStage==2);
+        await race.Protection.FilledAsync(race.Signal,default);
+        Check(race.Signal.RiskFreeCloseKind=="FirstStepLimit");
+        var legacy=new ServerSignal{ProtectionStage=2,RiskFreeReachedAtUtc=DateTime.UtcNow};
+        Check(RiskFreeExit.Title(legacy)=="ریسک‌فری" && !RiskFreeExit.Detail(legacy).Contains("استاپ‌مارکت"));
+    }
+
     private static async Task ExpectFailure(Func<Task<bool>> action)
     {
         try { await action(); }

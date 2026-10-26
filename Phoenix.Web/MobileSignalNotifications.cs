@@ -113,15 +113,19 @@ public sealed partial class MobilePushService
     }
 }
 
-public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService push, DedicatedTelegramOptions dedicated,
+public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService push, MobileSignalFeed feed, DedicatedTelegramOptions dedicated,
     ILogger<MobileSignalWorker> logger) : BackgroundService
 {
-    public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "Created", "Opened", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "Cancelled", "ManualClosed" };
+    public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "Created", "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "Cancelled", "ManualClosed" };
     public static IEnumerable<MobileSignalEvent> Events(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated)
     {
         var own = string.Equals(signal.RequestedByUsername, owner, StringComparison.OrdinalIgnoreCase);
         if (!own && (signal.PublicSignalNumber is null || dedicated.Owns(signal.RequestedByUsername))) yield break;
         yield return new($"{signal.Id}:Created", "Created", signal.CreatedAtUtc);
+        if ((signal.ExpireAdjustedAtUtc ?? signal.EntryTriggeredAtUtc) is { } near)
+            yield return new($"{signal.Id}:NearEntry","NearEntry",near);
+        if(signal.EarlyProtectionAtUtc is { } first)
+            yield return new($"{signal.Id}:FirstProtection","FirstProtection",first);
         if (signal.FilledAtUtc is { } opened) yield return new($"{signal.Id}:Opened", "Opened", opened);
         if (signal.RiskFreeReachedAtUtc is { } riskFree) yield return new($"{signal.Id}:RiskFreeReached", "RiskFreeReached", riskFree);
         if (signal.CompletedAtUtc is { } end && signal.Outcome is { } outcome && Kinds.Contains(outcome))
@@ -135,6 +139,7 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
             {
                 if (PhoenixSessionAuth.CredentialsConfigured(out var owner, out _))
                 {
+                    await feed.CaptureAsync(owner,ct);
                     var signals = await store.GetAllAsync(ct);
                     await push.QueueAsync(owner, signals.SelectMany(s => Events(s, owner, dedicated)).OrderBy(e => e.At), DateTimeOffset.UtcNow, ct);
                     await push.DeliverPendingAsync(DateTimeOffset.UtcNow, ct);

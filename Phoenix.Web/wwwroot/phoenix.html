@@ -16,7 +16,7 @@
 <link href="/security.css?v=2" rel="stylesheet"/>
 <link href="/crypto-statistics.css?v=1" rel="stylesheet"/>
 <title>Phoenix Trading Panel</title>
-<link href="/phoenix-ice.css?v=2" rel="stylesheet"/></head>
+<link href="/phoenix-ice.css?v=3" rel="stylesheet"/></head>
 <body>
 <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <main>
@@ -26,7 +26,7 @@
 <button aria-controls="notificationMenu" aria-expanded="false" aria-label="اعلان‌های سیگنال" class="notification-toggle" id="notificationToggle" type="button"><span data-icon="bell"></span><i hidden=""></i></button><div class="notification-menu" hidden="" id="notificationMenu"><b>اعلان‌های سیگنال</b><p id="notificationSummary">در حال دریافت وضعیت سیگنال‌ها…</p><button id="notificationShowActive" type="button">نمایش سیگنال‌های فعال</button><div class="safe" id="modeNote"><i>✓</i><span>در حال بررسی وضعیت موتور سفارش</span></div></div>
 <span class="badge" id="connection"><i></i>در حال بررسی</span>
 <button aria-controls="settingsMenu" aria-expanded="false" aria-label="باز کردن منوی تنظیمات" class="security-button home-settings-toggle" id="settingsToggle" type="button"><span data-icon="menu"></span></button>
-<div class="settings-menu" hidden="" id="settingsMenu"><button class="security-button" id="returnHomeButton" type="button">صفحهٔ اصلی فونیکس</button>
+<div class="settings-menu" hidden="" id="settingsMenu"><button class="security-button" id="deviceAlertsButton" type="button">اعلان‌های گوشی</button><button class="security-button" id="returnHomeButton" type="button">صفحهٔ اصلی فونیکس</button>
 <button class="security-button" id="telegramAccessButton" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
 <button class="security-button" id="usersButton" type="button"><span class="action-icon">♙</span><span>کاربران</span></button>
 <button class="security-button" id="securityButton" type="button"><span class="action-icon">⚙</span><span>تنظیمات امنیتی</span></button>
@@ -159,5 +159,5 @@
 <script src="/bulk-controls.js?v=2"></script>
 <script src="/crypto-statistics.js?v=1"></script>
 <script src="/home-tabs.js?v=20261026-ice"></script>
-<script src="/phoenix-ice.js?v=1"></script></body>
+<script src="/phoenix-ice.js?v=1"></script><script defer src="/device-alerts.js?v=1"></script><dialog id="deviceAlertsDialog" class="security-dialog" aria-labelledby="deviceAlertsTitle"><div class="dialog-head"><h2 id="deviceAlertsTitle">اعلان زندهٔ گوشی</h2><button type="button" id="closeDeviceAlerts" aria-label="بستن">×</button></div><div class="dialog-body"><p>اتصال مستقیم به سرور فونیکس؛ مستقل از تلگرام. ثبت و ورود سیگنال، پله‌های ریسک‌فری، تارگت، استاپ و سایر نتیجه‌ها با نام نماد اعلان می‌شوند.</p><p id="deviceAlertsState" role="status">در حال بررسی…</p><p id="deviceAlertsConnection"></p><div class="device-alert-actions"><button type="button" id="enableDeviceAlerts">فعال‌سازی اعلان زنده</button><button type="button" id="testDeviceAlerts">تست اعلان گوشی</button><button type="button" id="batteryDeviceAlerts">تنظیم باتری گوشی</button><button type="button" id="disableDeviceAlerts">توقف اعلان زنده</button></div><p id="deviceAlertsMessage" role="alert"></p><p class="device-alert-note">هنگام فعال‌بودن، یک اعلان ثابت وضعیت اتصال را نشان می‌دهد. برای جلوگیری از تأخیر در پس‌زمینه، باتری فونیکس را روی «بدون محدودیت» بگذار. پس از توقف اجباری برنامه توسط اندروید، فونیکس را دوباره باز کن. خروج از حساب، اعلان زنده را متوقف می‌کند. ارسال تلگرام فعلاً برقرار می‌ماند.</p></div></dialog></body>
 </html>

@@ -52,4 +52,12 @@ public class DirectAlertTest {
         assertTrue(context.getSystemService(NotificationManager.class).getNotificationChannel("phoenix-tone-pulse").getSound().toString().startsWith("android.resource://"));
     }
 
+    @Test public void tappingAnAlertOpensItsHistoryEvent()throws Exception{
+        PhoenixNotifications.showText(context,"one:RiskFree","fixture");
+        Notification notification=context.getSystemService(NotificationManager.class).getActiveNotifications()[0].getNotification();
+        Intent intent=org.robolectric.Shadows.shadowOf(notification.contentIntent).getSavedIntent();
+        assertEquals("phoenix.open",intent.getAction());
+        assertEquals("/notifications?eventId=one%3ARiskFree",intent.getStringExtra("route"));
+    }
+
 }

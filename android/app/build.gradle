@@ -55,7 +55,7 @@ tasks.register('generateNotificationTones') {
         raw.mkdirs()
         [crystal:[1046,1568,2093], pulse:[660,660,880], beacon:[880,1175,880], soft:[523,659,784]].each { name, notes ->
             def output = new ByteArrayOutputStream()
-            def little = { long value, int bytes -> (0..<bytes).each { output.write((int)((value >> (it*8)) & 255)) } }
+            def little = { value, bytes -> (0..<bytes).each { output.write((int)((value >> (it*8)) & 255)) } }
             int length = notes.size()*4400*2
             output.write('RIFF'.getBytes('US-ASCII')); little(length+36,4)
             output.write('WAVEfmt '.getBytes('US-ASCII')); little(16,4); little(1,2); little(1,2)

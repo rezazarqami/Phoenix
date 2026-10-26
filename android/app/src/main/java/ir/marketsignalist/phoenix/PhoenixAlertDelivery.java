@@ -4,7 +4,8 @@ import java.util.*;
 
 final class PhoenixAlertDelivery {
     static synchronized boolean deliver(Context context,String id,String kind,String symbol,String exitKind,long at){
-        if(!Arrays.asList("Created","NearEntry","Opened","FirstProtection","RiskFreeReached","Target","StopLoss","RiskFree","Expired","Cancelled","ManualClosed","Test").contains(kind))return false;
+        if(Arrays.asList("Created","Cancelled","ManualClosed").contains(kind))return true;
+        if(!Arrays.asList("NearEntry","Opened","FirstProtection","RiskFreeReached","Target","StopLoss","RiskFree","Expired","Test").contains(kind))return false;
         if(id==null||!id.matches("[A-Za-z0-9:_-]{1,120}"))return false;
         if(!PhoenixNotifications.channelAllowed(context,PhoenixNotifications.SIGNALS))return false;
         SharedPreferences seen=context.getSharedPreferences("orbit-push-seen",Context.MODE_PRIVATE);

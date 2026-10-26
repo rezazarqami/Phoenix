@@ -10,13 +10,13 @@ const flush=()=>new Promise(r=>setImmediate(r));
  for(const file of ['crypto-market.js','signal-batch-controls.js','crypto-ice.js'])w.eval(read(file));
  await flush();
  const ids=[...d.querySelectorAll('[id]')].map(x=>x.id);assert.equal(new Set(ids).size,ids.length);
- assert.equal(d.querySelectorAll('[data-market-tab]').length,6);assert.equal(d.querySelector('#freeCount'),null);
+ assert.equal(d.querySelectorAll('[data-market-tab]').length,7);assert.equal(d.querySelector('#freeCount'),null);
  const visible=()=>[...d.querySelectorAll('main [role=tabpanel]')].filter(p=>!p.hidden).map(p=>p.id);
  d.querySelector('#batchSize').value='42';
- for(const key of ['create','approved','history','archive','statistics','search']){d.querySelector(`[data-market-tab=${key}]`).click();assert.deepEqual(visible(),['market-pane-'+key]);}
+ for(const key of ['create','approved','history','archive','statistics','search','review']){d.querySelector(`[data-market-tab=${key}]`).click();assert.deepEqual(visible(),['market-pane-'+key]);}
  d.querySelector('#evaluationFrom').value='2026-01-01';d.querySelector('[data-market-tab=create]').click();assert.equal(d.querySelector('#batchSize').value,'42');
  d.querySelector('[data-market-tab=history]').click();assert.equal(d.querySelector('#evaluationFrom').value,'2026-01-01');
- d.querySelector('[data-market-tab=create]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'End',bubbles:true}));assert.deepEqual(visible(),['market-pane-search']);assert.equal(d.activeElement.id,'market-tab-search');
+ d.querySelector('[data-market-tab=create]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'End',bubbles:true}));assert.deepEqual(visible(),['market-pane-review']);assert.equal(d.activeElement.id,'market-tab-review');
  const count=d.querySelector('#batchCount');count.value='1';count.closest('label').querySelector('button').click();assert.equal(count.value,'1','Stepper obeys min');
  count.value='200';count.closest('label').querySelectorAll('button')[1].click();assert.equal(count.value,'200','Stepper obeys max');
  const timed=d.querySelector('#batchTimedMode');timed.checked=true;timed.dispatchEvent(new w.Event('change'));await flush();assert.ok(count.disabled);assert.equal(d.querySelector('#batchDuration').disabled,false);assert.ok(count.closest('label').querySelector('button').disabled);assert.ok(d.querySelector('#startBatch svg'),'Mode changes preserve icon');
@@ -33,5 +33,5 @@ const flush=()=>new Promise(r=>setImmediate(r));
   assert.equal(requests[0].url,'/api/auth/login');assert.equal(requests[0].options.credentials,'same-origin');assert.deepEqual(JSON.parse(requests[0].options.body),{username:'fixture',password:'test-password'});
   accepted=true;ld.querySelector('#loginForm').dispatchEvent(new lw.Event('submit',{cancelable:true,bubbles:true}));await flush();assert.equal(ld.querySelector('#password').value,'');assert.equal(ld.querySelector('#loginMessage').textContent,'');login.window.close();
  }
- console.log('PASS ice UI: six tabs, persistent inputs, bounded steppers, timed mode, password visibility and real web/native login submission.');
+ console.log('PASS ice UI: seven tabs, persistent inputs, bounded steppers, timed mode, password visibility and real web/native login submission.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

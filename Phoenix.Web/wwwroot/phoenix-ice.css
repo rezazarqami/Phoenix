@@ -42,3 +42,17 @@ body.crypto-market-open .home-tabs{display:none}body.crypto-market-open #panel-c
 body.review-focus-host{overflow:hidden!important}
 body.review-focus-host #panel-crypto{position:fixed!important;inset:0!important;z-index:200!important;padding:0!important;margin:0!important;background:#f3f9ff!important;height:100dvh!important;overflow:hidden!important}
 body.review-focus-host #panel-crypto iframe{display:block!important;width:100%!important;height:100dvh!important;min-height:0!important;border:0!important}
+
+/* Live exchange positions share the light Phoenix signal-center theme. */
+.signal-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}
+.viewer-only [data-signal-tab="positions"]{display:none}
+.signal-center .live-positions{padding:16px;background:#fff;color:#24445a}
+.positions-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.positions-heading h2{margin:0;font-size:18px}.positions-heading p,.positions-note,#positionsStatus{font-size:11px;color:#7a8f9e;line-height:1.8}
+.positions-heading button{border:1px solid #d7e9f4;background:#f0f9ff;color:#2688b1;border-radius:12px;padding:10px;font:inherit;font-size:11px}
+#positionsList{display:grid;gap:12px}.position-card{border:1px solid #e1edf4;border-radius:18px;padding:15px;background:#fbfdff;min-width:0}
+.position-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.position-top b{font-size:16px;direction:ltr}.position-side{font-size:11px;padding:5px 8px;border-radius:8px;background:#eaf5fc;color:#2c89b0;direction:ltr}
+.position-stage{display:block;margin:9px 0;color:#378da9;font-size:11px}.position-pnl{display:flex;align-items:baseline;gap:12px;direction:ltr;margin:12px 0}.position-pnl strong{font-size:24px;letter-spacing:-.4px}.position-pnl span{font-size:15px}.position-pnl.positive{color:#13a987}.position-pnl.negative{color:#d75c72}.position-pnl.neutral{color:#768c9d}
+.position-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 8px;margin:0}.position-metrics div{min-width:0}.position-metrics dt{font-size:10px;color:#8b9eab;margin-bottom:4px}.position-metrics dd{font-size:12px;margin:0;direction:ltr;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.positions-empty{padding:28px 10px;text-align:center;color:#7991a1;font-size:13px}
+@media(max-width:420px){.signal-tabs button{font-size:9px;gap:3px}.signal-tabs button svg{width:14px;height:14px}.signal-center .live-positions{padding:10px}.position-card{padding:12px}.position-pnl strong{font-size:21px}.positions-heading h2{font-size:16px}}

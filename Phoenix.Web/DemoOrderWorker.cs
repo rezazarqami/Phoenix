@@ -234,6 +234,7 @@ public sealed class DemoOrderWorker(
             Complete(order, "RiskFree", filledProtection.UpdatedAtUtc ?? DateTime.UtcNow);
             await store.UpdateAsync(order, token);
             await CancelRiskFreeProtectionAsync(order, token, filledProtection.OrderId);
+            await WalletNotification.CaptureAsync(client, store, order, token);
             await telegram.RiskFreeClosedAsync(order, token);
             return;
         }
@@ -243,6 +244,7 @@ public sealed class DemoOrderWorker(
             Complete(order, "Target", DateTime.UtcNow);
             await store.UpdateAsync(order, token);
             await CancelRiskFreeProtectionAsync(order, token);
+            await WalletNotification.CaptureAsync(client, store, order, token);
             await telegram.TargetReachedAsync(order, token);
         }
         else

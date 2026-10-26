@@ -20,7 +20,7 @@ const caption=`🔎 پیشنهاد جدید Phoenix
 نزدیکِ هم‌تایم‌فریم (از ۱۲ نمونه): 0 تارگت / 0 استاپ / 0 ریسک‌فری
 نزدیکِ سایر تایم‌فریم‌ها (از ۱۴۵ نمونه): 9 تارگت / 3 استاپ / 2 ریسک‌فری`;
 const chart='<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650"><rect width="1000" height="650" fill="white"/>'+Array.from({length:90},(_,i)=>{const y=280+100*Math.sin(i/8),up=i%3;return `<path d="M${i*10+30} ${y-45}v85" stroke="${up?'#33a996':'#db6376'}"/><rect x="${i*10+27}" y="${y-20}" width="6" height="35" fill="${up?'#33a996':'#db6376'}"/>`;}).join('')+'<path d="M20 160H970M20 380H970" stroke="#c5b65a"/><path d="M20 300H970M20 330H970" stroke="#50a9b8"/></svg>';
-const scripts=new Set(['home-tabs.js','phoenix-ice.js','crypto-market.js','crypto-ice.js','signal-batch-controls.js','in-app-review.js']);
+const scripts=new Set(['live-positions.js','home-tabs.js','phoenix-ice.js','crypto-market.js','crypto-ice.js','signal-batch-controls.js','in-app-review.js']);
 (async()=>{
  const server=http.createServer((req,res)=>{
   let target=new URL(req.url,'http://fixture').pathname;if(target==='/phoenix')target='/phoenix.html';if(target==='/analysis/coins')target='/crypto-market.html';
@@ -36,7 +36,7 @@ const scripts=new Set(['home-tabs.js','phoenix-ice.js','crypto-market.js','crypt
    await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.pathname.startsWith('/api/')){
-     let data={};if(url.pathname==='/api/analysis/proposals')data=proposals;else if(url.pathname.includes('signal-batch'))data={running:false,message:'آماده'};else if(url.pathname.includes('market/overview'))data={closes:[100,102,99,104]};else if(url.pathname.includes('coins'))data={assets:[]};else if(url.pathname.includes('shadow'))data={summary:{total:0},signals:[]};else if(url.pathname.includes('learning'))data={entrySamples:100,proposalSamples:50};
+     let data={};if(url.pathname==='/api/positions/live')data={updatedAtUtc:'2026-10-27T01:00:00Z',items:[{position:{symbol:'BTCUSDT',side:'Buy',size:0.015,leverage:20,averagePrice:79826.7,markPrice:80000,unrealisedPnl:2.5995,initialMargin:59.87,returnPercent:4.34,takeProfit:82000,stopLoss:79500,liquidationPrice:76000},signalId:'fixture',firstProtection:true,timeframe:'15'},{position:{symbol:'ETHUSDT',side:'Sell',size:0.5,leverage:10,averagePrice:3000,markPrice:3010,unrealisedPnl:-5,initialMargin:150,returnPercent:-3.33},signalId:'fixture2',riskFreeReached:true,timeframe:'60'}]};else if(url.pathname==='/api/analysis/proposals')data=proposals;else if(url.pathname.includes('signal-batch'))data={running:false,message:'آماده'};else if(url.pathname.includes('market/overview'))data={closes:[100,102,99,104]};else if(url.pathname.includes('coins'))data={assets:[]};else if(url.pathname.includes('shadow'))data={summary:{total:0},signals:[]};else if(url.pathname.includes('learning'))data={entrySamples:100,proposalSamples:50};
      await route.fulfill({json:data});return;
     }
     if(url.pathname.endsWith('.js')&&!scripts.has(path.basename(url.pathname))){await route.fulfill({body:''});return;}
@@ -47,6 +47,12 @@ const scripts=new Set(['home-tabs.js','phoenix-ice.js','crypto-market.js','crypt
    assert.ok(link.y>=title.y+title.height,'History link must be below the title');assert.ok(link.x>=0&&link.x+link.width<=width+1,'Popover link must stay in the viewport');
    if(process.env.REVIEW_SCREENSHOTS)await page.screenshot({path:process.env.REVIEW_SCREENSHOTS+`/bell-${width}.png`});
    await page.locator('#notificationToggle').click();
+   await page.locator('#signal-tab-positions').click();await page.locator('.position-card').first().waitFor();
+   assert.equal(await page.locator('.position-card').count(),2);
+   assert.equal(await page.locator('.position-pnl.positive').count(),1);assert.equal(await page.locator('.position-pnl.negative').count(),1);
+   assert.ok(await page.locator('#signal-pane-positions').evaluate(e=>e.scrollWidth<=e.clientWidth+1),'Live position cards must not overflow horizontally');
+   const tabBoxes=await page.locator('[data-signal-tab]').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().toJSON()));assert.ok(tabBoxes.every(b=>b.x>=0&&b.right<=width+1),'Four tabs must fit the viewport');
+   if(process.env.REVIEW_SCREENSHOTS)await page.locator('.signal-center').screenshot({path:process.env.REVIEW_SCREENSHOTS+`/positions-${width}.png`});
    await page.locator('#tab-crypto').click();const frame=page.frameLocator('#panel-crypto iframe');await frame.locator('#market-tab-review').click();
    assert.equal(await frame.locator('.review-heading').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','Review heading must not inherit the dark global header');
    if(process.env.REVIEW_SCREENSHOTS)await page.screenshot({path:process.env.REVIEW_SCREENSHOTS+`/empty-${width}.png`,fullPage:true});

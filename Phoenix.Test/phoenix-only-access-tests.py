@@ -39,7 +39,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert request(c,'/phoenix')[0]==200
     assert request(c,'/api/mobile/status')[0]==403
     assert request(c,'/api/mobile/feed')[0]==403
+    assert request(c,'/api/positions/live')[0]==403
     assert request(c,'/api/personal/entries')[0]==404
+   assert request(client(),'/api/positions/live')[0]==401
    assert request(client(),'/api/signals')[0]==401
    assert request(client(),'/api/mobile/status')[0]==401
    assert request(client(),'/api/mobile/feed')[0]==401

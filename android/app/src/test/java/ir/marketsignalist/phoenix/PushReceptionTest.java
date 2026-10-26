@@ -25,7 +25,7 @@ public class PushReceptionTest {
         Notification notice=shadowOf(manager).getAllNotifications().get(0);
         assertEquals(Notification.VISIBILITY_PRIVATE,notice.visibility);
         assertNotNull(notice.publicVersion);
-        assertEquals("/phoenix",shadowOf(notice.contentIntent).getSavedIntent().getStringExtra("route"));
+        assertEquals("/notifications?eventId=signal-id%3ATarget",shadowOf(notice.contentIntent).getSavedIntent().getStringExtra("route"));
         assertEquals(MainActivity.class.getName(),shadowOf(notice.contentIntent).getSavedIntent().getComponent().getClassName());
         manager.cancelAll();service.onMessageReceived(message("signal"));
         assertEquals("Retry must not resurface a dismissed notification",0,shadowOf(manager).getAllNotifications().size());

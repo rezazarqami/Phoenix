@@ -20,6 +20,9 @@ with tempfile.TemporaryDirectory() as tmp:
     except Exception:pass
     time.sleep(.1)
    else:raise AssertionError('Server startup failed')
+   anonymous=client()
+   for path,marker in [('/login-ice.css',b'.login-shell'),('/analysis-assets/phoenix-ice-logo.png',b'\x89PNG'),('/analysis-assets/phoenix-ice-sky.webp',b'RIFF'),('/fonts/Vazirmatn-variable.woff2',b'wOF2')]:
+    status,body,url=request(anonymous,path);assert status==200 and marker in body and not url.endswith('/login'),path
    owner=client();assert request(owner,'/api/auth/login',{'username':'owner','password':password})[0]==200
    assert request(owner,'/')[2].endswith('/phoenix')
    assert request(owner,'/index.html')[2].endswith('/phoenix')

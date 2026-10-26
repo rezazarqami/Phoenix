@@ -1,10 +1,12 @@
 using Phoenix.Engine.Exchanges.Bybit;
+using System.Text.Json;
 using Phoenix.Web;
 
 internal static class SimilarityTests
 {
     private static TechnicalFeatureSnapshot Features => new(0.5m, 1m, 0m, 0m, 0m,
         1m, 1m, 0.5m, 0.5m, 1m, 0.5m);
+    private static bool SameData(object? a,object? b)=>JsonSerializer.Serialize(a)==JsonSerializer.Serialize(b);
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
@@ -103,7 +105,7 @@ internal static class SimilarityTests
         var future = rows.Select(x => new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(),
             Direction = "Long", Timeframe = "15", CompletedAtUtc = new DateTime(2027, 1, 1) }, "StopLoss", target));
         var review = SignalSimilarityService.CalculateFromPatterns(candidate, rows.Concat(future).Concat(rows).ToArray());
-        Check(review == baseline, "Future labels and duplicated IDs must not affect a past review");
+        Check(SameData(review,baseline), "Future labels and duplicated IDs must not affect a past review");
         var wrongInterval = new ServerSignal { Direction = "Long", Timeframe = "D", TechnicalFeatures = target };
         Check(SignalSimilarityService.CalculateFromPatterns(wrongInterval, rows).TargetPercent > 0m,
             "A distant timeframe must not multiply technical resemblance by zero");
@@ -120,7 +122,7 @@ internal static class SimilarityTests
             new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
                 Timeframe = "D", CompletedAtUtc = now.AddDays(-1) }, outcome, Features)).ToArray();
         var result = SignalSimilarityService.CalculateFromPatterns(candidate, rows);
-        Check(result.Evidence is { ComparisonVersion: 2, ComparableTargets: 1, ComparableStops: 1,
+        Check(result.Evidence is { ComparisonVersion: 3, ComparableTargets: 1, ComparableStops: 1,
             ComparableRiskFree: 1, OtherTimeframeNearbyTargets: 1, OtherTimeframeNearbyStops: 1,
             OtherTimeframeNearbyRiskFree: 1, SameTimeframeNearbyTargets: 0 },
             "Sparse legacy snapshots and distant timeframes must retain all three outcome counts");
@@ -196,7 +198,7 @@ internal static class SimilarityTests
             "Historical evidence must occupy exactly two lines");
         var future = rows[0] with { Signal = new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
             Timeframe = "15", CompletedAtUtc = candidate.CreatedAtUtc.AddDays(1) } };
-        Check(SignalSimilarityService.CalculateFromPatterns(candidate, rows.Append(future).ToArray()).Evidence == result.Evidence,
+        Check(SignalSimilarityService.CalculateFromPatterns(candidate, rows.Append(future).ToArray()).Evidence is { } futureEvidence && SameData(futureEvidence,result.Evidence),
             "Unknown future outcomes must never alter counts");
         Check(SignalOutcomeModel.Train(rows) is null, "A few descriptive examples cannot activate probabilities");
     }
@@ -218,7 +220,7 @@ internal static class SimilarityTests
         var first=rows[0];
         var duplicate=new LearnedSignalPattern(new ServerSignal { Id=Guid.NewGuid(),Symbol="BTCUSDT",Direction="Long",Timeframe="15",
             EntryPrice=100,TakeProfit=110,StopLoss=90,EntryTriggeredAtUtc=at.AddSeconds(15),CompletedAtUtc=at.AddHours(1) },"Target",Features);
-        Check(SignalSimilarityService.CalculateFromPatterns(candidate,rows.Append(duplicate).ToArray()) == result,
+        Check(SignalSimilarityService.CalculateFromPatterns(candidate,rows.Append(duplicate).ToArray()) is { } duplicated && SameData(duplicated,result),
             "Duplicated trade episodes with different IDs must not inflate evidence.");
         var conflict=duplicate with { Outcome="StopLoss" };
         Check(SignalPatternIdentity.Unique(rows.Append(conflict)).Length==11,

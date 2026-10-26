@@ -7,6 +7,9 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
     int SameTimeframeNearbyStops)
 {
     public int ComparisonVersion { get; init; }
+    public string? Metric { get; init; }
+    public int InsufficientFeatureCount { get; init; }
+    public IReadOnlyList<SimilarityExample>? NearestExamples { get; init; }
     public int ComparableRiskFree { get; init; }
     public int SameTimeframeNearbyRiskFree { get; init; }
     public int OtherTimeframeNearbyTargets { get; init; }
@@ -20,6 +23,9 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
     public decimal? HistoricalTargetRate => SameTimeframeNearbyCount < 10 ? null
         : Math.Round(100m * SameTimeframeNearbyTargets / SameTimeframeNearbyCount, 1);
 }
+
+public sealed record SimilarityExample(Guid SignalId,string Outcome,string? Timeframe,decimal Score,
+    bool Nearby,IReadOnlyDictionary<string,decimal> GroupDistances);
 
 public sealed record TradePayoffEvidence(decimal RewardRisk, decimal GrossBinaryBreakEvenRate)
 {

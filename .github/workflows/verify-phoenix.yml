@@ -30,6 +30,7 @@ jobs:
           node Phoenix.Test/personal-worker-tests.cjs
           npm ci --prefix Phoenix.Test/ui --ignore-scripts --no-audit --no-fund
           npm test --prefix Phoenix.Test/ui
+          node Phoenix.Test/phoenix-home-ui-tests.cjs
           node Phoenix.Test/mobile-ui-tests.cjs
       - name: Verify Android-compatible cancellation controls
         run: node Phoenix.Test/cancellation-ui-tests.cjs

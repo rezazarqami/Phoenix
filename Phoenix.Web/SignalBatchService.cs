@@ -3,7 +3,7 @@ using Phoenix.Engine.Exchanges.Bybit;
 
 namespace Phoenix.Web;
 
-public sealed class SignalBatchService(
+public sealed partial class SignalBatchService(
     MarketCapCatalog markets, BybitDemoClient bybit, SignalCandidateFinder finder,
     ServerOrderStore orders, SignalSubmissionService submission, TelegramNotifier telegram,
     DedicatedTelegramNotifier dedicatedTelegram,
@@ -29,13 +29,7 @@ public sealed class SignalBatchService(
         lock (_sync)
         {
             if (_runCancellation is not null) { error = "صف قبلی هنوز در حال توقف است؛ چند لحظه دیگر دوباره تلاش کنید."; return false; }
-            var dedicatedRoute = dedicatedTelegram.Owns(requestedByUsername);
-            if (dedicatedRoute && !dedicatedTelegram.IsConfigured)
-            {
-                error = "ربات اختصاصی این حساب هنوز تنظیم نشده است.";
-                return false;
-            }
-            if (!dedicatedRoute && !telegram.IsConfigured) { error = "ربات تلگرام Phoenix تنظیم نشده است."; return false; }
+            var dedicatedRoute = false;
             DateTimeOffset? endsAt = timedMode ? DateTimeOffset.UtcNow.AddMinutes(durationMinutes) : null;
             _state = new(true, target, 0, 0, 0, null, "در حال شروع بررسی بازارها…", null,
                 directionFilter, chartFilter, timeframeFilter)
@@ -205,12 +199,15 @@ public sealed class SignalBatchService(
             var assets = await markets.GetAsync(token);
             var nextAsset = 0;
             const int priorityWindow = 8;
-            var proposedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var existing = await PendingAsync(requestedByUsername ?? "", token);
+            var proposedKeys = existing.Select(x=>ProposalKey(x.Candidate,x.Interval,x.LineMode)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             bool ShouldContinue() => endsAt.HasValue
                 ? DateTimeOffset.UtcNow < endsAt.Value
-                : Status.Approved < target;
+                : Status.Approved + Status.Observed < target;
             while (ShouldContinue())
             {
+                await WaitForCapacityAsync(target, endsAt, token);
+                if (!ShouldContinue()) break;
                 if (nextAsset >= assets.Count)
                 {
                     if (!endsAt.HasValue) break;
@@ -289,6 +286,8 @@ public sealed class SignalBatchService(
                 {
                     token.ThrowIfCancellationRequested();
                     if (!ShouldContinue()) break;
+                    await WaitForCapacityAsync(target, endsAt, token);
+                    if (!ShouldContinue()) break;
                     var option = ranked[optionIndex];
                     prepared ??= PrepareProposalAsync(option, positionSizeUsdt, minimumTargetProbability, token);
                     PreparedProposal? proposal;
@@ -305,72 +304,20 @@ public sealed class SignalBatchService(
                         });
                         continue;
                     }
-                    prepared = optionIndex + 1 < ranked.Length
-                        ? PrepareProposalAsync(ranked[optionIndex + 1], positionSizeUsdt, minimumTargetProbability, token)
-                        : null;
+                    prepared = null;
                     if (proposal is null)
                     {
                         Update(state => state with { Message = "پیشنهاد از فیلتر فاصله/برآورد نتیجه عبور نکرد؛ بررسی ادامه دارد. برای مشاهدهٔ پیشنهادهای بدون برآورد، حداقل را صفر بگذارید." });
                         continue;
                     }
-                    var analysis = proposal.Analysis;
-                    var technicalFeatures = analysis.Features;
-                    var selected = option.Candidate;
                     var key = Guid.NewGuid().ToString("N");
-                    var decision = new TaskCompletionSource<BatchDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    lock (_sync) { _decision = decision; _decisionKey = key; }
-                    var caption = proposal.Caption;
-                    var image = proposal.Image;
-                    await reviews.SaveAsync(key, selected, option.Candles, option.Interval, option.LineMode, image, token);
-                    Update(state => state with
-                    {
-                        Proposed = state.Proposed + 1, CurrentSymbol = selected.Symbol,
-                        Message = $"منتظر پاسخ تلگرام برای {selected.Symbol}؛ فاصله تا ورود {Format(option.EntryDistancePercent)}٪"
-                    });
-                    token.ThrowIfCancellationRequested();
-                    var sent = dedicatedRoute
-                        ? await dedicatedTelegram.SendCandidateAsync(image, caption, key, token)
-                        : await telegram.SendCandidateAsync(image, caption, key, token);
-                    await reviews.MarkDeliveryAsync(key, sent, token);
-                    if (!sent)
-                    {
-                        logger.LogWarning("Skipping {Symbol}; Telegram candidate delivery failed", selected.Symbol);
-                        Update(state => state with { Error = null, Message = "ارسال یک پیشنهاد ناموفق بود؛ صف ادامه دارد…" });
-                        continue;
-                    }
+                    await reviews.SaveAsync(key, option.Candidate, option.Candles, option.Interval, option.LineMode, proposal.Image, token);
+                    await AddProposalAsync(new PendingProposal(key, requestedByUsername ?? "", option.Candidate,
+                        option.Interval, option.LineMode, proposal.Analysis, proposal.Caption, proposal.Image,
+                        positionSizeUsdt, DateTime.UtcNow), token);
                     proposedKeys.Add(option.ProposalKey);
-                    var selectedDecision = await decision.Task.WaitAsync(token);
-                    if (selectedDecision == BatchDecision.Reject)
-                    {
-                        Update(state => state with { Rejected = state.Rejected + 1 });
-                        continue;
-                    }
-                    if (selectedDecision == BatchDecision.Observe)
-                    {
-                        var observed = await shadow.AddAsync(selected, option.Interval, option.LineMode,
-                            image, analysis, requestedByUsername, token);
-                        await reviews.LinkSignalAsync(key, observed.Id, token);
-                        proposedKeys.Add(option.ProposalKey);
-                        Update(state => state with
-                        {
-                            Observed = state.Observed + 1,
-                            Message = $"{selected.Symbol} فقط برای پایش ثبت شد؛ در حال رفتن به مورد بعدی…"
-                        });
-                        continue;
-                    }
-                    var outcome = await submission.QueueAsync(new SignalRequest(selected.Symbol,
-                        selected.Direction, selected.Ceiling, selected.Floor, positionSizeUsdt), token,
-                        new SignalEvidence(option.Interval, option.LineMode ? "Line" : "Candles", image,
-                            technicalFeatures, string.Join(" | ", analysis.Strengths.Concat(analysis.Risks)), analysis.MarketRegime,
-                            SignalProposalEvidence.Capture(selected, option.Interval, analysis)),
-                        requestedByUsername);
-                    await reviews.LinkSignalAsync(key, outcome.Signal?.Id, token);
-                    if (outcome.Signal is null)
-                    {
-                        Update(state => state with { Error = outcome.Error, Message = $"ثبت {selected.Symbol} ناموفق بود؛ بررسی ادامه دارد." });
-                        continue;
-                    }
-                    Update(state => state with { Approved = state.Approved + 1, Message = $"{selected.Symbol} ثبت شد؛ در حال رفتن به مورد بعدی…" });
+                    Update(state => state with { Proposed = state.Proposed + 1,
+                        Message = "پیشنهاد در صف تأیید داخل اپ آماده است." });
                 }
             }
             Update(state => state with

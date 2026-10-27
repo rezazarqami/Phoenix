@@ -39,6 +39,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert request(c,'/phoenix')[0]==200
     assert request(c,'/api/mobile/status')[0]==403
     assert request(c,'/api/mobile/feed')[0]==403
+    assert request(c,'/api/signals/cancel-selected',{'ids':['00000000-0000-4000-8000-000000000001']})[0]==403
     assert request(c,'/api/mobile/history/wallet-recovery')[0]==403
     assert request(c,'/api/mobile/history/recover-wallets',{})[0]==403
     assert request(c,'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==403
@@ -46,6 +47,10 @@ with tempfile.TemporaryDirectory() as tmp:
     assert request(c,'/api/personal/entries')[0]==404
    assert request(client(),'/api/positions/live')[0]==401
    assert request(client(),'/api/signals')[0]==401
+   assert request(client(),'/api/signals/00000000-0000-4000-8000-000000000001/live-chart')[0]==401
+   assert request(owner,'/api/signals/00000000-0000-4000-8000-000000000001/live-chart')[0]==404
+   assert request(owner,'/api/signals/cancel-selected',{'ids':[]})[0]==400
+   assert request(owner,'/api/signals/cancel-selected',{'ids':['00000000-0000-4000-8000-000000000001']})[0]==200
    assert request(client(),'/api/mobile/status')[0]==401
    assert request(client(),'/api/mobile/feed')[0]==401
    assert request(client(),'/api/mobile/history/wallet-recovery')[0]==401

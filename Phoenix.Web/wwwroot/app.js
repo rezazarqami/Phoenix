@@ -311,11 +311,8 @@ async function refreshSignals() {
     const signals = await response.json();
     const active = signals.filter(s => !isFinished(s));
     document.querySelector('#count').textContent = fa.format(active.length);
-    document.querySelector('#orders').innerHTML = active.length ? active.map(s => `
-      <article class="order"><strong>${s.symbol} · ${s.direction}</strong><span class="status">${statusLabel(s.status)}</span>
-      <small>ENTRY ${fa.format(s.entryPrice)}${s.averageFillPrice ? ' · FILL ' + fa.format(s.averageFillPrice) : ''} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · EXPIRE ${fa.format(s.expirePrice)}${s.expireStage === 'Target' ? ' (منتقل‌شده به تارگت)' : ''} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT${s.error ? ' · ERROR: ' + escapeHtml(s.error) : ''}</small>
-      <div class="similarity">${outcomeSummary(s)}${similaritySupport(s.similarityEvidence)}</div>
-      <button class="remove" ${s.status === 'RecoveryRequired' ? 'disabled title="تا تطبیق وضعیت صرافی قابل حذف یا اجرا نیست"' : ''} onclick="removeSignal('${s.id}')">${s.status === 'Submitted' ? 'لغو سفارش' : 'لغو سیگنال'}</button></article>`).join('') : '<div class="empty"><span>◇</span><strong>سیگنال فعالی وجود ندارد</strong><p>سیگنال‌های پایان‌یافته در بخش تاریخچه نتایج قرار می‌گیرند.</p></div>';
+    window.phoenixActiveSignals = active;
+    window.dispatchEvent(new CustomEvent('phoenix-signals-updated', { detail: active }));
   } catch { /* status indicator already reports connectivity */ }
 }
 

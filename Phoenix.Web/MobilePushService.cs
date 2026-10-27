@@ -157,8 +157,11 @@ public static class MobileEndpoints
         });
         static string Owner(HttpRequest request) { PhoenixSessionAuth.TryGetIdentity(request, out var user); return user.Username; }
         group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, directFeed = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
-        group.MapGet("/history", async (long? before,string? eventId,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
-            Results.Ok(await feed.HistoryAsync(Owner(request),before,eventId,ct)));
+        group.MapGet("/history", async (long? before,string? eventId,string? view,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
+            Results.Ok(await feed.HistoryAsync(Owner(request),before,eventId,ct,view)));
+        group.MapPost("/history/import-wallets", async (TelegramWalletImportRequest input,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
+            Results.Ok(await feed.ImportWalletsAsync(Owner(request),input.Export,ct)))
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(2_200_000));
         group.MapGet("/feed", async (long? after,int? wait,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>{
             var until=DateTime.UtcNow.AddSeconds(Math.Clamp(wait??0,0,20));
             DeviceSignalPage page;

@@ -15,6 +15,8 @@ builder.Services.AddRateLimiter(options => {
 });
 builder.Services.AddSingleton<MobilePushService>();
 builder.Services.AddSingleton<MobileSignalFeed>();
+builder.Services.AddSingleton<BybitWalletRecovery>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<BybitWalletRecovery>());
 builder.Services.AddHostedService<MobileSignalWorker>();
 builder.Services.AddHttpClient("MobilePush", client => client.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddSingleton(BybitDemoOptions.FromEnvironment());

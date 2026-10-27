@@ -6,7 +6,7 @@ public sealed partial class MobileSignalFeed
 {
     private static async Task SaveHistoryAsync(SqliteConnection db,SqliteTransaction tx,string owner,ServerSignal s,MobileSignalEvent e,CancellationToken ct)
     {
-        var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" or "StopLoss" ? s.ResultWalletBalanceUsdt : null);
+        var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" or "StopLoss" ? s.ResultWalletBalanceUsdt : null,s.ResultWalletAtUtc,s.ResultWalletBalanceUsdt.HasValue?"LocalSnapshot":null);
         using var cmd=db.CreateCommand();cmd.Transaction=tx;
         cmd.CommandText="INSERT INTO device_signal_history(owner,event_id,payload,at_utc) VALUES($o,$id,$p,$at) ON CONFLICT(owner,event_id) DO UPDATE SET payload=excluded.payload WHERE json_extract(device_signal_history.payload,'$.WalletBalanceUsdt') IS NULL AND json_extract(excluded.payload,'$.WalletBalanceUsdt') IS NOT NULL";
         cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);

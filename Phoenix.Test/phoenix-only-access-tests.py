@@ -39,6 +39,8 @@ with tempfile.TemporaryDirectory() as tmp:
     assert request(c,'/phoenix')[0]==200
     assert request(c,'/api/mobile/status')[0]==403
     assert request(c,'/api/mobile/feed')[0]==403
+    assert request(c,'/api/mobile/history/wallet-recovery')[0]==403
+    assert request(c,'/api/mobile/history/recover-wallets',{})[0]==403
     assert request(c,'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==403
     assert request(c,'/api/positions/live')[0]==403
     assert request(c,'/api/personal/entries')[0]==404
@@ -46,6 +48,8 @@ with tempfile.TemporaryDirectory() as tmp:
    assert request(client(),'/api/signals')[0]==401
    assert request(client(),'/api/mobile/status')[0]==401
    assert request(client(),'/api/mobile/feed')[0]==401
+   assert request(client(),'/api/mobile/history/wallet-recovery')[0]==401
+   assert request(owner,'/api/mobile/history/wallet-recovery')[0]==200
    assert request(client(),'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==401
    assert request(owner,'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==200
    assert request(owner,'/api/mobile/history/import-wallets',{'export':{}})[0]==400

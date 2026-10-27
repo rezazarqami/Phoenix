@@ -13,6 +13,7 @@ Run("Result wallet snapshots persist and enrich existing history without changin
 Run("Telegram exports restore only unambiguous recent result wallet balances", TelegramWalletImportTests.Import);
 Run("Bybit historical wallets require exact complete unambiguous closing fills", BybitWalletRecoveryTests.Matching);
 Run("Bybit historical wallets paginate, persist, prefer local snapshots and isolate owners", BybitWalletRecoveryTests.Persistence);
+Run("Selected cancellation isolates IDs, skips executed orders and retains archived chart levels", SelectedSignalTests.Cancellation);
 Run("Device history persists, paginates and isolates event deep links", MobileHistoryTests.History);
 Run("In-app review persists, enforces capacity and isolates owners", InAppQueueTests.CapacityAndRestart);
 Run("Notification policy excludes registration and only expires near signals", InAppQueueTests.AlertPolicy);

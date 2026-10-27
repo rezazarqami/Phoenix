@@ -6,15 +6,17 @@ public sealed partial class MobileSignalFeed
 {
     private static async Task SaveHistoryAsync(SqliteConnection db,SqliteTransaction tx,string owner,ServerSignal s,MobileSignalEvent e,CancellationToken ct)
     {
-        var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" ? s.ResultWalletBalanceUsdt : null);
+        var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" or "StopLoss" ? s.ResultWalletBalanceUsdt : null);
         using var cmd=db.CreateCommand();cmd.Transaction=tx;
         cmd.CommandText="INSERT INTO device_signal_history(owner,event_id,payload,at_utc) VALUES($o,$id,$p,$at) ON CONFLICT(owner,event_id) DO UPDATE SET payload=excluded.payload WHERE json_extract(device_signal_history.payload,'$.WalletBalanceUsdt') IS NULL AND json_extract(excluded.payload,'$.WalletBalanceUsdt') IS NOT NULL";
         cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
         cmd.Parameters.AddWithValue("$p",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));
         await cmd.ExecuteNonQueryAsync(ct);
     }
-    public async Task<DeviceHistoryPage> HistoryAsync(string owner,long? before,string? eventId,CancellationToken ct)
+    public async Task<DeviceHistoryPage> HistoryAsync(string owner,long? before,string? eventId,CancellationToken ct,string? view=null)
     {
+        if(view is not (null or "all" or "results"))throw new ArgumentException("سربرگ معتبر نیست.");
+        var resultFilter=view=="results" ? " AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss')" : "";
         if(before is <=0 || eventId?.Length>120)throw new ArgumentException("نشانگر رویداد معتبر نیست.");
         await CaptureAsync(owner,ct);await gate.WaitAsync(ct);
         try{
@@ -33,13 +35,13 @@ public sealed partial class MobileSignalFeed
             }
             string? anchor=null;long anchorSeq=0;bool found=eventId is null;
             if(before.HasValue || eventId is not null){
-                using var lookup=db.CreateCommand();lookup.CommandText="SELECT seq,at_utc FROM device_signal_history WHERE owner=$o AND "+(before.HasValue?"seq=$key":"event_id=$key");
+                using var lookup=db.CreateCommand();lookup.CommandText="SELECT seq,at_utc FROM device_signal_history WHERE owner=$o AND "+(before.HasValue?"seq=$key":"event_id=$key")+resultFilter;
                 lookup.Parameters.AddWithValue("$o",owner.ToLowerInvariant());lookup.Parameters.AddWithValue("$key",before.HasValue?(object)before.Value:eventId!);
                 using var r=await lookup.ExecuteReaderAsync(ct);if(await r.ReadAsync(ct)){anchorSeq=r.GetInt64(0);anchor=r.GetString(1);found=true;}
                 else if(before.HasValue)throw new ArgumentException("این صفحهٔ تاریخچه در دسترس نیست.");
             }
             using var cmd=db.CreateCommand();cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());
-            cmd.CommandText="SELECT seq,payload FROM device_signal_history WHERE owner=$o";
+            cmd.CommandText="SELECT seq,payload FROM device_signal_history WHERE owner=$o"+resultFilter;
             if(anchor is not null){cmd.CommandText+=" AND (at_utc<$at OR (at_utc=$at AND seq"+(before.HasValue?"<":"<=")+"$seq))";cmd.Parameters.AddWithValue("$at",anchor);cmd.Parameters.AddWithValue("$seq",anchorSeq);}
             cmd.CommandText+=" ORDER BY at_utc DESC,seq DESC LIMIT 51";
             var rows=new List<DeviceSignalAlert>();using var reader=await cmd.ExecuteReaderAsync(ct);

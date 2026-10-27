@@ -49,3 +49,14 @@ Recovered balance, transaction/order references, balance timestamp and source ar
 Owner-only routes: GET `/api/mobile/history/wallet-recovery`, POST `/api/mobile/history/recover-wallets`. The configured main-account API key is used; Strategy 2 is excluded. Automatic execution on production begins only after deployment. API permission/data availability determine actual recovery count; the development tests do not prove production account access.
 
 References: https://bybit-exchange.github.io/docs/v5/account/transaction-log and https://bybit-exchange.github.io/docs/v5/position/close-pnl .
+
+
+## Active desk selection and live signal charts
+
+Signal Center → Active Signals now uses compact keyed rows with a left checkbox, asset badge, direction, current status, per-row cancel and expandable chart/levels. Select All snapshots only unfilled Pending/Submitted records; newly arriving signals are not silently added, and records that fill during polling are removed from selection. The server limits selected cancellation to 100 distinct IDs and reuses the execution-gated SignalCancellationService, including exchange cancellation confirmation and partial-fill refusal. Selection never invokes close-position or trading-create endpoints.
+
+The old direction-based bulk panel has been removed from Active Signals. The existing main-account Close All preview, confirmation, one-use close token and resume-entry controls now live in Open Positions; Strategy 2 remains excluded.
+
+Authenticated GET `/api/signals/{id}/live-chart` finds the current or archived original signal and returns 150 current Bybit candles, a current ticker, the saved timeframe, and unchanged saved ceiling/floor/entry/TP/SL/protection levels. There is no reanalysis. The shared local Lightweight Charts widget refreshes every five seconds only for visible open charts, labels the last successful update, marks stale data explicitly on failure, preserves zoom, and aborts/disposes when the row closes or disappears. The journal now opens this live chart; the original frozen image remains under a separately labeled “تصویر زمان ثبت سیگنال” disclosure. Historical result text and price levels remain original even though the live chart displays today's market.
+
+Tests cover selected IDs, fill races, unchanged unselected/open/submitting positions, submitted partial executions, owner/viewer routes, archived-level lookup, keyed row retention, chart disposal, 360/390/412px overflow, current price display and network-failure labeling. Publication does not require a new Android APK.

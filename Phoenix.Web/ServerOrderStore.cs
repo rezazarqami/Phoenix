@@ -421,6 +421,9 @@ public sealed class ServerOrderStore
         return await _history.GetCryptoStatisticsAsync(token);
     }
 
+    public async Task<ServerSignal?> FindSignalAsync(Guid id,CancellationToken token=default)=>
+        (await GetAllAsync(token)).SingleOrDefault(s=>s.Id==id)??await _history.FindSignalAsync(id,token);
+
     public Task<byte[]?> GetHistoryImageAsync(Guid id, CancellationToken token = default) =>
         _history.GetImageAsync(id, token);
 

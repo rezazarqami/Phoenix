@@ -6,6 +6,23 @@ public sealed record SignalCancellationResult(bool Cancelled, string Message);
 
 public sealed class SignalCancellationService(ServerOrderStore store, BybitDemoClient bybit)
 {
+    public async Task<IReadOnlyList<SelectedCancellationResult>> CancelSelectedAsync(Guid[] ids,CancellationToken token=default)
+    {
+        if(ids.Length is <1 or >100)throw new ArgumentException("بین ۱ تا ۱۰۰ سیگنال انتخاب کن.");
+        var results=new List<SelectedCancellationResult>();
+        foreach(var id in ids.Distinct())
+        {
+            // CancelAsync takes the execution gate and checks current exchange/store state for each ID.
+            var current=(await store.GetAllAsync(token)).SingleOrDefault(s=>s.Id==id);
+            if(current is null||current.Status is not ("Pending" or "Submitted")||current.FilledAtUtc is not null||current.CompletedAtUtc is not null)
+            {results.Add(new(id,false,"دیگر در انتظار ورود نیست؛ لغو نشد."));continue;}
+            try{var result=await CancelAsync(id,token);results.Add(new(id,result.Cancelled,result.Message));}
+            catch(OperationCanceledException) when(token.IsCancellationRequested){throw;}
+            catch{results.Add(new(id,false,"لغو تأیید نشد؛ وضعیت صرافی را بررسی کن."));}
+        }
+        return results;
+    }
+
     public async Task<SignalCancellationResult> CancelAsync(Guid id, CancellationToken token = default)
     {
         await store.ExecutionGate.WaitAsync(token);
@@ -44,3 +61,6 @@ public sealed class SignalCancellationService(ServerOrderStore store, BybitDemoC
         finally { store.ExecutionGate.Release(); }
     }
 }
+
+public sealed record SelectedCancellationResult(Guid Id,bool Cancelled,string Message);
+public sealed record CancelSelectedRequest(Guid[] Ids);

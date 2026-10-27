@@ -16,7 +16,7 @@
 <link href="/security.css?v=2" rel="stylesheet"/>
 <link href="/crypto-statistics.css?v=1" rel="stylesheet"/>
 <title>Phoenix Trading Panel</title>
-<link href="/phoenix-ice.css?v=20261027-positions" rel="stylesheet"/></head>
+<link href="/phoenix-ice.css?v=20261027-active-desk" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=1"></head>
 <body>
 <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <main>
@@ -65,20 +65,12 @@
 <p id="message" role="status"></p>
 </form>
 </section><section aria-labelledby="signal-tab-active" class="card orders-card" hidden="" id="signal-pane-active" role="tabpanel">
-<div hidden="" id="bulkControls" style="padding:18px;border-bottom:1px solid #806328">
-<p>عملیات گروهی — فقط حساب استراتژی اصلی (Strategy 2 دمو تغییر نمی‌کند)</p>
-<div style="display:flex;gap:10px;flex-wrap:wrap">
-<select aria-label="جهت سیگنال‌های منتظر ورود" id="cancelDirection"><option value="All">همه جهت‌ها</option><option value="Long">فقط Long</option><option value="Short">فقط Short</option></select>
-<button class="security-button" id="cancelPendingButton" type="button">لغو منتظرهای ورود</button>
-<button class="security-button" id="closePositionsButton" style="color:#f87171" type="button">بستن همه پوزیشن‌های باز…</button>
-<button class="security-button" hidden="" id="resumeEntriesButton" type="button">ادامه ورودهای جدید</button>
-</div>
-<p id="bulkStatus" role="status" style="white-space:pre-line"></p>
-</div>
-<div class="section-title"><div><span class="step">02</span><div><h2>سیگنال‌های فعال</h2><p>سیگنال‌های در انتظار یا معامله‌های باز</p></div></div><span class="counter" id="count">۰</span></div>
+<div class="active-desk-heading"><span class="active-desk-icon" aria-hidden="true">▥</span><div><h2>سیگنال‌های فعال</h2><p>سیگنال‌های در انتظار یا معامله‌های باز</p></div><span class="counter" id="count">۰</span></div>
+<div id="activeSelectionControls" class="active-selection-controls" hidden><button id="selectAllSignals" type="button" aria-pressed="false">☑ انتخاب همه</button><button id="cancelSelectedSignals" type="button" disabled>لغو انتخاب‌شده‌ها</button></div><p id="activeActionStatus" class="active-action-status" role="status"></p>
 <div class="orders" id="orders"><div class="empty"><span>◇</span><strong>هنوز سیگنالی ثبت نشده</strong><p>اولین سیگنال شما اینجا نمایش داده می‌شود.</p></div></div>
 </section><section aria-labelledby="signal-tab-positions" class="card live-positions" hidden id="signal-pane-positions" role="tabpanel">
 <div class="positions-heading"><div><h2>معاملات باز</h2><p>حساب واقعی بای‌بیت · سود و زیان تحقق‌نیافته</p></div><button id="refreshPositions" type="button">به‌روزرسانی</button></div>
+<div id="bulkControls" class="position-actions" hidden><button class="security-button" id="closePositionsButton" type="button">بستن همهٔ پوزیشن‌های باز…</button><button class="security-button" id="resumeEntriesButton" type="button" hidden>ادامهٔ ورودهای جدید</button><p id="bulkStatus" role="status"></p></div>
 <p id="positionsStatus" role="status">برای دریافت اطلاعات، این سربرگ را باز کن.</p><div id="positionsList" aria-live="polite"></div>
 <p class="positions-note">سود و زیان دلاری از بای‌بیت؛ درصد بازده نسبت به مارجین اولیهٔ گزارش‌شدهٔ صرافی است. کارمزد و تسویهٔ نهایی ممکن است متفاوت باشد.</p>
 </section><section aria-labelledby="signal-tab-history" class="card history-card" hidden="" id="signal-pane-history" role="tabpanel">
@@ -158,11 +150,12 @@
 </dialog>
 <link href="/history.css?v=1" rel="stylesheet"/>
 <script src="/confirmation.js?v=1"></script>
-<script src="/app.js?v=20261026-ice-home"></script>
+<script src="/vendor/lightweight-charts.standalone.production.js"></script><script src="/signal-live-chart.js?v=1"></script><script src="/active-signals.js?v=1"></script>
+<script src="/app.js?v=20261027-active-desk"></script>
 <script src="/install-phoenix.js?v=2"></script>
-<script src="/bulk-controls.js?v=2"></script>
+<script src="/bulk-controls.js?v=20261027-positions"></script>
 <script src="/crypto-statistics.js?v=1"></script>
-<script src="/live-positions.js?v=1"></script>
+<script src="/live-positions.js?v=20261027-controls"></script>
 <script src="/home-tabs.js?v=20261027-compact"></script>
 <script src="/phoenix-ice.js?v=1"></script><script defer src="/device-alerts.js?v=1"></script><dialog id="deviceAlertsDialog" class="security-dialog" aria-labelledby="deviceAlertsTitle"><div class="dialog-head"><h2 id="deviceAlertsTitle">اعلان زندهٔ گوشی</h2><button type="button" id="closeDeviceAlerts" aria-label="بستن">×</button></div><div class="dialog-body"><p>اتصال مستقیم به سرور فونیکس؛ مستقل از تلگرام. فقط نزدیک ورود، ورود تأییدشدهٔ صرافی، پله‌های ریسک‌فری، تارگت، استاپ و انقضای سیگنال نزدیک‌شده اعلان می‌شوند.</p><p id="deviceAlertsState" role="status">در حال بررسی…</p><p id="deviceAlertsConnection"></p><label>صدای پیام <select id="deviceAlertSound"><option value="crystal">کریستال</option><option value="pulse">ضربان</option><option value="beacon">فانوس</option><option value="soft">ملایم</option></select></label><div class="device-alert-actions"><button type="button" id="soundDeviceAlerts">تنظیم صدا در اندروید</button><button type="button" id="connectionDeviceAlerts">مخفی‌کردن اعلان اتصال</button><button type="button" id="enableDeviceAlerts">فعال‌سازی اعلان زنده</button><button type="button" id="testDeviceAlerts">تست اعلان گوشی</button><button type="button" id="batteryDeviceAlerts">تنظیم باتری گوشی</button><button type="button" id="disableDeviceAlerts">توقف اعلان زنده</button></div><p id="deviceAlertsMessage" role="alert"></p><p class="device-alert-note">هنگام فعال‌بودن، یک اعلان ثابت وضعیت اتصال را نشان می‌دهد. برای جلوگیری از تأخیر در پس‌زمینه، باتری فونیکس را روی «بدون محدودیت» بگذار. پس از توقف اجباری برنامه توسط اندروید، فونیکس را دوباره باز کن. خروج از حساب، اعلان زنده را متوقف می‌کند. ارسال تلگرام فعلاً برقرار می‌ماند.</p></div></dialog></body>
 </html>

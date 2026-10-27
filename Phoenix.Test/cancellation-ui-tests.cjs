@@ -27,38 +27,16 @@ async function confirmations() {
     assert.equal(dialog.removed, true);
   }
 }
-async function bulk({confirmed = true, statusCode = 200, networkError = false, refreshError = false, direction = 'All'} = {}) {
-  const nodes = Object.fromEntries(['bulkControls','bulkStatus','resumeEntriesButton','cancelPendingButton','closePositionsButton','cancelDirection'].map(x => ['#'+x, element('button')]));
-  nodes['#cancelDirection'].value = direction;
-  let posts = [], refreshes = 0;
-  const context = {
-    document: {querySelector: x => nodes[x], querySelectorAll: () => [nodes['#cancelPendingButton'], nodes['#closePositionsButton']]},
-    phoenixConfirm: async () => confirmed,
-    confirm: () => { throw new Error('Native confirmation must not be called in Android'); },
-    fetch: async (url, options) => {
-      if (url === '/api/auth/me') return {json: async () => ({isAdmin: true})};
-      if (url === '/api/positions/entry-pause') return {json: async () => ({paused: false})};
-      posts.push(url); assert.equal(options.method, 'POST');
-      if (networkError) throw new Error('Network disconnected');
-      return {ok: statusCode === 200, status: statusCode, json: async () => {
-        if (statusCode !== 200) throw new Error('Empty response');
-        return {cancelled: 3};
-      }};
-    },
-    refreshSignals: async () => { refreshes++; if (refreshError) throw new Error('Refresh failed'); },
-    refreshHistory: async () => { refreshes++; }
-  };
-  await vm.runInNewContext(fs.readFileSync(path.join(root, 'bulk-controls.js'), 'utf8'), context);
-  await nodes['#cancelPendingButton'].onclick();
-  assert.equal(nodes['#cancelPendingButton'].disabled, false);
-  if (!confirmed) { assert.equal(posts.length, 0); return; }
-  assert.deepEqual(posts, ['/api/signals/cancel-pending/' + direction]);
-  const text = nodes['#bulkStatus'].textContent;
-  if (networkError) assert.match(text, /Network disconnected/);
-  else if (statusCode === 401) assert.match(text, /منقضی/);
-  else if (statusCode === 403) assert.match(text, /مجوز/);
-  else { assert.match(text, /3 سیگنال/); assert.ok(refreshes >= 1); }
-  if (refreshError) assert.match(text, /به‌روزرسانی نمایش ناموفق/);
+async function bulk({confirmed=true,statusCode=200,networkError=false,refreshError=false}={}) {
+ const nodes=Object.fromEntries(['bulkControls','bulkStatus','resumeEntriesButton','closePositionsButton'].map(x=>['#'+x,element('button')]));let posts=[],refreshes=0;
+ const context={window:{dispatchEvent(){}},Event:function(){},document:{querySelector:x=>nodes[x],querySelectorAll:()=>[nodes['#closePositionsButton']]},phoenixConfirm:async()=>confirmed,
+ fetch:async(url,options)=>{
+  if(url==='/api/auth/me')return {json:async()=>({isAdmin:true})};if(url==='/api/positions/entry-pause')return {json:async()=>({paused:false})};
+  posts.push(url);assert.equal(options.method,'POST');if(networkError)throw Error('Network disconnected');return {ok:statusCode===200,status:statusCode,json:async()=>statusCode!==200?{}:url.endsWith('close-preview')?{id:'preview',account:'Real',positions:[{symbol:'BTCUSDT',side:'Buy',size:1}]}:{items:[{symbol:'BTCUSDT',submitted:true}]}};
+ },refreshSignals:async()=>{refreshes++;if(refreshError)throw Error('Refresh failed');},refreshHistory:async()=>{refreshes++;}};
+ await vm.runInNewContext(fs.readFileSync(path.join(root,'bulk-controls.js'),'utf8'),context);await nodes['#closePositionsButton'].onclick();assert.equal(nodes['#closePositionsButton'].disabled,false);
+ assert.equal(posts[0],'/api/positions/close-preview');if(!confirmed){assert.equal(posts.length,1);return;}
+ const output=nodes['#bulkStatus'].textContent;if(networkError)assert.match(output,/Network disconnected/);else if(statusCode===401)assert.match(output,/منقضی/);else if(statusCode===403)assert.match(output,/مجوز/);else{assert.equal(posts[1],'/api/positions/close-all/preview');assert.match(output,/درخواست بستن ارسال شد/);assert.ok(refreshes>=1);}if(refreshError)assert.match(output,/به‌روزرسانی نمایش ناموفق/);
 }
 async function single(confirmed, statusCode) {
   const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
@@ -75,9 +53,9 @@ async function single(confirmed, statusCode) {
 }
 (async () => {
   await confirmations();
-  for (const direction of ['All','Long','Short']) await bulk({direction});
+  await bulk();
   await bulk({confirmed:false}); await bulk({statusCode:401}); await bulk({statusCode:403});
   await bulk({networkError:true}); await bulk({refreshError:true});
   await single(true, 200); await single(true, 409); await single(false, 200);
-  console.log('PASS cancellation UI: HTML accept/cancel/Escape, bulk All/Long/Short, no-op cancellation, expired session, permission error, network error, refresh failure and individual cancellation.');
+  console.log('PASS cancellation UI: HTML accept/cancel/Escape, position close preview/confirmation, no-op cancellation, expired session, permission error, network error, refresh failure and individual cancellation.');
 })().catch(error => { console.error(error); process.exit(1); });

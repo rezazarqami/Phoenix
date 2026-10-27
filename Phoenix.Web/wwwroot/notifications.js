@@ -23,11 +23,13 @@
    const detail=document.createElement('details');detail.className='event-detail';
    const summary=text('summary','نمودار و جزئیات');summary.setAttribute('aria-label','نمودار ثبت‌شدهٔ سیگنال و جزئیات '+(e.symbol||'Phoenix'));detail.append(summary);
    const body=text('div','');body.className='event-detail-body';
-   const id=e.id.split(':')[0];let chartRequested=false;
+   const id=e.id.split(':')[0];let chartRequested=false,liveChart=null;
    function showChart(){if(chartRequested)return;chartRequested=true;
     if(!/^[a-f0-9-]{36}$/i.test(id)){body.prepend(text('p','نمودار این سابقه در دسترس نیست.'));return;}
-    const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image';image.alt='نمودار '+e.symbol;
-    image.onerror=()=>{image.replaceWith(text('p','نمودار این سابقه در دسترس نیست.'));};body.prepend(image);
+    const host=text('div','');host.className='signal-live-host';body.prepend(host);
+    if(window.PhoenixLiveChart)liveChart=window.PhoenixLiveChart.mount(host,id);else host.append(text('p','دریافت نمودار زنده در دسترس نیست.'));
+    const archive=document.createElement('details');archive.className='signal-archive-chart';archive.append(text('summary','تصویر زمان ثبت سیگنال'));
+    archive.addEventListener('toggle',()=>{if(archive.open&&!archive.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image';image.alt='تصویر زمان ثبت '+e.symbol;image.onerror=()=>image.replaceWith(text('p','تصویر زمان ثبت در دسترس نیست.'));archive.append(image);}});body.append(archive);
    }
    const levels=document.createElement('div');levels.className='event-levels';
    for(const [label,value] of [['ورود',e.entryPrice],['تارگت',e.takeProfit],['استاپ ثبت‌شده',e.stopLoss]])if(Number(value)>0){const cell=document.createElement('div');cell.append(text('small',label),text('b',Number(value).toLocaleString('en-US',{maximumFractionDigits:10})));levels.append(cell);}
@@ -37,7 +39,7 @@
    const date=text('time',new Date(e.at).toLocaleString('fa-IR'));date.dateTime=e.at;body.append(date);
    if(e.walletSource==='BybitTransaction')body.append(Object.assign(text('small','پس از تسویه در بای‌بیت'+(e.walletAtUtc?' · '+new Date(e.walletAtUtc).toLocaleString('fa-IR'):'')),{className:'wallet-source'}));
    detail.append(body);detail.open=openedDetails.has(e.id);if(detail.open)showChart();
-   detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;if(detail.open){openedDetails.add(e.id);showChart();}else openedDetails.delete(e.id);});card.append(detail);
+   detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;if(detail.open){openedDetails.add(e.id);showChart();}else{openedDetails.delete(e.id);liveChart?.stop();liveChart=null;chartRequested=false;body.querySelector('.signal-live-host')?.remove();body.querySelector('.signal-archive-chart')?.remove();}});card.append(detail);
    if(resultKinds.has(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));
     wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));card.append(wallet);}
    fragment.append(card);

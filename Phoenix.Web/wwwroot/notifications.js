@@ -8,22 +8,38 @@
  const resultKinds=new Set(['Target','RiskFree','StopLoss']),tabs=[...document.querySelectorAll('[data-journal-tab]')];
  const fresh=()=>({entries:new Map(),before:null,hasMore:false,busy:false,initialized:false});
  let states={all:fresh(),results:fresh()},view=initialView;
+ const openedDetails=new Set();
  const text=(tag,value)=>Object.assign(document.createElement(tag),{textContent:value});
  function render(){
   const state=states[view],fragment=document.createDocumentFragment();let count=0;
   for(const e of [...state.entries.values()].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||b.sequence-a.sequence)){
    if(view==='results'&&!resultKinds.has(e.kind))continue;count++;
    const card=document.createElement('article');card.className='event-card'+(e.id===focus?' focused':'');card.dataset.kind=e.kind;card.dataset.eventId=e.id;
-   const head=document.createElement('div');head.className='event-top';head.append(Object.assign(text('b',e.symbol||'Phoenix'),{className:'event-symbol'}),Object.assign(text('span',titles[e.kind]||e.kind),{className:'event-kind'}));card.append(head);
-   card.append(text('p',messages[e.kind]||'رویداد سیگنال ثبت شد.'));
-   if(e.kind==='RiskFree'&&exits[e.exitKind])card.append(text('p',exits[e.exitKind]));
+   const code=e.kind==='Target'?'TP':e.kind==='StopLoss'?'SL':e.kind==='FirstProtection'?'RF1':e.kind==='RiskFree'?(e.exitKind==='FirstStepLimit'?'RF1':e.exitKind==='SecondStepLimit'?'RF2':'RF'):e.kind==='RiskFreeReached'?'RF':null;
+   const head=document.createElement('div');head.className='event-top';
+   const badge=Object.assign(text('span',code||titles[e.kind]||e.kind),{className:'event-kind'});badge.title=titles[e.kind]||e.kind;badge.setAttribute('aria-label',(titles[e.kind]||e.kind)+(e.kind==='RiskFree'&&exits[e.exitKind]?' · '+exits[e.exitKind]:''));
+   head.append(Object.assign(text('b',e.symbol||'Phoenix'),{className:'event-symbol'}),badge);card.append(head);
+   card.append(Object.assign(text('p',messages[e.kind]||'رویداد سیگنال ثبت شد.'),{className:'event-message'}));
+   const detail=document.createElement('details');detail.className='event-detail';
+   const summary=text('summary','نمودار و جزئیات');summary.setAttribute('aria-label','نمودار ثبت‌شدهٔ سیگنال و جزئیات '+(e.symbol||'Phoenix'));detail.append(summary);
+   const body=text('div','');body.className='event-detail-body';
+   const id=e.id.split(':')[0];let chartRequested=false;
+   function showChart(){if(chartRequested)return;chartRequested=true;
+    if(!/^[a-f0-9-]{36}$/i.test(id)){body.prepend(text('p','نمودار این سابقه در دسترس نیست.'));return;}
+    const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image';image.alt='نمودار '+e.symbol;
+    image.onerror=()=>{image.replaceWith(text('p','نمودار این سابقه در دسترس نیست.'));};body.prepend(image);
+   }
    const levels=document.createElement('div');levels.className='event-levels';
    for(const [label,value] of [['ورود',e.entryPrice],['تارگت',e.takeProfit],['استاپ ثبت‌شده',e.stopLoss]])if(Number(value)>0){const cell=document.createElement('div');cell.append(text('small',label),text('b',Number(value).toLocaleString('en-US',{maximumFractionDigits:10})));levels.append(cell);}
-   if(levels.children.length)card.append(levels);
-   card.append(Object.assign(text('div',[e.direction,e.timeframe?'تایم‌فریم '+e.timeframe:null].filter(Boolean).join(' · ')),{className:'event-meta'}));
-   const id=e.id.split(':')[0];if(/^[a-f0-9-]{36}$/i.test(id)){const chart=document.createElement('details');chart.append(text('summary','نمودار ثبت‌شدهٔ سیگنال'));chart.addEventListener('toggle',()=>{if(chart.open&&!chart.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image';image.alt='نمودار '+e.symbol;image.onerror=()=>{image.remove();chart.append(text('p','نمودار این سابقه در دسترس نیست.'));};chart.append(image);}});card.append(chart);}
-   const date=text('time',new Date(e.at).toLocaleString('fa-IR'));date.dateTime=e.at;card.append(date);
-   if(resultKinds.has(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));if(e.walletSource==='BybitTransaction'){const source=text('small','پس از تسویه در بای‌بیت'+(e.walletAtUtc?' · '+new Date(e.walletAtUtc).toLocaleTimeString('fa-IR'):''));source.style.flexBasis='100%';wallet.append(source);}card.append(wallet);}
+   if(levels.children.length)body.append(levels);
+   body.append(Object.assign(text('div',[e.direction,e.timeframe?'تایم‌فریم '+e.timeframe:null].filter(Boolean).join(' · ')),{className:'event-meta'}));
+   if(e.kind==='RiskFree'&&exits[e.exitKind])body.append(text('p',exits[e.exitKind]));
+   const date=text('time',new Date(e.at).toLocaleString('fa-IR'));date.dateTime=e.at;body.append(date);
+   if(e.walletSource==='BybitTransaction')body.append(Object.assign(text('small','پس از تسویه در بای‌بیت'+(e.walletAtUtc?' · '+new Date(e.walletAtUtc).toLocaleString('fa-IR'):'')),{className:'wallet-source'}));
+   detail.append(body);detail.open=openedDetails.has(e.id);if(detail.open)showChart();
+   detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;if(detail.open){openedDetails.add(e.id);showChart();}else openedDetails.delete(e.id);});card.append(detail);
+   if(resultKinds.has(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));
+    wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));card.append(wallet);}
    fragment.append(card);
   }
   timeline.replaceChildren(fragment);if(!count)timeline.append(text('p',state.initialized?(view==='results'?'هنوز نتیجهٔ نهایی ثبت نشده است.':'هنوز رویدادی ثبت نشده است.'):'در حال دریافت…'));

@@ -23,7 +23,7 @@
    card.append(Object.assign(text('div',[e.direction,e.timeframe?'تایم‌فریم '+e.timeframe:null].filter(Boolean).join(' · ')),{className:'event-meta'}));
    const id=e.id.split(':')[0];if(/^[a-f0-9-]{36}$/i.test(id)){const chart=document.createElement('details');chart.append(text('summary','نمودار ثبت‌شدهٔ سیگنال'));chart.addEventListener('toggle',()=>{if(chart.open&&!chart.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image';image.alt='نمودار '+e.symbol;image.onerror=()=>{image.remove();chart.append(text('p','نمودار این سابقه در دسترس نیست.'));};chart.append(image);}});card.append(chart);}
    const date=text('time',new Date(e.at).toLocaleString('fa-IR'));date.dateTime=e.at;card.append(date);
-   if(resultKinds.has(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));card.append(wallet);}
+   if(resultKinds.has(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));if(e.walletSource==='BybitTransaction'){const source=text('small','پس از تسویه در بای‌بیت'+(e.walletAtUtc?' · '+new Date(e.walletAtUtc).toLocaleTimeString('fa-IR'):''));source.style.flexBasis='100%';wallet.append(source);}card.append(wallet);}
    fragment.append(card);
   }
   timeline.replaceChildren(fragment);if(!count)timeline.append(text('p',state.initialized?(view==='results'?'هنوز نتیجهٔ نهایی ثبت نشده است.':'هنوز رویدادی ثبت نشده است.'):'در حال دریافت…'));
@@ -63,5 +63,15 @@
    importStatus.textContent=Number(result.imported).toLocaleString('fa-IR')+' موجودی بازیابی شد؛ '+Number(result.unresolved).toLocaleString('fa-IR')+' نتیجه هنوز پیام قابل تطبیق ندارد.';states={all:fresh(),results:fresh()};select(view);
   }catch(error){importStatus.textContent=error instanceof SyntaxError?'فایل JSON معتبر نیست.':error.message;}finally{importButton.disabled=false;}
  });
- setInterval(()=>{if(!document.hidden)load();},5000);select(view);
+ const recoveryButton=document.getElementById('recoverBybitWallets'),recoveryStatus=document.getElementById('bybitRecoveryStatus');let recovering=false,lastRecovery=null;
+ async function recovery(manual=false){
+  if(recovering)return;recovering=true;if(manual){recoveryButton.disabled=true;recoveryStatus.textContent='در حال بازیابی از سوابق بای‌بیت…';}
+  try{const response=await fetch('/api/mobile/history/'+(manual?'recover-wallets':'wallet-recovery'),manual?{method:'POST'}:{cache:'no-store'});if(!response.ok)throw Error();const result=await response.json();
+   recoveryStatus.textContent=result.state==='running'?'در حال بازیابی خودکار موجودی‌ها از بای‌بیت…':(result.message||'')+(result.atUtc?' '+Number(result.recovered||0).toLocaleString('fa-IR')+' موجودی بازیابی شد؛ '+Number(result.unresolved||0).toLocaleString('fa-IR')+' مورد بدون تطبیق قطعی.':'');
+   recoveryButton.disabled=result.state==='running';if(result.atUtc!==lastRecovery&&result.state!=='running'){lastRecovery=result.atUtc;if(result.recovered>0)load();}
+  }catch{recoveryStatus.textContent='وضعیت بازیابی فعلاً در دسترس نیست؛ سابقهٔ نتایج محفوظ است.';recoveryButton.disabled=false;}
+  finally{recovering=false;}
+ }
+ recoveryButton.addEventListener('click',()=>recovery(true));setInterval(()=>{if(!document.hidden)recovery();},30000);
+ setInterval(()=>{if(!document.hidden)load();},5000);select(view);recovery();
 })();

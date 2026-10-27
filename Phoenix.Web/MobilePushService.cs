@@ -159,6 +159,8 @@ public static class MobileEndpoints
         group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, directFeed = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
         group.MapGet("/history", async (long? before,string? eventId,string? view,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
             Results.Ok(await feed.HistoryAsync(Owner(request),before,eventId,ct,view)));
+        group.MapGet("/history/wallet-recovery", (HttpRequest request,BybitWalletRecovery recovery)=>Results.Ok(recovery.Status(Owner(request))));
+        group.MapPost("/history/recover-wallets", async (HttpRequest request,BybitWalletRecovery recovery,CancellationToken ct)=>Results.Ok(await recovery.RecoverAsync(Owner(request),ct)));
         group.MapPost("/history/import-wallets", async (TelegramWalletImportRequest input,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
             Results.Ok(await feed.ImportWalletsAsync(Owner(request),input.Export,ct)))
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(2_200_000));

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node ../phoenix-home-ui-tests.cjs && node ../ice-market-login-ui-tests.cjs && node ../device-alert-ui-tests.cjs && node ../in-app-review-ui-tests.cjs && node ../notification-history-ui-tests.cjs && node ../journal-results-ui-tests.cjs && node ../live-positions-ui-tests.cjs && node ../active-signals-ui-tests.cjs && node ../compact-review-layout-tests.cjs && node ../journal-layout-tests.cjs && node ../active-desk-layout-tests.cjs"
+    "test": "node ../phoenix-home-ui-tests.cjs && node ../ice-market-login-ui-tests.cjs && node ../device-alert-ui-tests.cjs && node ../in-app-review-ui-tests.cjs && node ../notification-history-ui-tests.cjs && node ../journal-results-ui-tests.cjs && node ../live-positions-ui-tests.cjs && node ../active-signals-ui-tests.cjs && node ../compact-review-layout-tests.cjs && node ../journal-layout-tests.cjs && node ../active-desk-layout-tests.cjs && node ../animated-hero-layout-tests.cjs"
   },
   "devDependencies": {
     "@sparticuz/chromium": "^133.0.0",

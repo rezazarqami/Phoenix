@@ -25,6 +25,13 @@ public sealed class SignalHistoryStore
         }.ToString();
     }
 
+    internal async Task<ServerSignal?> FindSignalAsync(Guid id,CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try{await using var db=await OpenAsync(token);return await ReadSnapshotAsync(db,id,token);}
+        finally{_gate.Release();}
+    }
+
     public async Task UpsertAsync(ServerSignal signal, string fallbackEvent, CancellationToken token = default,
         SignalEvidence? evidence = null)
     {

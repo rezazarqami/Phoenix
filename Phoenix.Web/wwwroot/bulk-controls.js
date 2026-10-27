@@ -25,16 +25,10 @@
     catch (error) { status.textContent = error.message; }
     finally {
       buttons.forEach(b => b.disabled = false);
-      try { await paused(); await refreshSignals(); await refreshHistory(); }
+      try { await paused(); await refreshSignals(); await refreshHistory(); window.dispatchEvent(new Event('phoenix-positions-refresh')); }
       catch { status.textContent += '\nبه‌روزرسانی نمایش ناموفق بود؛ صفحه را تازه کنید.'; }
     }
   }
-  document.querySelector('#cancelPendingButton').onclick = () => run(async () => {
-    const direction = document.querySelector('#cancelDirection').value;
-    if (!await phoenixConfirm('سیگنال‌های منتظر ورود (' + direction + ') در استراتژی اصلی لغو شوند؟ پوزیشن‌های باز دست‌نخورده می‌مانند.')) { status.textContent = 'عملیات انجام نشد.'; return; }
-    const data = await request('/api/signals/cancel-pending/' + direction);
-    status.textContent = data.cancelled + ' سیگنال منتظر ورود لغو شد.';
-  });
   document.querySelector('#closePositionsButton').onclick = () => run(async () => {
     const preview = await request('/api/positions/close-preview');
     if (!preview.positions.length) { status.textContent = 'پوزیشن باز USDT در این حساب وجود ندارد.'; return; }

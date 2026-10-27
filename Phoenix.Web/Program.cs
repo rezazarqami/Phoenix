@@ -755,6 +755,32 @@ app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpReques
     return await submission.SubmitAsync(request, token, identity.Username);
 });
 
+app.MapPost("/api/signals/cancel-selected",async (CancelSelectedRequest input,HttpRequest request,SignalCancellationService cancellation,CancellationToken token)=>
+{
+    if(!PhoenixSessionAuth.TryGetIdentity(request,out var user)||!user.IsAdmin)return Results.StatusCode(403);
+    if(input.Ids is null||input.Ids.Length is <1 or >100)return Results.BadRequest(new{error="بین ۱ تا ۱۰۰ سیگنال انتخاب کن."});
+    var items=await cancellation.CancelSelectedAsync(input.Ids,token);return Results.Ok(new{items,cancelled=items.Count(x=>x.Cancelled)});
+});
+app.MapGet("/api/signals/{id:guid}/live-chart",async (Guid id,ServerOrderStore store,BybitDemoClient bybit,HttpResponse response,CancellationToken token)=>
+{
+    response.Headers.CacheControl="no-store";
+    var signal=await store.FindSignalAsync(id,token);if(signal is null)return Results.NotFound();
+    var interval=signal.Timeframe??"60";
+    using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(8));
+    try
+    {
+        var candlesTask=bybit.GetKlinesAsync(signal.Symbol,interval,150,timeout.Token);
+        var tickerTask=bybit.GetLastPriceAsync(signal.Symbol,timeout.Token);await Task.WhenAll(candlesTask,tickerTask);
+        return Results.Ok(new{signal.Id,signal.Symbol,signal.Direction,interval,updatedAtUtc=DateTime.UtcNow,
+            lastPrice=tickerTask.Result.LastPrice,candles=candlesTask.Result,
+            levels=new[]{new{label="CEILING",price=signal.Ceiling},new{label="FLOOR",price=signal.Floor},
+                new{label="ENTRY",price=signal.EntryPrice},new{label="TP",price=signal.TakeProfit},new{label="SL",price=signal.StopLoss},
+                new{label="RF",price=signal.RiskFreePrice??0m},new{label="RF1 SL",price=signal.EarlyStopLimit??0m},new{label="RF2 SL",price=signal.StopLoss2??0m}}.Where(x=>x.price>0)});
+    }
+    catch(OperationCanceledException) when(token.IsCancellationRequested){throw;}
+    catch{return Results.Json(new{error="دریافت نمودار زنده ناموفق بود؛ آخرین زمان دریافت را بررسی کن."},statusCode:503);}
+});
+
 app.MapDelete("/api/signals/{id:guid}", async (Guid id, SignalCancellationService cancellation,
     CancellationToken token) =>
 {

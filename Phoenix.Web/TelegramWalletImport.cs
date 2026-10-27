@@ -49,7 +49,7 @@ public sealed partial class MobileSignalFeed
                 var message=matches.OrderBy(m=>m.At).First();
                 using var update=db.CreateCommand();update.Transaction=tx;
                 update.CommandText="UPDATE device_signal_history SET payload=$p WHERE owner=$o AND event_id=$id AND json_extract(payload,'$.WalletBalanceUsdt') IS NULL";
-                update.Parameters.AddWithValue("$p",JsonSerializer.Serialize(e with{WalletBalanceUsdt=message.Balance}));
+                update.Parameters.AddWithValue("$p",JsonSerializer.Serialize(e with{WalletBalanceUsdt=message.Balance,WalletAtUtc=message.At,WalletSource="TelegramExport"}));
                 update.Parameters.AddWithValue("$o",owner.ToLowerInvariant());update.Parameters.AddWithValue("$id",e.Id);
                 if(await update.ExecuteNonQueryAsync(ct)==0)continue;
                 using var audit=db.CreateCommand();audit.Transaction=tx;

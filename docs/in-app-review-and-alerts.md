@@ -27,3 +27,12 @@ The APK build remains on the existing CI signing key and identity. This PR does 
 - Return percentage is exchange unrealisedPnl divided by exchange positionIM × 100; unknown or zero margin produces an unavailable percentage. This basis is labeled in the UI and may differ from Bybit views configured to use another price/margin basis. Reference: https://bybit-exchange.github.io/docs/v5/position
 - A symbol/side position is an exchange aggregate: multiple matching live Phoenix signals are labeled aggregate rather than assigned a fabricated protection stage. On network errors the previous snapshot stays visible with its last-success time.
 - Web-only update; no APK or Android signing changes. Prepare the pull request, then deploy by merging to master.
+
+
+## Journal results tab and Telegram wallet recovery
+
+The journal now uses the same existing Phoenix sky and logo assets as the home page, with scoped CSS. “همهٔ رویدادها” preserves the full lifecycle; “فقط نتایج” includes Target, RiskFree close and StopLoss only. The server filters before applying its 50-row pagination, and each view has an independent cursor/cache. All final-result cards end with the USDT wallet balance or an explicit unavailable label. New main-account stop-loss results now capture wallet snapshots too.
+
+The owner can select a single-chat Telegram Desktop JSON export (maximum 2 MiB) in the journal's recovery section. The importer examines the latest 50 final outcomes, including removed archived signals, and only fills missing journal balances. It matches outcome, symbol, direction, all three price levels and a message time from 5 seconds before to 24 hours after the outcome. Conflicting balances or ambiguous trades remain unresolved. Existing snapshots are never overwritten; zero balances are valid. It stores message ID, message time and export SHA256 in a journal audit table, not the full message text. Import does not send Telegram messages, access today's wallet, modify trades or replay phone alerts.
+
+Historical Telegram messages are not available from the current Bot API connection; an actual chat export is required to recover those values. Until supplied/imported, unknown historical balances remain unknown. Export recovery is owner-only and capped at the most recent 50 final results. Reference: https://core.telegram.org/bots/api#getting-updates .

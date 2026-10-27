@@ -39,12 +39,17 @@ with tempfile.TemporaryDirectory() as tmp:
     assert request(c,'/phoenix')[0]==200
     assert request(c,'/api/mobile/status')[0]==403
     assert request(c,'/api/mobile/feed')[0]==403
+    assert request(c,'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==403
     assert request(c,'/api/positions/live')[0]==403
     assert request(c,'/api/personal/entries')[0]==404
    assert request(client(),'/api/positions/live')[0]==401
    assert request(client(),'/api/signals')[0]==401
    assert request(client(),'/api/mobile/status')[0]==401
    assert request(client(),'/api/mobile/feed')[0]==401
+   assert request(client(),'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==401
+   assert request(owner,'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==200
+   assert request(owner,'/api/mobile/history/import-wallets',{'export':{}})[0]==400
+   assert request(owner,'/api/mobile/history?view=invalid')[0]==400
    status,body,_=request(owner,'/api/mobile/feed');assert status==200 and 'cursor' in json.loads(body)
    assert request(owner,'/api/mobile/feed?after=-1')[0]==400
    print('PASS Phoenix-only: root/login routing, removed workspace and assets, owner-only mobile endpoints, preserved editor/viewer sessions.')

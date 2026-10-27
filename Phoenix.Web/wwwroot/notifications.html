@@ -1,1 +1,17 @@
-<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>رویدادهای سیگنال | Phoenix</title><link rel="stylesheet" href="/notifications.css?v=1"></head><body><header><a href="/phoenix" class="back" aria-label="بازگشت به فونیکس">←</a><div><small>PHOENIX / SIGNAL JOURNAL</small><h1>رویدادهای سیگنال</h1><p>مسیر هر سیگنال، از نزدیک ورود تا نتیجهٔ معامله</p></div><span class="live">● زنده</span></header><main><div class="tools"><a href="/notifications">جدیدترین رویدادها</a></div><p id="historyStatus" role="status">در حال دریافت تاریخچه…</p><div id="eventTimeline" aria-label="تاریخچهٔ رویدادها"></div><button id="loadOlder" type="button" hidden>نمایش رویدادهای قدیمی‌تر</button><button id="refreshEvents" type="button">به‌روزرسانی</button></main><script src="/notifications.js?v=2"></script></body></html>
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>رویدادها و نتایج | Phoenix</title><link rel="stylesheet" href="/notifications.css?v=20261027-journal"></head>
+<body>
+<header class="journal-hero">
+ <div class="journal-topbar"><a class="journal-brand" href="/phoenix" aria-label="صفحهٔ اصلی فونیکس"><img src="/analysis-assets/phoenix-ice-logo.png" alt="نشان فونیکس" width="76" height="76"><span><b>PHOENIX</b><small>BYBIT FUTURES CONTROL</small><span>تحلیل · استراتژی · اجرای هوشمند</span></span></a><a href="/phoenix" class="back" aria-label="بازگشت به فونیکس"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></div>
+</header>
+<main>
+ <section class="journal-heading"><div><small>PHOENIX / SIGNAL JOURNAL</small><h1>رویدادها و نتایج</h1><p>مسیر معاملات و نتیجهٔ نهایی، در یک نگاه</p></div><span class="live">● زنده</span></section>
+ <div class="journal-tabs" role="tablist" aria-label="نمایش تاریخچه"><button id="journal-tab-all" role="tab" aria-controls="journalPanel" aria-selected="true" data-journal-tab="all" type="button">همهٔ رویدادها</button><button id="journal-tab-results" role="tab" aria-controls="journalPanel" aria-selected="false" tabindex="-1" data-journal-tab="results" type="button">فقط نتایج</button></div>
+ <section id="journalPanel" role="tabpanel" aria-labelledby="journal-tab-all">
+ <div class="tools"><p id="viewDescription">تمام اعلان‌ها؛ از نزدیک ورود تا پایان معامله</p><button id="refreshEvents" type="button" aria-label="به‌روزرسانی رویدادها">به‌روزرسانی ↻</button></div>
+ <p id="historyStatus" role="status">در حال دریافت تاریخچه…</p><div id="eventTimeline" aria-label="تاریخچهٔ رویدادها"></div><button id="loadOlder" type="button" hidden>نمایش رویدادهای قدیمی‌تر</button>
+ </section>
+ <details class="wallet-import"><summary>بازیابی موجودی نتایج قدیمی از تلگرام</summary><p>خروجی JSON گفت‌وگو را از Telegram Desktop انتخاب کن. موجودی فقط برای ۵۰ نتیجهٔ اخیر با تطبیق نماد، جهت، سطوح قیمت و زمان پیام ثبت می‌شود؛ مقادیر ثبت‌شده تغییر نمی‌کنند.</p><label for="walletImportFile">فایل خروجی تلگرام (JSON، حداکثر ۲ مگابایت)</label><input type="file" id="walletImportFile" accept=".json,application/json"><button id="importWallets" type="button">بازیابی موجودی‌ها</button><p id="walletImportStatus" role="status"></p></details>
+</main><script src="/notifications.js?v=20261027-journal"></script>
+</body></html>

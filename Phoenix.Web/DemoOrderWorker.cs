@@ -267,6 +267,7 @@ public sealed class DemoOrderWorker(
             order.FailureReason = ProfessionalSignalAnalysisService.ExplainStop(order.TechnicalFeatures);
             await store.UpdateAsync(order, token);
             await CancelRiskFreeProtectionAsync(order, token);
+            await WalletNotification.CaptureAsync(client, store, order, token);
             await telegram.StopLossReachedAsync(order, token);
         }
 

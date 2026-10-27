@@ -30,6 +30,6 @@
   }catch(error){status.textContent=error.message+(lastSuccess?' اطلاعات نمایش‌داده‌شده مربوط به '+new Date(lastSuccess).toLocaleTimeString('fa-IR')+' است.':' دوباره تلاش کن.');}
   finally{busy=false;refresh.disabled=false;}
  }
- refresh.addEventListener('click',load);window.addEventListener('phoenix-signal-tab-changed',event=>{if(event.detail==='positions')load();});
+ window.addEventListener('phoenix-positions-refresh',load);refresh.addEventListener('click',load);window.addEventListener('phoenix-signal-tab-changed',event=>{if(event.detail==='positions')load();});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});setInterval(load,5000);
 })();

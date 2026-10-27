@@ -253,7 +253,7 @@ public sealed class ServerOrderStore
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(s => s.Id == id);
-            if (signal is null || signal.Outcome is not ("Target" or "RiskFree") || signal.ResultWalletAtUtc is not null) return;
+            if (signal is null || signal.Outcome is not ("Target" or "RiskFree" or "StopLoss") || signal.ResultWalletAtUtc is not null) return;
             signal.ResultWalletBalanceUsdt = balance; signal.ResultWalletAtUtc = at;
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "ResultWalletSnapshot", token);

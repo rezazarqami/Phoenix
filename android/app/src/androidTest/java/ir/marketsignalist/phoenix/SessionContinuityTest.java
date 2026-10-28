@@ -47,7 +47,7 @@ public class SessionContinuityTest {
             waitJs(scenario,"documentToken+'|'+document.getElementById('draft').value+'|'+scrollY","\"retained|unsent|500\"");
             int before=documents.get();
             scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED);
-            scenario.onActivity(app->app.onNewIntent(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)));
+            scenario.onActivity(app->app.onNewIntent(new Intent(app,MainActivity.class).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)));
             waitJs(scenario,"documentToken+'|'+document.getElementById('draft').value+'|'+scrollY","\"retained|unsent|500\"");
             assertEquals("Resume must not request a new document",before,documents.get());
             scenario.onActivity(app->{try{assertEquals(android.view.View.GONE,((android.view.View)field(app,"pageCover")).getVisibility());}catch(Exception e){throw new RuntimeException(e);}});

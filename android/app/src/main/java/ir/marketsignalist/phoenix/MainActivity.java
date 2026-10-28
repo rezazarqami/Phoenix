@@ -134,7 +134,10 @@ public final class MainActivity extends Activity {
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private void makePageCover(){
         pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(2,13,35));
-        loadingLogo=new ImageView(this);loadingLogo.setImageResource(R.drawable.phoenix_standalone_logo);
+        loadingLogo=new ImageView(this);
+        android.graphics.BitmapFactory.Options logoOptions=new android.graphics.BitmapFactory.Options();
+        logoOptions.inScaled=false;logoOptions.inSampleSize=2;
+        loadingLogo.setImageBitmap(android.graphics.BitmapFactory.decodeResource(getResources(),R.drawable.phoenix_standalone_logo,logoOptions));
         loadingLogo.setContentDescription("Phoenix");loadingLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         pageCover.addView(loadingLogo,new LinearLayout.LayoutParams(dp(180),dp(180)));
         loadingLabel=new TextView(this);loadingLabel.setText("Loading");loadingLabel.setTextColor(Color.WHITE);loadingLabel.setTextSize(18);

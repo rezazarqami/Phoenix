@@ -34,6 +34,8 @@ public class MainActivityTest {
     @Test public void initialLoadingShowsOnlyLogoAndCyclingEnglishDots()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"renderPageState");
         assertEquals(View.VISIBLE,((View)get(app,"loadingLogo")).getVisibility());
+        android.graphics.drawable.BitmapDrawable logo=(android.graphics.drawable.BitmapDrawable)((android.widget.ImageView)get(app,"loadingLogo")).getDrawable();
+        assertTrue("Splash artwork must not expand into a huge density-scaled bitmap",logo.getBitmap().getWidth()<=768);
         assertEquals(View.GONE,((View)get(app,"pageStatus")).getVisibility());
         assertEquals(View.GONE,((View)get(app,"retry")).getVisibility());
         assertEquals("Loading",((TextView)get(app,"loadingLabel")).getText().toString());

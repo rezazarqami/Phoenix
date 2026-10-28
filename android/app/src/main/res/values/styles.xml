@@ -1,9 +1,11 @@
 <resources>
     <style name="PhoenixTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">#f5f3f8</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:colorAccent">#73538f</item>
+        <item name="android:statusBarColor">#020d23</item>
+        <item name="android:navigationBarColor">#020d23</item>
+        <item name="android:windowBackground">#020d23</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorAccent">#009dff</item>
         <item name="android:fontFamily">sans</item>
     </style>
 </resources>

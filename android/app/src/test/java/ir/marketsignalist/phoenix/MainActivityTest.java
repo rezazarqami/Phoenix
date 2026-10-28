@@ -21,6 +21,13 @@ public class MainActivityTest {
     private Object get(MainActivity app,String name)throws Exception{Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(app);}
     private void set(MainActivity app,String name,Object value)throws Exception{Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);f.set(app,value);}
     private void call(MainActivity app,String name)throws Exception{Method m=MainActivity.class.getDeclaredMethod(name);m.setAccessible(true);m.invoke(app);}
+    @Test public void launcherUsesNewBundledArtworkAndDarkSystemBars(){
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
+        assertEquals(R.mipmap.phoenix_launcher_v20,app.getApplicationInfo().icon);
+        assertEquals(android.graphics.Color.rgb(2,13,35),app.getWindow().getStatusBarColor());
+        assertEquals(0,app.getWindow().getDecorView().getSystemUiVisibility() &
+            (View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR));
+    }
     @Test public void verifiedUnlockStartsRealPageBehindLoadingCover()throws Exception{
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
         set(app,"resumed",true);call(app,"unlock");

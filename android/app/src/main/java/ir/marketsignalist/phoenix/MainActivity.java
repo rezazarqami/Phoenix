@@ -45,11 +45,11 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        getWindow().setStatusBarColor(Color.rgb(245,243,248));getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().setStatusBarColor(Color.rgb(2,13,35));getWindow().setNavigationBarColor(Color.rgb(2,13,35));
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(245,243,248));
+        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(2,13,35));
         root.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
-        browser=new WebView(this);browser.setBackgroundColor(Color.rgb(245,243,248));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        browser=new WebView(this);browser.setBackgroundColor(Color.rgb(2,13,35));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
         settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.9.4");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
@@ -116,10 +116,10 @@ public final class MainActivity extends Activity {
     }
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private void makePageCover(){
-        pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(35,26,47));
+        pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(2,13,35));
         TextView title=new TextView(this);title.setText("فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
         pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
-        retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(220,250,82)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
+        retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(0,195,255)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
         connectionCheck=new Button(this);connectionCheck.setText("بررسی اتصال همین گوشی");connectionCheck.setOnClickListener(v->{if(unlocked&&pageFailed)checkConnection();});pageCover.addView(connectionCheck);
         pageCover.setVisibility(View.GONE);root.addView(pageCover,new FrameLayout.LayoutParams(-1,-1));
     }

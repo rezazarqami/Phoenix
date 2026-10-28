@@ -1,5 +1,9 @@
 (() => {
   'use strict';
+  document.getElementById('marketBack')?.addEventListener('click',()=>{
+    if(parent!==window)parent.postMessage({type:'phoenix-return-home'},location.origin);
+    else location.assign('/phoenix');
+  });
   const paths={send:'m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13',shield:'M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6l-9-4Zm-4 10 3 3 5-6',database:'M20 6c0 2-4 4-8 4S4 8 4 6s4-4 8-4 8 2 8 4ZM4 6v12c0 5 16 5 16 0V6M4 12c0 5 16 5 16 0',archive:'M4 7h16v14H4V7Zm-1-4h18v4H3V3Zm6 10h6m-3-2v4',chart:'M4 3h16v18H4V3Zm3 12 4-5 4 3 3-5',search:'M20 20l-5-5M17 9a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',bars:'M4 21v-7h3v7M11 21V9h3v12M18 21V3h3v18',clock:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 6v6l4 2',direction:'M3 7h18m-5-5 5 5-5 5M21 17H3m5-5-5 5 5 5',candles:'M5 2v20M2 7h6v9H2V7Zm10-6v22M9 4h6v9H9V4Zm10-2v20M16 9h6v8h-6V9Z',stop:'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z'};
   const icon=name=>`<svg viewBox="0 0 24 24" fill="${name==='stop'?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]}"/></svg>`;
   document.querySelectorAll('[data-market-icon]').forEach(el=>el.innerHTML=icon(el.dataset.marketIcon));

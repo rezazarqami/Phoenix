@@ -397,3 +397,6 @@ form.addEventListener('submit', async event => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
 setInterval(refreshStatus, 1000); setInterval(refreshSignals, 5000); setInterval(refreshHistory, 5000);
+
+// Resume the live data feeds without replacing the document or user input.
+window.addEventListener('phoenix-native-resume',()=>{refreshStatus();refreshSignals();refreshHistory();});

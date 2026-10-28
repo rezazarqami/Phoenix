@@ -19,8 +19,8 @@
         queued = false;
         const doc = frame.contentDocument;
         if (!doc?.body || !frame.getClientRects().length) return;
-        const height = Math.ceil(Math.max(doc.body.scrollHeight, doc.body.offsetHeight));
-        if (height > 0 && Math.abs(frame.getBoundingClientRect().height - height) > 2)
+        const height = Math.ceil(Math.max(doc.body.scrollHeight, doc.body.getBoundingClientRect().height))+2;
+        if (height > 0 && Math.abs(frame.getBoundingClientRect().height - height) > 1)
           frame.style.height = `${height}px`;
       });
     };
@@ -52,6 +52,7 @@
         frame.src = routes[name];
         frame.title = tab.textContent.trim();
         frame.className = 'home-content-frame';
+        frame.setAttribute('scrolling','no');
         fitFrame(frame);
         panel.append(frame);
       }
@@ -77,6 +78,12 @@
     const frame=document.querySelector('#panel-crypto iframe');
     if(event.origin!==location.origin || !frame || event.source!==frame.contentWindow || event.data?.type!=='phoenix-review-focus')return;
     if(!document.getElementById('panel-crypto').hidden)document.body.classList.toggle('review-focus-host',event.data.active===true);
+  });
+  window.addEventListener('message',event=>{
+    if(event.origin!==location.origin||event.data?.type!=='phoenix-return-home')return;
+    const frame=document.querySelector('#panel-crypto iframe');
+    if(!frame||event.source!==frame.contentWindow)return;
+    activate('home');window.scrollTo({top:0,behavior:'instant'});
   });
   window.addEventListener('hashchange', () => activate(location.hash.slice(1), false));
   window.addEventListener('message', event => {

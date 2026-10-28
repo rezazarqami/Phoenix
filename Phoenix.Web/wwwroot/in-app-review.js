@@ -3,7 +3,7 @@
  const list=document.getElementById('reviewList'),detail=document.getElementById('reviewDetail'),status=document.getElementById('reviewStatus'),pane=document.getElementById('market-pane-review');
  let items=[],selected=null,busy=false,loading=false,autoFocus=true;
  const text=(tag,value,className)=>Object.assign(document.createElement(tag),{textContent:value,...(className?{className}:{})});
- function focusReview(active){document.body.classList.toggle('review-focus',active);document.getElementById('closeReviewFocus').hidden=!active;if(parent!==window)parent.postMessage({type:'phoenix-review-focus',active},location.origin);}
+ function focusReview(active){const standalone=parent===window;document.body.classList.toggle('review-focus',standalone&&active);document.getElementById('closeReviewFocus').hidden=!standalone||!active;}
  const shortLabels={'فاصله تا ورود':'تا ورود','فاصله ورود تا تارگت':'تا تارگت','لوریج محاسبه‌شده':'اهرم محاسبه','حداکثر لوریج ارز':'سقف اهرم','لوریج قابل استفاده با این سقف':'اهرم مجاز','تایم‌فریم سیگنال':'تایم‌فریم'};
  function summary(item){
   const fields=[],near=[];let direction='',interval='';

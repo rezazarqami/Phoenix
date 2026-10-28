@@ -3,7 +3,8 @@
     crypto: '/analysis/coins?v=20260902-1&embed=1',
     signal: '/analysis/signals?v=20260827-4&embed=1',
     elliott: '/analysis?v=20260827-4&embed=1',
-    strategy: '/strategy2.html?embed=1'
+    strategy: '/strategy2.html?embed=1',
+    notifications: '/notifications?embed=1'
   };
   const tabs = [...document.querySelectorAll('.home-tab')];
   const settingsToggle = document.querySelector('#settingsToggle');
@@ -15,7 +16,7 @@
     const measure = () => {
       if (queued) return;
       queued = true;
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         queued = false;
         const doc = frame.contentDocument;
         if (!doc?.body || !frame.getClientRects().length) return;
@@ -29,7 +30,7 @@
       try {
         const doc = frame.contentDocument;
         if (!doc?.body) return;
-        observer = new ResizeObserver(measure);
+        observer = new doc.defaultView.ResizeObserver(measure);
         observer.observe(doc.body);
         measure();
       } catch { /* External navigation cannot be measured. */ }
@@ -38,31 +39,26 @@
     window.addEventListener('phoenix-tab-changed', measure);
   }
 
-  function activate(name, updateHash = true) {
-    if (!tabs.some(tab => tab.dataset.panel === name)) name = 'home';
-    for (const tab of tabs) {
-      const selected = tab.dataset.panel === name;
-      tab.classList.toggle('active', selected);
-      tab.setAttribute('aria-selected', String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-      const panel = document.querySelector('#panel-' + tab.dataset.panel);
-      panel.hidden = !selected;
-      if (selected && routes[name] && !panel.firstElementChild) {
-        const frame = document.createElement('iframe');
-        frame.src = routes[name];
-        frame.title = tab.textContent.trim();
-        frame.className = 'home-content-frame';
-        frame.setAttribute('scrolling','no');
-        fitFrame(frame);
-        panel.append(frame);
-      }
-    }
-    if(name!=='crypto')document.body.classList.remove('review-focus-host');
-    document.body.classList.toggle('crypto-market-open', name === 'crypto');
-    document.querySelector('.market-card').hidden = name !== 'home';
-    if (updateHash && location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
-    window.dispatchEvent(new CustomEvent('phoenix-tab-changed', { detail: name }));
+  function ensureFrame(name, query='') {
+    const panel=document.getElementById('panel-'+name);if(!routes[name])return;
+    const url=new URL(routes[name],location.origin),params=new URLSearchParams(query);
+    for(const key of ['symbol','eventId','view']){const value=params.get(key);if(value&&value.length<=200)url.searchParams.set(key,value);}
+    let frame=panel.querySelector('iframe');
+    if(!frame){frame=document.createElement('iframe');frame.title=name==='notifications'?'رویدادها و نتایج':tabs.find(tab=>tab.dataset.panel===name).textContent.trim();frame.className='home-content-frame';frame.setAttribute('scrolling','no');fitFrame(frame);panel.append(frame);}
+    if(!frame.dataset.route||(query&&frame.dataset.route!==url.href)){frame.dataset.route=url.href;frame.src=url.href;}
   }
+  function activate(name, updateHash=true, query='') {
+    if(!tabs.some(tab=>tab.dataset.panel===name)&&name!=='notifications')name='home';
+    for(const tab of tabs){const selected=tab.dataset.panel===name;tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected||(name==='notifications'&&tab.dataset.panel==='home')?0:-1;}
+    document.querySelectorAll('.home-section').forEach(panel=>panel.hidden=panel.id!=='panel-'+name);
+    ensureFrame(name,query);
+    document.body.classList.remove('review-focus-host');
+    document.body.classList.toggle('crypto-market-open',name==='crypto');
+    document.querySelector('.market-card').hidden=name!=='home';
+    const hash='#'+name+(query?'?'+query:'');if(updateHash&&location.hash!==hash)history.replaceState(null,'',hash);
+    window.dispatchEvent(new CustomEvent('phoenix-tab-changed',{detail:name}));
+  }
+  function fromHash(){const [name,query='']=location.hash.slice(1).split('?');activate(name,false,query);}
   tabs.forEach((tab, index) => {
     tab.addEventListener('click', () => activate(tab.dataset.panel));
     tab.addEventListener('keydown', event => {
@@ -74,27 +70,27 @@
       activate(tabs[next].dataset.panel);
     });
   });
-  window.addEventListener('message', event => {
-    const frame=document.querySelector('#panel-crypto iframe');
-    if(event.origin!==location.origin || !frame || event.source!==frame.contentWindow || event.data?.type!=='phoenix-review-focus')return;
-    if(!document.getElementById('panel-crypto').hidden)document.body.classList.toggle('review-focus-host',event.data.active===true);
-  });
   window.addEventListener('message',event=>{
-    if(event.origin!==location.origin||event.data?.type!=='phoenix-return-home')return;
-    const frame=document.querySelector('#panel-crypto iframe');
-    if(!frame||event.source!==frame.contentWindow)return;
-    activate('home');window.scrollTo({top:0,behavior:'instant'});
+    if(event.origin!==location.origin||event.data?.type!=='phoenix-navigate')return;
+    if(![...document.querySelectorAll('.home-content-frame')].some(frame=>frame.contentWindow===event.source))return;
+    if(!routes[event.data.panel]&&event.data.panel!=='home')return;
+    activate(event.data.panel,true,typeof event.data.query==='string'?event.data.query:'');
+    window.scrollTo({top:0,behavior:'instant'});
   });
-  window.addEventListener('hashchange', () => activate(location.hash.slice(1), false));
+  document.addEventListener('click',event=>{
+    const link=event.target.closest('a[href]');if(event.defaultPrevented||!link||link.getAttribute('href')?.startsWith('#')||link.target==='_blank'||link.hasAttribute('download')||event.ctrlKey||event.metaKey||event.shiftKey||event.button>0)return;
+    const route=window.PhoenixShellRoute?.(link.href);if(!route)return;
+    event.preventDefault();activate(route.panel,true,route.query);document.getElementById('notificationMenu').hidden=true;
+    document.getElementById('notificationToggle').setAttribute('aria-expanded','false');window.scrollTo({top:0,behavior:'instant'});
+  });
+  window.addEventListener('hashchange',fromHash);
   window.addEventListener('message', event => {
     if (event.origin !== location.origin || event.data?.type !== 'phoenix-open-signal') return;
     const symbol = String(event.data.symbol || '').toUpperCase();
     if (!/^[A-Z0-9]{2,24}$/.test(symbol)) return;
-    activate('signal');
-    const frame = document.querySelector('#panel-signal iframe');
-    frame.src = routes.signal + '&symbol=' + encodeURIComponent(symbol);
+    activate('signal',true,new URLSearchParams({symbol}).toString());
   });
-  activate(location.hash.slice(1), false);
+  fromHash();
 
   document.getElementById('returnHomeButton').addEventListener('click', () => activate('home'));
 

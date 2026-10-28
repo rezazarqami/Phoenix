@@ -58,15 +58,15 @@ const scripts=new Set(['live-positions.js','home-tabs.js','phoenix-ice.js','cryp
    if(process.env.REVIEW_SCREENSHOTS)await page.screenshot({path:process.env.REVIEW_SCREENSHOTS+`/empty-${width}.png`,fullPage:true});
    proposals=[{key:'fixture',symbol:'MUSDT',caption,image:'/fixture-chart.svg',createdAt:'2026-01-01T00:00:00Z',state:'Ready'}];
    await frame.locator('#market-tab-review').click();await frame.locator('#reviewDetail .review-actions').waitFor();
-   await page.waitForFunction(()=>document.body.classList.contains('review-focus-host'));await frame.locator('.review-chart img').evaluate(img=>img.decode());await frame.locator('body').evaluate(()=>document.fonts.ready);
+   assert.equal(await page.locator('.home-tab:visible').count(),6,'Review keeps the six main tabs');assert.equal(await page.locator('.phoenix-sky').isVisible(),true);assert.equal(await page.locator('body').evaluate(e=>e.classList.contains('review-focus-host')),false,'Review must not cover the shared header');await frame.locator('.review-chart img').evaluate(img=>img.decode());await frame.locator('body').evaluate(()=>document.fonts.ready);
    const measurements=await frame.locator('#market-pane-review').evaluate(e=>{
     const box=s=>document.querySelector(s).getBoundingClientRect().toJSON();
-    return {width:innerWidth,height:innerHeight,scroll:document.documentElement.scrollHeight,chart:box('.review-chart'),actions:box('.review-actions'),fields:[...document.querySelectorAll('.review-metrics b')].map(x=>x.textContent),reason:box('#reviewDetail>textarea'),overflow:document.documentElement.scrollWidth>innerWidth+1};
+    return {width:innerWidth,height:innerHeight,scroll:document.documentElement.scrollHeight,panel:box('#market-pane-review'),chart:box('.review-chart'),actions:box('.review-actions'),fields:[...document.querySelectorAll('.review-metrics b')].map(x=>x.textContent),reason:box('#reviewDetail>textarea'),overflow:document.documentElement.scrollWidth>innerWidth+1};
    });
-   assert.ok(!measurements.overflow,'No horizontal overflow');assert.ok(measurements.scroll<=measurements.height+2,'Review must fit one viewport');assert.ok(measurements.chart.height>=100,'Chart must retain usable space');assert.ok(measurements.actions.bottom<=measurements.height+1,'All decisions must remain visible');assert.ok(measurements.reason.bottom<=measurements.actions.top,'Reason and actions must not overlap');assert.ok(measurements.fields.includes('0.9854')&&measurements.fields.includes('×20 — محدود به سقف ارز'),'Prices and leverage cap must remain visible');
+   assert.ok(!measurements.overflow,'No horizontal overflow');assert.ok(measurements.chart.height>=100,'Chart must retain usable space');assert.ok(measurements.actions.bottom<=measurements.panel.bottom+1,'All decisions fit inside the review panel');assert.ok(measurements.reason.bottom<=measurements.actions.top,'Reason and actions must not overlap');assert.ok(measurements.fields.includes('0.9854')&&measurements.fields.includes('×20 — محدود به سقف ارز'),'Prices and leverage cap must remain visible');
    const filled=await frame.locator('.review-chart img').evaluate(img=>{const r=img.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};});assert.ok(filled.h>0);
    if(process.env.REVIEW_SCREENSHOTS)await page.screenshot({path:process.env.REVIEW_SCREENSHOTS+`/review-${width}.png`});
-   await frame.locator('#closeReviewFocus').click();await page.waitForFunction(()=>!document.body.classList.contains('review-focus-host'));
+   assert.equal(await frame.locator('#closeReviewFocus').isVisible(),false,'No fullscreen review mode inside the common shell');
    assert.deepEqual(errors,[],'No runtime errors');console.log(`PASS compact review ${width}x${height}: popover, empty state, iframe focus, chart, all fields and actions fit.`);
   }
  }finally{await browser.close();await new Promise(r=>server.close(r));}

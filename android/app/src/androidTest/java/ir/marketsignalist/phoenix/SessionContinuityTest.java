@@ -24,10 +24,10 @@ public class SessionContinuityTest {
         assertEquals(script,expected,value.get());
     }
     @Test public void returningFromAnotherAppOrLauncherRetainsDomInputAndScroll()throws Exception{
-        AtomicInteger documents=new AtomicInteger();
+        AtomicInteger documents=new AtomicInteger();AtomicReference<Intent> originalIntent=new AtomicReference<>();
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
             scenario.onActivity(app->{try{
-                WebView web=(WebView)field(app,"browser");web.stopLoading();WebViewClient original=web.getWebViewClient();
+                originalIntent.set(new Intent(app.getIntent()));WebView web=(WebView)field(app,"browser");web.stopLoading();WebViewClient original=web.getWebViewClient();
                 web.setWebViewClient(new WebViewClient(){
                     @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest request){
                         if(request.isForMainFrame()){
@@ -48,9 +48,11 @@ public class SessionContinuityTest {
             int before=documents.get();
             scenario.moveToState(Lifecycle.State.CREATED);scenario.moveToState(Lifecycle.State.RESUMED);
             scenario.onActivity(app->app.onNewIntent(new Intent(app,MainActivity.class).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)));
+            try{
             waitJs(scenario,"documentToken+'|'+document.getElementById('draft').value+'|'+scrollY","\"retained|unsent|500\"");
             assertEquals("Resume must not request a new document",before,documents.get());
             scenario.onActivity(app->{try{assertEquals(android.view.View.GONE,((android.view.View)field(app,"pageCover")).getVisibility());}catch(Exception e){throw new RuntimeException(e);}});
+            }finally{scenario.onActivity(app->app.setIntent(originalIntent.get()));}
         }
     }
 }

@@ -46,7 +46,7 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setStatusBarColor(Color.rgb(2,13,35));getWindow().setNavigationBarColor(Color.rgb(2,13,35));
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(0);
         root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(2,13,35));
         root.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(2,13,35));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);

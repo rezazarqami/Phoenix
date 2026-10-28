@@ -25,7 +25,15 @@ public final class MainActivity extends Activity {
     private static final String START_ROUTE="/phoenix";
     private WebView browser;
     private FrameLayout root;
-    private TextView pageStatus;
+    private TextView pageStatus, loadingLabel;
+    private ImageView loadingLogo;
+    private int loadingDots=0;
+    private boolean hasRenderedPage=false;
+    private final Runnable loadingTick=new Runnable(){public void run(){
+        if(!pageLoading||pageFailed||!resumed)return;
+        loadingDots=(loadingDots+1)%4;loadingLabel.setText("Loading"+"...".substring(0,loadingDots));
+        ui.postDelayed(this,450);
+    }};
     private LinearLayout pageCover;
     private Button retry, connectionCheck;
     private int loadProgress=0;
@@ -52,7 +60,7 @@ public final class MainActivity extends Activity {
         browser=new WebView(this);browser.setBackgroundColor(Color.rgb(2,13,35));browser.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(browser,new FrameLayout.LayoutParams(-1,-1));makePageCover();setContentView(root);readIntent(getIntent());
         WebSettings settings=browser.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/1.9.4");settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setUserAgentString(settings.getUserAgentString()+" PhoenixAndroid/"+BuildConfig.VERSION_NAME);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(browser,false);
         browser.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView view,int progress){loadProgress=progress;}
@@ -112,12 +120,26 @@ public final class MainActivity extends Activity {
                 handleMessage(message.getData(),reply);
             });
         }
+        if(state!=null){Bundle saved=state.getBundle("phoenixWebState");
+            if(saved!=null&&browser.restoreState(saved)!=null){initialLoaded=true;lastUrl=browser.getUrl();
+                if(getIntent()==null||!"phoenix.open".equals(getIntent().getAction()))requestedRoute=null;
+                beginLoading();
+            }
+        }
         unlock();
+    }
+    @Override protected void onSaveInstanceState(Bundle out){
+        Bundle saved=new Bundle();browser.saveState(saved);out.putBundle("phoenixWebState",saved);super.onSaveInstanceState(out);
     }
     private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
     private void makePageCover(){
         pageCover=new LinearLayout(this);pageCover.setOrientation(LinearLayout.VERTICAL);pageCover.setGravity(Gravity.CENTER);pageCover.setPadding(dp(34),dp(34),dp(34),dp(34));pageCover.setBackgroundColor(Color.rgb(2,13,35));
-        TextView title=new TextView(this);title.setText("فونیکس");title.setTextColor(Color.WHITE);title.setTextSize(30);pageCover.addView(title);
+        loadingLogo=new ImageView(this);loadingLogo.setImageResource(R.drawable.phoenix_standalone_logo);
+        loadingLogo.setContentDescription("Phoenix");loadingLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        pageCover.addView(loadingLogo,new LinearLayout.LayoutParams(dp(180),dp(180)));
+        loadingLabel=new TextView(this);loadingLabel.setText("Loading");loadingLabel.setTextColor(Color.WHITE);loadingLabel.setTextSize(18);
+        loadingLabel.setTextDirection(View.TEXT_DIRECTION_LTR);loadingLabel.setGravity(Gravity.CENTER);loadingLabel.setPadding(0,dp(18),0,0);
+        loadingLabel.setTypeface(android.graphics.Typeface.MONOSPACE);pageCover.addView(loadingLabel,new LinearLayout.LayoutParams(dp(180),dp(60)));
         pageStatus=new TextView(this);pageStatus.setTextColor(Color.rgb(230,215,240));pageStatus.setTextSize(16);pageStatus.setGravity(Gravity.CENTER);pageStatus.setPadding(0,dp(21),0,dp(21));pageCover.addView(pageStatus);
         retry=new Button(this);retry.setText("تلاش مجدد");retry.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(0,195,255)));retry.setOnClickListener(v->{if(unlocked){browser.stopLoading();loadPage(lastUrl);}});pageCover.addView(retry);
         connectionCheck=new Button(this);connectionCheck.setText("بررسی اتصال همین گوشی");connectionCheck.setOnClickListener(v->{if(unlocked&&pageFailed)checkConnection();});pageCover.addView(connectionCheck);
@@ -125,21 +147,23 @@ public final class MainActivity extends Activity {
     }
     private void renderPageState(){
         if(!unlocked){pageCover.setVisibility(View.GONE);return;}
-        boolean covered=pageLoading||pageFailed;
+        boolean covered=(pageLoading&&!hasRenderedPage)||pageFailed;
         pageCover.setVisibility(covered?View.VISIBLE:View.GONE);
+        loadingLabel.setVisibility(pageFailed?View.GONE:View.VISIBLE);pageStatus.setVisibility(pageFailed?View.VISIBLE:View.GONE);
+        ui.removeCallbacks(loadingTick);if(covered&&pageLoading&&!pageFailed&&resumed)ui.postDelayed(loadingTick,450);
         // Keep the WebView visible behind the opaque cover so its compositor can produce a frame.
         browser.setVisibility(View.VISIBLE);
         retry.setVisibility(pageFailed?View.VISIBLE:View.GONE);connectionCheck.setVisibility(pageFailed?View.VISIBLE:View.GONE);connectionCheck.setEnabled(!checkingConnection);
     }
     private void beginLoading(){
-        navigation++;loadProgress=0;loadStage="شروع درخواست";pageLoading=true;pageFailed=false;pageStatus.setText("در حال اتصال و بازکردن برنامه…");
+        navigation++;loadProgress=0;loadStage="شروع درخواست";pageLoading=true;pageFailed=false;loadingDots=0;loadingLabel.setText("Loading");
         ui.removeCallbacks(loadTimeout);ui.postDelayed(loadTimeout,30000);renderPageState();
     }
     private void pageReady(String url){
         // A committed document is usable even when a font/image is still loading.
         // Never make page availability depend on a compositor fence beneath an opaque cover.
         if(!pageFailed&&TrustedNavigation.trusted(url)&&url.equals(browser.getUrl())){
-            lastUrl=url;pageLoading=false;ui.removeCallbacks(loadTimeout);renderPageState();
+            lastUrl=url;hasRenderedPage=true;pageLoading=false;ui.removeCallbacks(loadTimeout);renderPageState();
         }
     }
     private void checkConnection(){
@@ -170,12 +194,17 @@ public final class MainActivity extends Activity {
     private boolean deviceSecure(){return getSystemService(KeyguardManager.class).isDeviceSecure();}
     private void unlock(){
         if(isFinishing())return;
-        unlocked=true;browser.setVisibility(View.VISIBLE);browser.onResume();browser.requestLayout();
-        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?START_ROUTE:requestedRoute;loadPage(HOME+route);initialLoaded=true;requestedRoute=null;}
+        unlocked=true;browser.setVisibility(View.VISIBLE);
+        if(!initialLoaded||requestedRoute!=null){String route=requestedRoute==null?START_ROUTE:requestedRoute;
+            if(!initialLoaded||!(HOME+route).equals(browser.getUrl()))loadPage(HOME+route);
+            initialLoaded=true;requestedRoute=null;
+        }
         renderPageState();
         browser.evaluateJavascript("window.dispatchEvent(new Event('phoenix-native-resume'))",null);
     }
     private void readIntent(Intent intent){
+        // Returning through the launcher restores the existing document, tab, inputs and scroll.
+        if(initialLoaded&&(intent==null||!"phoenix.open".equals(intent.getAction())))return;
         String route=intent!=null&&"phoenix.open".equals(intent.getAction())?TrustedNavigation.route(intent.getStringExtra("route")):"/";
         // Notifications already in the tray can retain the pre-history home route.
         if(START_ROUTE.equals(route)&&intent!=null&&intent.getData()!=null){
@@ -186,8 +215,8 @@ public final class MainActivity extends Activity {
         requestedRoute="/".equals(route)?START_ROUTE:route;
     }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);readIntent(intent);unlock();}
-    @Override protected void onResume(){super.onResume();if(PhoenixAlertService.prefs(this).getBoolean("enabled",false))try{PhoenixAlertService.start(this);}catch(Exception ignored){}getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;unlock();}
-    @Override protected void onPause(){resumed=false;CookieManager.getInstance().flush();browser.onPause();super.onPause();}
+    @Override protected void onResume(){super.onResume();if(PhoenixAlertService.prefs(this).getBoolean("enabled",false))try{PhoenixAlertService.start(this);}catch(Exception ignored){}getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);resumed=true;browser.onResume();unlock();}
+    @Override protected void onPause(){resumed=false;ui.removeCallbacks(loadingTick);CookieManager.getInstance().flush();browser.onPause();super.onPause();}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(browser!=null)browser.evaluateJavascript("window.dispatchEvent(new Event('phoenix-native-resume'))",null);}
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);

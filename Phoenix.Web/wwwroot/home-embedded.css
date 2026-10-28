@@ -13,3 +13,8 @@ html.embedded-view body{min-height:0!important}
 #marketMore{display:block;margin:16px auto;padding:12px 24px;border:1px solid #c59a46;border-radius:10px;background:#1c2027;color:#f7d589}
 #marketMore[hidden]{display:none}
 @media(max-width:600px){.topbar,body>header{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}}
+
+/* Embedded pages size intrinsically; clip does not create an inner scroll owner. */
+html.embedded-view{height:auto!important;min-height:0!important;overflow:clip!important;scroll-behavior:auto!important}
+html.embedded-view body{height:auto;overflow:visible!important;min-height:0!important}
+html.embedded-view body.review-focus{height:100dvh!important;overflow:hidden!important}

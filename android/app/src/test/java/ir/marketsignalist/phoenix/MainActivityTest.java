@@ -21,6 +21,32 @@ public class MainActivityTest {
     private Object get(MainActivity app,String name)throws Exception{Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(app);}
     private void set(MainActivity app,String name,Object value)throws Exception{Field f=MainActivity.class.getDeclaredField(name);f.setAccessible(true);f.set(app,value);}
     private void call(MainActivity app,String name)throws Exception{Method m=MainActivity.class.getDeclaredMethod(name);m.setAccessible(true);m.invoke(app);}
+    @Test public void launcherReturnKeepsTheCurrentPageAndDoesNotNavigate()throws Exception{
+        ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).create().start().resume();
+        MainActivity app=controller.get();set(app,"pageLoading",false);set(app,"hasRenderedPage",true);
+        long before=(Long)get(app,"navigation");
+        controller.pause().stop().restart().start().resume();
+        app.onNewIntent(new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER));
+        assertEquals(before,((Long)get(app,"navigation")).longValue());
+        assertNull(get(app,"requestedRoute"));assertFalse((Boolean)get(app,"pageLoading"));
+        assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
+    }
+    @Test public void initialLoadingShowsOnlyLogoAndCyclingEnglishDots()throws Exception{
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();set(app,"resumed",true);call(app,"renderPageState");
+        assertEquals(View.VISIBLE,((View)get(app,"loadingLogo")).getVisibility());
+        assertEquals(View.GONE,((View)get(app,"pageStatus")).getVisibility());
+        assertEquals(View.GONE,((View)get(app,"retry")).getVisibility());
+        assertEquals("Loading",((TextView)get(app,"loadingLabel")).getText().toString());
+        for(String expected:new String[]{"Loading.","Loading..","Loading...","Loading"}){
+            ((Runnable)get(app,"loadingTick")).run();assertEquals(expected,((TextView)get(app,"loadingLabel")).getText().toString());
+        }
+    }
+    @Test public void navigationAfterFirstPaintKeepsTheDocumentVisible()throws Exception{
+        MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
+        set(app,"hasRenderedPage",true);call(app,"beginLoading");
+        assertEquals(View.GONE,((View)get(app,"pageCover")).getVisibility());
+        assertEquals(View.VISIBLE,((View)get(app,"browser")).getVisibility());
+    }
     @Test public void launcherUsesNewBundledArtworkAndDarkSystemBars(){
         MainActivity app=Robolectric.buildActivity(MainActivity.class).create().get();
         assertEquals(R.mipmap.phoenix_launcher_v20,app.getApplicationInfo().icon);

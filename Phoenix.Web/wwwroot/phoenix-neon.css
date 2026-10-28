@@ -22,3 +22,5 @@ body{color:#edf5ff;background:linear-gradient(#020d2320,#020d2350),url('/analysi
 
 /* Native WebView already applies system insets; never add a second top inset. */
 html.android-shell body{padding-top:0!important}
+
+html{scroll-behavior:auto}body{overflow-x:clip}.home-content-frame{touch-action:auto;overflow:clip}

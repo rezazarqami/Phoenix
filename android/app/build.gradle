@@ -8,8 +8,8 @@ android {
         minSdk 26
         targetSdk 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 19
-        versionName '1.9.9-neon'
+        versionCode 20
+        versionName '1.9.10-hero'
         // Public Firebase app identifiers only. Never place a service account here.
         ['APP_ID','API_KEY','PROJECT_ID','SENDER_ID'].each { key ->
             def value = System.getenv('PHOENIX_FIREBASE_' + key) ?: ''
@@ -24,7 +24,7 @@ android {
         phoenix {
             dimension 'client'
             applicationIdSuffix '.standalone.capture'
-            manifestPlaceholders = [clientLabel: 'Phoenix', clientIcon: '@drawable/phoenix_standalone_logo']
+            manifestPlaceholders = [clientLabel: 'Phoenix', clientIcon: '@mipmap/phoenix_launcher_v20']
             buildConfigField 'boolean', 'PHOENIX_ONLY', 'true'
         }
     }

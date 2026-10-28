@@ -2,7 +2,7 @@
    Layout and all trading controls remain owned by phoenix-ice.css. */
 :root{color-scheme:dark;--blue:#009dff;--yellow:#009dff;--green:#00e6bd;--red:#ff5676;--muted:#b4c6e4;--panel:#061a37;--panel2:#071e40;--line:#1763ad;color:#f4f8ff;background:#020d23}
 body{color:#edf5ff;background:linear-gradient(#020d2320,#020d2350),url('/analysis-assets/phoenix-matrix.png') center top/100% auto repeat-y;background-attachment:scroll}
-.phoenix-sky{background:transparent}.phoenix-hero-animation{opacity:.82;mix-blend-mode:screen}.home-brand-logo{filter:drop-shadow(0 0 8px #009dff80)}
+.phoenix-sky{background:#06152c}.phoenix-hero-animation{opacity:1;mix-blend-mode:normal}.home-brand-logo{filter:drop-shadow(0 0 8px #009dff80)}
 .home-tabs,.market-card,.signal-center{background:linear-gradient(125deg,#03152db8,#00091bbf 65%,#031630b3);border:1px solid #188dff;box-shadow:inset 0 0 18px #087bff55,0 0 16px #007bff35;-webkit-backdrop-filter:blur(.7px);backdrop-filter:blur(.7px)}
 .home-tab{background:linear-gradient(145deg,#061c3ba6,#010b20b3);border-color:#1463a9;color:#f7faff;box-shadow:inset 0 0 12px #087bff25,0 3px 9px #0005}
 .home-tab:hover{background:#0b3973;color:#fff}.home-tab.active{background:linear-gradient(135deg,#00d9ff,#0079ff 40%,#003c9d);border-color:#45f4ff;box-shadow:inset 0 0 12px #34efff,0 0 13px #00caff,0 0 25px #006eff88}
@@ -19,3 +19,6 @@ body{color:#edf5ff;background:linear-gradient(#020d2320,#020d2350),url('/analysi
 /* Subtle glass: translucent navy layers retain a faint view of the matrix. */
 .signal-center>.card,.home-tab{-webkit-backdrop-filter:blur(.4px);backdrop-filter:blur(.4px)}
 .position-card,.active-signal-row,.signal-center .order,.signal-center .history-item{background:#020e24a6}
+
+/* Native WebView already applies system insets; never add a second top inset. */
+html.android-shell body{padding-top:0!important}

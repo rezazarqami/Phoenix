@@ -392,8 +392,8 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
     return Results.Ok(signals.OrderByDescending(x => x.CreatedAtUtc));
 });
 
-app.MapGet("/api/history", async (int? days, int? limit, ServerOrderStore store, CancellationToken token) =>
-    Results.Ok(await store.GetHistoryAsync(days ?? 30, limit ?? 1000, token)));
+app.MapGet("/api/history", async (int? days, int? limit, string? source, ServerOrderStore store, CancellationToken token) =>
+    source is not (null or "normal" or "manual") ? Results.BadRequest(new {error="منشأ نتایج معتبر نیست."}) : Results.Ok(await store.GetHistoryAsync(days ?? 30, limit ?? 1000, token,source)));
 
 app.MapGet("/api/crypto-statistics", async (string? strategy, ServerOrderStore store,
     Strategy2Runtime strategy2, HttpResponse response, CancellationToken token) =>

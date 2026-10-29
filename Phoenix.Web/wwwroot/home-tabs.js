@@ -20,12 +20,13 @@
         queued = false;
         const doc = frame.contentDocument;
         if (!doc?.body || !frame.getClientRects().length) return;
+        doc.documentElement.style.setProperty('--phoenix-viewport-height', `${window.innerHeight}px`);
         const height = Math.ceil(Math.max(doc.body.scrollHeight, doc.body.getBoundingClientRect().height))+2;
         if (height > 0 && Math.abs(frame.getBoundingClientRect().height - height) > 1)
           frame.style.height = `${height}px`;
       });
     };
-    frame.addEventListener('load', () => {
+    const initialize = () => {
       observer?.disconnect();
       try {
         const doc = frame.contentDocument;
@@ -34,6 +35,10 @@
         observer.observe(doc.body);
         measure();
       } catch { /* External navigation cannot be measured. */ }
+    };
+    frame.addEventListener('load', initialize);
+    window.addEventListener('message', event => {
+      if(event.origin===location.origin&&event.source===frame.contentWindow&&event.data?.type==='phoenix-frame-ready')initialize();
     });
     window.addEventListener('resize', measure);
     window.addEventListener('phoenix-tab-changed', measure);
@@ -42,7 +47,7 @@
   function ensureFrame(name, query='') {
     const panel=document.getElementById('panel-'+name);if(!routes[name])return;
     const url=new URL(routes[name],location.origin),params=new URLSearchParams(query);
-    for(const key of ['symbol','eventId','view']){const value=params.get(key);if(value&&value.length<=200)url.searchParams.set(key,value);}
+    for(const key of ['symbol','eventId','view','source']){const value=params.get(key);if(value&&value.length<=200)url.searchParams.set(key,value);}
     let frame=panel.querySelector('iframe');
     if(!frame){frame=document.createElement('iframe');frame.title=name==='notifications'?'رویدادها و نتایج':tabs.find(tab=>tab.dataset.panel===name).textContent.trim();frame.className='home-content-frame';frame.setAttribute('scrolling','no');fitFrame(frame);panel.append(frame);}
     if(!frame.dataset.route||(query&&frame.dataset.route!==url.href)){frame.dataset.route=url.href;frame.src=url.href;}

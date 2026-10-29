@@ -1,5 +1,6 @@
 (() => {
- 'use strict';const list=document.getElementById('orders'),controls=document.getElementById('activeSelectionControls'),all=document.getElementById('selectAllSignals'),cancel=document.getElementById('cancelSelectedSignals'),status=document.getElementById('activeActionStatus');
+ 'use strict';
+ function mount({list,controls,all,cancel,status,refresh}) {
  list.replaceChildren();
  let signals=[],admin=false,busy=false;const selected=new Set(),rows=new Map();
  const make=(tag,value,cls)=>Object.assign(document.createElement(tag),{textContent:value,className:cls||''});
@@ -28,10 +29,15 @@
   try{if(!await phoenixConfirm(ids.length.toLocaleString('fa-IR')+' سیگنال انتخاب‌شدهٔ منتظر ورود لغو شود؟'))return;
    status.textContent='در حال لغو انتخاب‌شده‌ها…';const response=await fetch('/api/signals/cancel-selected',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});const data=await response.json();if(!response.ok)throw Error(data.error||(response.status===401?'نشست منقضی شده است.':'لغو انجام نشد.'));
    for(const item of data.items)if(item.cancelled)selected.delete(item.id);status.textContent=Number(data.cancelled).toLocaleString('fa-IR')+' سیگنال لغو شد.'+(data.items.some(x=>!x.cancelled)?' '+data.items.filter(x=>!x.cancelled).map(x=>x.message).join(' · '):'');
-   await refreshSignals();await refreshHistory();
+   await refresh();
   }catch(error){status.textContent=error.message;}finally{busy=false;selection();}
  }
  all.addEventListener('click',()=>{const available=signals.filter(eligible);const clear=available.every(s=>selected.has(s.id));for(const s of available)clear?selected.delete(s.id):selected.add(s.id);selection();});cancel.addEventListener('click',()=>cancelIds([...selected]));
- window.PhoenixActiveSignals={render};window.addEventListener('phoenix-signals-updated',event=>render(event.detail));if(window.phoenixActiveSignals)render(window.phoenixActiveSignals);
  fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.json()).then(session=>{admin=!!session.isAdmin;controls.hidden=!admin;selection();}).catch(()=>{admin=false;selection();});
+ return {render,stop(){for(const row of rows.values())row.stop();}};
+ }
+ window.PhoenixActiveSignalsUI={mount};
+ const list=document.getElementById('orders');if(!list)return;
+ const component=mount({list,controls:document.getElementById('activeSelectionControls'),all:document.getElementById('selectAllSignals'),cancel:document.getElementById('cancelSelectedSignals'),status:document.getElementById('activeActionStatus'),refresh:async()=>{await refreshSignals();await refreshHistory();}});
+ window.PhoenixActiveSignals=component;window.addEventListener('phoenix-signals-updated',event=>component.render(event.detail));if(window.phoenixActiveSignals)component.render(window.phoenixActiveSignals);
 })();

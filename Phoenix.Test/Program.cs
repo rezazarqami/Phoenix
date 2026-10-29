@@ -8,6 +8,7 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Journal sources filter before paging and preserve legacy wallets across restart", JournalSourceTests.Isolation);
 Run("Manual chart plans retain explicit levels, leverage and both directional protection policies", ManualSignalTests.Plans);
 Run("Manual chart source and initial expiry results survive restart independently", ManualSignalTests.Archive);
 Run("Live positions retain exchange PnL, hedge sides and unknown margins", LivePositionTests.ExchangeValues);

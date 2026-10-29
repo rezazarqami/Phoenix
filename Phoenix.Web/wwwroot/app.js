@@ -337,20 +337,20 @@ function resultLabel(signal) {
   return statusLabel(signal.status);
 }
 
-async function refreshHistory() {
-  try {
-    const response = await fetch('/api/history?days=30&limit=1000', { cache: 'no-store' });
-    const items = await response.json();
-    const finished = items.filter(item => isFinished({ ...item.signal, removedAtUtc: item.removedAtUtc }));
+let historySource='normal',historyItems=[],historyCache={normal:[],manual:[]};
+function renderHistory(){
+    const items=historyItems;
+    const finished = items.filter(item => (historySource==='manual')===(item.signal.origin==='ManualChart') && isFinished({ ...item.signal, removedAtUtc: item.removedAtUtc }));
     document.querySelector('#historyCount').textContent = fa.format(finished.length);
     document.querySelector('#history').innerHTML = finished.length ? finished.map(item => {
       const s = item.signal;
       const ended = s.completedAtUtc || s.targetReachedAtUtc || s.riskFreeClosedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
       const reason = s.outcome === 'Expired' ? `<em class="expire-reason">${s.expireReason === 'InitialBoundary' ? 'عبور از مرز اولیه سقف/کف' : 'بازگشت به تارگت بعد از فعال‌شدن اکسپایر'}</em>` : '';
-      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
+      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${s.leverageSource === 'Manual' ? 'MANUAL LEVERAGE' : s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
     }).join('') : '<div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div>';
-  } catch { /* history remains unchanged until the next refresh */ }
 }
+document.querySelectorAll('[data-history-source]').forEach(button=>button.addEventListener('click',()=>{historySource=button.dataset.historySource;document.querySelectorAll('[data-history-source]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));historyItems=historyCache[historySource];renderHistory();refreshHistory();}));
+async function refreshHistory(){const source=historySource;try{const response=await fetch('/api/history?days=30&limit=1000&source='+source,{cache:'no-store'});if(!response.ok)return;historyCache[source]=await response.json();if(source===historySource){historyItems=historyCache[source];renderHistory();}}catch{/* Keep the last history while reconnecting. */}}
 
 function statusLabel(status) {
   if (status === 'Closing') return 'درخواست بستن؛ منتظر تأیید صرافی';

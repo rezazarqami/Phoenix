@@ -25,3 +25,4 @@ html body,html.embedded-view body{background:#061a37!important;color:#edf5ff;col
 .event-card .event-wallet{border-color:#21598b;color:#b4c6e4}.event-wallet b{color:#74deff}.event-wallet .wallet-missing{color:#b4c6e4}
 .event-card[data-kind=Target] .event-kind{color:#00e6bd}.event-card[data-kind=StopLoss] .event-kind{color:#ff7894}
 .event-card[data-kind=RiskFree] .event-kind,.event-card[data-kind=FirstProtection] .event-kind,.event-card[data-kind=RiskFreeReached] .event-kind{color:#50d9d2}
+.journal-sources,.history-sources{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0 8px}.journal-sources button,.history-sources button{font:11px Vazir,Tahoma,sans-serif;padding:9px 6px;border:1px solid #21598b;border-radius:9px;color:#c3d8ed;background:#061a37;cursor:pointer}.journal-sources button[aria-pressed=true],.history-sources button[aria-pressed=true]{color:#80dfff;border-color:#2395c1;background:#092c4d}

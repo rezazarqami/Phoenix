@@ -25,7 +25,7 @@ final class PhoenixNotifications {
     static boolean channelAllowed(Context c,String id){NotificationChannel channel=c.getSystemService(NotificationManager.class).getNotificationChannel(SIGNALS.equals(id)?selectedChannel(c):id);return allowed(c)&&channel!=null&&channel.getImportance()!=NotificationManager.IMPORTANCE_NONE;}
     static void show(Context c,String channel,String eventId,String route){show(c,channel,eventId,route,null);}
     static void show(Context c,String channel,String eventId,String route,String eventKind){
-        if(!SIGNALS.equals(channel)||java.util.Arrays.asList("Created","Cancelled","ManualClosed").contains(eventKind))return;
+        if(!SIGNALS.equals(channel)||java.util.Arrays.asList("Created","Cancelled").contains(eventKind))return;
         showText(c,eventId,signalText(eventKind));
     }
     static void showText(Context c,String eventId,String text){
@@ -49,6 +49,7 @@ final class PhoenixNotifications {
             case "Target":return "یک سیگنال به تارگت رسید.";
             case "StopLoss":return "یک سیگنال به استاپ رسید.";
             case "RiskFree":return "یک معامله با ریسک‌فری بسته شد.";
+            case "EntryError":return "ورود معامله با خطا مواجه شد؛ علت را در نتایج ببین.";
             case "Expired":return "یک سیگنال اکسپایر شد.";
             case "Cancelled":return "یک سیگنال لغو شد.";
             case "ManualClosed":return "یک معامله به‌صورت دستی بسته شد.";

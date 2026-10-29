@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Phoenix.Web;
 
-public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null, decimal? WalletBalanceUsdt=null, DateTime? WalletAtUtc=null, string? WalletSource=null, string? Origin=null);
+public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null, decimal? WalletBalanceUsdt=null, DateTime? WalletAtUtc=null, string? WalletSource=null, string? Origin=null,string? Reason=null);
 public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<DeviceSignalAlert> Events,DateTime ServerTimeUtc);
 
 // First-party authenticated feed. No Telegram, Firebase, third-party account or device secret is needed.
@@ -25,6 +25,10 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
             CREATE TABLE IF NOT EXISTS device_history_sources_initialized(owner TEXT PRIMARY KEY);
             """;await cmd.ExecuteNonQueryAsync(token);return db;
     }
+    internal static string? EventReason(ServerSignal s) => s.Outcome=="EntryError" || s.Status is "Error" or "Rejected" or "Deactivated" or "RecoveryRequired"
+        ? (s.Error?.Contains("110007")==true || s.Error?.Contains("110004")==true || s.Error?.Contains("balance",StringComparison.OrdinalIgnoreCase)==true ? "ورود انجام نشد: موجودی قابل استفاده کافی نیست." : "ورود با خطا مواجه شد: "+(s.Error??s.Status))
+        : s.ExpireReason=="TimeframeBlocked" ? "سیگنال هنگام توقف این تایم‌فریم به ورود رسید و منقضی شد." : null;
+    public static DeviceSignalPage ForClient(DeviceSignalPage page,int version) => version>=2 ? page : page with {Events=page.Events.Where(e=>e.Kind is not ("EntryError" or "ManualClosed")).ToArray()};
     public async Task CaptureAsync(string owner,CancellationToken token)
     {
         await gate.WaitAsync(token);
@@ -39,7 +43,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
                 var e=pair.Event;var s=pair.Signal;
                 if(e.At.Kind!=DateTimeKind.Utc || e.At<now.AddDays(-1) || e.At>now)continue;
                 using var cmd=db.CreateCommand();cmd.Transaction=tx;
-                var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,Origin:s.Origin);
+                var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,Origin:s.Origin,Reason:EventReason(s));
                 cmd.CommandText="INSERT OR IGNORE INTO device_signal_events(owner,event_id,payload,at_utc) VALUES($owner,$id,$payload,$at)";
                 cmd.Parameters.AddWithValue("$owner",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
                 cmd.Parameters.AddWithValue("$payload",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));
@@ -50,7 +54,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
             clean.Parameters.AddWithValue("$before",now.AddDays(-7).ToString("O"));await clean.ExecuteNonQueryAsync(token);
             using var filtered=db.CreateCommand();filtered.Transaction=tx;
             filtered.CommandText="""
-                DELETE FROM device_signal_events WHERE json_extract(payload,'$.Kind') IN ('Created','Cancelled','ManualClosed')
+                DELETE FROM device_signal_events WHERE json_extract(payload,'$.Kind') IN ('Created','Cancelled')
                 OR (json_extract(payload,'$.Kind')='Expired' AND NOT EXISTS(
                     SELECT 1 FROM device_signal_events near WHERE near.owner=device_signal_events.owner
                     AND near.event_id=replace(device_signal_events.event_id,':Expired',':NearEntry')));

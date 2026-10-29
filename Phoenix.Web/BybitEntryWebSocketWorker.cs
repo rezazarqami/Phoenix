@@ -95,12 +95,12 @@ public sealed class BybitEntryWebSocketWorker(
                 var text = trade.GetProperty("p").GetString();
                 if (symbol is not null && decimal.TryParse(text, NumberStyles.Number,
                         CultureInfo.InvariantCulture, out var price))
-                    await HandleTradeAsync(symbol, price, token);
+                    await HandleTradeAsync(symbol, price, token,trade.TryGetProperty("T",out var time)&&time.TryGetInt64(out var milliseconds)?DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime:DateTime.UtcNow);
             }
         }
     }
 
-    private async Task HandleTradeAsync(string symbol, decimal price, CancellationToken token)
+    private async Task HandleTradeAsync(string symbol, decimal price, CancellationToken token,DateTime observedAtUtc)
     {
         if (!DemoOrderWorker.IsTradingEnabled(options)) return;
         var candidates = _pending.Values.Where(x => x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase));
@@ -110,7 +110,7 @@ public sealed class BybitEntryWebSocketWorker(
             await store.ExecutionGate.WaitAsync(token);
             try
             {
-                if (EntryReached(watch, price) && await store.TryClaimSubmissionAsync(watch.Id, price, token))
+                if (EntryReached(watch, price) && await store.TryClaimSubmissionAsync(watch.Id, price, token,observedAtUtc))
                 {
                     _pending.TryRemove(watch.Id, out _);
                     claimed = (await store.GetAllAsync(token)).Single(x => x.Id == watch.Id);
@@ -158,9 +158,10 @@ public sealed class BybitEntryWebSocketWorker(
             }
             else
             {
-                order.Status = "Error";
+                order.Status = exception is HttpRequestException or OperationCanceledException ? "RecoveryRequired" : "Error";
                 order.Error = exception.Message;
                 logger.LogError(exception, "WebSocket-triggered order {OrderLinkId} failed", order.OrderLinkId);
+                await store.UpdateAsync(order, token);
                 await telegram.OrderErrorAsync(order, token);
             }
         }

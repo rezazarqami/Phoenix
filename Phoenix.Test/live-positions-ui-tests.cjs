@@ -4,7 +4,7 @@ const {JSDOM}=require('./ui/node_modules/jsdom');
  const root=path.join(__dirname,'../Phoenix.Web/wwwroot'),dom=new JSDOM(fs.readFileSync(path.join(root,'phoenix.html'),'utf8'),{url:'https://marketsignalist.ir/phoenix',runScripts:'outside-only'});
  const w=dom.window,d=w.document;let timer,requests=0,fail=false;w.setInterval=f=>{timer=f;return 1;};
  Object.defineProperty(d,'hidden',{value:false,configurable:true});
- w.fetch=async()=>{requests++;return {ok:!fail,status:fail?503:200,json:async()=>({updatedAtUtc:'2026-10-27T01:00:00Z',items:[
+ w.fetch=async(url)=>{if(url==='/api/auth/me')return {ok:true,json:async()=>({isAdmin:true})};requests++;return {ok:!fail,status:fail?503:200,json:async()=>({updatedAtUtc:'2026-10-27T01:00:00Z',items:[
  {position:{symbol:'BTCUSDT<script>',side:'Buy',leverage:20,unrealisedPnl:5.25,returnPercent:50,averagePrice:100,markPrice:105,initialMargin:10,size:1},signalId:'one',firstProtection:true,timeframe:'15'},
  {position:{symbol:'ETHUSDT',side:'Sell',leverage:5,unrealisedPnl:-2.5,returnPercent:-25,averagePrice:100,size:2},signalId:'two',riskFreeReached:true},
  {position:{symbol:'UNKNOWN',side:'Buy',unrealisedPnl:0,returnPercent:null},matchedSignals:2}

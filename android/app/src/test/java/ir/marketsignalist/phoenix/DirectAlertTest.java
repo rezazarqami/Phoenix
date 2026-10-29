@@ -24,6 +24,14 @@ public class DirectAlertTest {
         assertTrue(PhoenixAlertService.consume(context,page));assertEquals(2,context.getSharedPreferences("orbit-push-seen",0).getAll().size());
         String text=context.getSystemService(NotificationManager.class).getActiveNotifications()[0].getNotification().extras.getCharSequence(Notification.EXTRA_TEXT).toString();assertTrue(text.contains("BTCUSDT"));
     }
+    @Test public void entryFailureReasonAndManualClosePostOnce()throws Exception{
+        JSONObject page=page(new JSONArray().put(event("one:EntryError","EntryError","").put("reason","ورود انجام نشد: موجودی کافی نیست.")).put(event("two:ManualClosed","ManualClosed","")));
+        assertTrue(PhoenixAlertService.consume(context,page));
+        android.service.notification.StatusBarNotification[] notifications=context.getSystemService(NotificationManager.class).getActiveNotifications();
+        assertEquals(2,notifications.length);StringBuilder text=new StringBuilder();for(android.service.notification.StatusBarNotification n:notifications)text.append(n.getNotification().extras.getCharSequence(Notification.EXTRA_TEXT));
+        assertTrue(text.toString().contains("موجودی کافی نیست"));assertTrue(text.toString().contains("دستی"));
+        assertTrue(PhoenixAlertService.consume(context,page));assertEquals(2,context.getSystemService(NotificationManager.class).getActiveNotifications().length);assertEquals(12,PhoenixAlertService.prefs(context).getLong("cursor",0));
+    }
     @Test public void wrongAccountAndBackwardCursorNeverPost()throws Exception{
         JSONObject page=page(new JSONArray().put(event("private:Target","Target",""))).put("account","someone-else");
         try{PhoenixAlertService.consume(context,page);fail();}catch(java.io.IOException expected){}

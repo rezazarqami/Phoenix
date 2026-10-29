@@ -1,7 +1,7 @@
 (() => {
  'use strict';
  const list=document.getElementById('reviewList'),detail=document.getElementById('reviewDetail'),status=document.getElementById('reviewStatus'),pane=document.getElementById('market-pane-review');
- let items=[],selected=null,busy=false,loading=false,autoFocus=true;
+ let items=[],selected=null,loading=false,autoFocus=true;const pending=new Map(),decided=new Set();let countVersion=0,lastActiveCount=null;const failures=new Map();
  const text=(tag,value,className)=>Object.assign(document.createElement(tag),{textContent:value,...(className?{className}:{})});
  function focusReview(active){const standalone=parent===window;document.body.classList.toggle('review-focus',standalone&&active);document.getElementById('closeReviewFocus').hidden=!standalone||!active;}
  const shortLabels={'فاصله تا ورود':'تا ورود','فاصله ورود تا تارگت':'تا تارگت','لوریج محاسبه‌شده':'اهرم محاسبه','حداکثر لوریج ارز':'سقف اهرم','لوریج قابل استفاده با این سقف':'اهرم مجاز','تایم‌فریم سیگنال':'تایم‌فریم'};
@@ -17,7 +17,7 @@
  }
  function renderList(){
   list.replaceChildren();
-  for(const item of items){const button=text('button',item.symbol);button.type='button';button.className=item.key===selected?'selected':'';button.disabled=busy;button.onclick=()=>{selected=item.key;autoFocus=true;render();};list.append(button);}
+  for(const item of items){const button=text('button',item.symbol);button.type='button';button.className=item.key===selected?'selected':'';button.disabled=false;button.onclick=()=>{selected=item.key;autoFocus=true;render();};list.append(button);}
  }
  function render(){
   document.getElementById('reviewBadge').textContent=items.length.toLocaleString('fa-IR');document.getElementById('reviewCapacity').textContent=items.length.toLocaleString('fa-IR')+' / ۱۰';
@@ -40,17 +40,24 @@
   if(item.state!=='Ready'){detail.append(text('p',item.error||'وضعیت ارسال قبلی نیازمند بررسی است.','review-error'));return;}
   const reason=document.createElement('textarea');reason.rows=1;reason.placeholder='دلیل رد (اختیاری)';reason.maxLength=1500;reason.setAttribute('aria-label','دلیل رد');detail.append(reason);
   const actions=document.createElement('div');actions.className='review-actions';
-  for(const [action,label] of [['register','تأیید و ثبت'],['observe','فقط تأیید'],['reject','رد']]){const button=text('button',label);button.type='button';button.disabled=busy;button.onclick=()=>decide(item.key,action,reason.value);actions.append(button);}detail.append(actions);
+  for(const [action,label] of [['register','تأیید و ثبت'],['observe','فقط تأیید'],['reject','رد']]){const button=text('button',label);button.type='button';button.disabled=false;button.onclick=()=>decide(item.key,action,reason.value);actions.append(button);}detail.append(actions);
  }
- async function refresh(){if(loading||busy)return;loading=true;try{
+ async function refresh(){if(loading)return;loading=true;try{
   const response=await fetch('/api/analysis/proposals',{cache:'no-store'});if(!response.ok)throw Error('دریافت صف ناموفق بود؛ دوباره تلاش می‌کنیم.');
-  const next=await response.json();if(JSON.stringify(next)!==JSON.stringify(items)){const previous=selected,oldActive=JSON.stringify(items.find(x=>x.key===selected));items=next;if(!items.some(x=>x.key===selected))selected=items[0]?.key;if(previous!==selected||oldActive!==JSON.stringify(items.find(x=>x.key===selected))||!detail.children.length)render();else{renderList();document.getElementById('reviewCapacity').textContent=items.length.toLocaleString('fa-IR')+' / ۱۰';document.getElementById('reviewBadge').textContent=items.length.toLocaleString('fa-IR');/* Do not reset chart/rejection text while new proposals arrive. */}}
-  status.textContent=items.length===10?'صف کامل است؛ پس از بررسی یک مورد، تحلیل ادامه می‌یابد.':items.length.toLocaleString('fa-IR')+' پیشنهاد آمادهٔ بررسی';
- }catch(error){status.textContent=error.message;}finally{loading=false;}}
- async function decide(key,action,reason){if(busy)return;busy=true;list.querySelectorAll('button').forEach(x=>x.disabled=true);detail.querySelectorAll('button,textarea').forEach(x=>x.disabled=true);try{
-  const response=await fetch('/api/analysis/proposals/'+encodeURIComponent(key)+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,reason})});
-  if(!response.ok){const body=await response.json();throw Error(body.error||'ثبت پاسخ ناموفق بود.');}status.textContent='پاسخ ثبت شد.';
- }catch(error){status.textContent=error.message;}finally{busy=false;await refresh();render();}}
+  const next=(await response.json()).filter(x=>!pending.has(x.key)&&!decided.has(x.key));if(JSON.stringify(next)!==JSON.stringify(items)){const previous=selected,oldActive=JSON.stringify(items.find(x=>x.key===selected));items=next;if(!items.some(x=>x.key===selected))selected=items[0]?.key;if(previous!==selected||oldActive!==JSON.stringify(items.find(x=>x.key===selected))||!detail.children.length)render();else{renderList();document.getElementById('reviewCapacity').textContent=items.length.toLocaleString('fa-IR')+' / ۱۰';document.getElementById('reviewBadge').textContent=items.length.toLocaleString('fa-IR');/* Do not reset chart/rejection text while new proposals arrive. */}}
+  if(!pending.size&&!failures.size)status.textContent=items.length===10?'صف کامل است؛ پس از بررسی یک مورد، تحلیل ادامه می‌یابد.':items.length.toLocaleString('fa-IR')+' پیشنهاد آمادهٔ بررسی';
+ }catch(error){status.textContent=error.message;}finally{loading=false;if(!pane.hidden)updateActiveCount();}}
+ async function updateActiveCount(){const version=++countVersion;try{const r=await fetch('/api/signals',{cache:'no-store'});if(!r.ok)return;const signals=await r.json();if(version!==countVersion)return;const active=signals.filter(s=>!s.completedAtUtc&&!s.targetReachedAtUtc&&!s.stopLossReachedAtUtc&&!s.riskFreeClosedAtUtc&&!s.removedAtUtc&&!['Error','Rejected','Cancelled','Deactivated','Expired'].includes(s.status));const counter=document.getElementById('activeCount');if(counter)counter.textContent=active.length.toLocaleString('fa-IR');if(lastActiveCount!==active.length){lastActiveCount=active.length;window.dispatchEvent(new CustomEvent('phoenix-signals-invalidated'));if(parent!==window)parent.postMessage({type:'phoenix-signals-invalidated'},location.origin);}}catch{}}
+ function progress(){status.textContent=(pending.size?pending.size.toLocaleString('fa-IR')+' پاسخ در حال ثبت در پس‌زمینه · ':'')+(failures.size?[...failures.values()].join(' · '):items.length.toLocaleString('fa-IR')+' پیشنهاد آمادهٔ بررسی');}
+ async function decide(key,action,reason){if(pending.has(key))return;const item=items.find(x=>x.key===key);if(!item||item.state!=='Ready')return;
+  pending.set(key,item);decided.add(key);failures.delete(key);items=items.filter(x=>x.key!==key);selected=items[0]?.key;
+  // Reserve the same chart frame before changing the image; keep the action row in place.
+  const y=window.scrollY;render();window.scrollTo(0,y);progress();
+  try{const response=await fetch('/api/analysis/proposals/'+encodeURIComponent(key)+'/decision',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({action,reason})});
+   if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.error||'ثبت پاسخ ناموفق بود.');}
+  }catch(error){decided.delete(key);failures.set(key,item.symbol+': '+error.message+' وضعیت را در صف بررسی کن؛ ارسال خودکار تکرار نمی‌شود.');}
+  finally{pending.delete(key);await updateActiveCount();await refresh();progress();}
+ }
  document.getElementById('closeReviewFocus').addEventListener('click',()=>{autoFocus=false;focusReview(false);});
  document.getElementById('market-tab-review').addEventListener('click',()=>{autoFocus=true;render();refresh();});
  document.getElementById('startBatch').addEventListener('click',()=>setTimeout(()=>document.getElementById('market-tab-review').click(),500));

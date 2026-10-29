@@ -53,19 +53,22 @@ public sealed partial class SignalBatchService
     {
         if(action is not ("register" or "observe" or "reject"))return "انتخاب معتبر نیست.";
         if(reason?.Length>1500)return "دلیل رد حداکثر ۱۵۰۰ نویسه است.";
+        PendingProposal item;
         await reviewGate.WaitAsync(ct);
         try
         {
             var items=await ReadProposalsAsync(ct);
-            var item=items.SingleOrDefault(x=>x.Key==key && x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase));
-            if(item is null)return "این پیشنهاد قبلاً بررسی شده است.";
+            var found=items.SingleOrDefault(x=>x.Key==key && x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase));
+            if(found is null)return "این پیشنهاد قبلاً بررسی شده است.";item=found;
             if(item.State!="Ready")return "نتیجهٔ ارسال قبلی نیازمند بررسی است؛ برای جلوگیری از معاملهٔ تکراری دوباره ارسال نمی‌شود.";
-            var selected=item.Candidate;
+
             // Commit the claim before any trading side effect. A crash cannot replay a submission.
             items[items.IndexOf(item)]=item with{State="Processing"};
             await WriteProposalsAsync(items,ct);
-            try
-            {
+        }finally{reviewGate.Release();}
+        var selected=item.Candidate;
+        try
+        {
                 if(action=="reject"){
                     if(!await reviews.DecideAsync(key,false,reason,ct))throw new InvalidOperationException("ذخیرهٔ رد ناموفق بود.");
                     Update(s=>s with{Rejected=s.Rejected+1});
@@ -85,12 +88,12 @@ public sealed partial class SignalBatchService
                     await reviews.DecideAsync(key,true,ct);await reviews.LinkSignalAsync(key,outcome.Signal.Id,ct);
                     Update(s=>s with{Approved=s.Approved+1});
                 }
-                items.RemoveAll(x=>x.Key==key);await WriteProposalsAsync(items,CancellationToken.None);return null;
+                await reviewGate.WaitAsync(CancellationToken.None);try{var items=await ReadProposalsAsync(CancellationToken.None);items.RemoveAll(x=>x.Key==key);await WriteProposalsAsync(items,CancellationToken.None);}finally{reviewGate.Release();}return null;
             }
-            catch(Exception e){items[items.FindIndex(x=>x.Key==key)]=item with{State="NeedsReview",Error="عملیات کامل نشد؛ وضعیت سفارش را پیش از تلاش دوباره بررسی کنید."};
-                await WriteProposalsAsync(items,CancellationToken.None);logger.LogError(e,"In-app proposal decision failed {Key}",key);return "عملیات کامل نشد؛ وضعیت در صف نمایش داده می‌شود.";}
+        catch(Exception e){
+            await reviewGate.WaitAsync(CancellationToken.None);try{var items=await ReadProposalsAsync(CancellationToken.None);var index=items.FindIndex(x=>x.Key==key);if(index>=0)items[index]=item with{State="NeedsReview",Error="عملیات کامل نشد؛ وضعیت سفارش را پیش از تلاش دوباره بررسی کنید."};await WriteProposalsAsync(items,CancellationToken.None);}finally{reviewGate.Release();}
+            logger.LogError(e,"In-app proposal decision failed {Key}",key);return "عملیات کامل نشد؛ وضعیت در صف نمایش داده می‌شود.";
         }
-        finally{reviewGate.Release();}
     }
 }
 public sealed record InAppDecisionRequest(string Action,string? Reason);

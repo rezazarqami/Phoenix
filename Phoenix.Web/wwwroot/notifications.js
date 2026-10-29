@@ -2,10 +2,10 @@
  'use strict';
  const timeline=document.getElementById('eventTimeline'),status=document.getElementById('historyStatus'),older=document.getElementById('loadOlder'),panel=document.getElementById('journalPanel');
  const params=new URLSearchParams(location.search),focus=params.get('eventId'),initialView=params.get('view')==='results'?'results':'all';
- const titles={NearEntry:'نزدیک ورود',Opened:'ورود تأیید شد',FirstProtection:'پلهٔ اول محافظت',RiskFreeReached:'محدودهٔ ریسک‌فری',Target:'تارگت',StopLoss:'استاپ‌لاس',RiskFree:'خروج ریسک‌فری',Expired:'انقضای سیگنال نزدیک ورود'};
- const messages={NearEntry:'قیمت به محدودهٔ ورود سیگنال نزدیک شد.',Opened:'ورود معامله در بای‌بیت تأیید شد.',FirstProtection:'پلهٔ اول محافظت از معامله فعال شد.',RiskFreeReached:'معامله به محدودهٔ ریسک‌فری رسید.',Target:'سیگنال به تارگت رسید.',StopLoss:'معامله با استاپ‌لاس پایان یافت.',RiskFree:'معامله با ریسک‌فری بسته شد.',Expired:'سیگنالی که قبلاً نزدیک ورود شده بود، منقضی شد.'};
+ const titles={EntryError:'خطای ورود',ManualClosed:'بستن دستی',NearEntry:'نزدیک ورود',Opened:'ورود تأیید شد',FirstProtection:'پلهٔ اول محافظت',RiskFreeReached:'محدودهٔ ریسک‌فری',Target:'تارگت',StopLoss:'استاپ‌لاس',RiskFree:'خروج ریسک‌فری',Expired:'انقضای سیگنال نزدیک ورود'};
+ const messages={EntryError:'ورود معامله با خطا مواجه شد.',ManualClosed:'این معامله به صورت دستی بسته شد.',NearEntry:'قیمت به محدودهٔ ورود سیگنال نزدیک شد.',Opened:'ورود معامله در بای‌بیت تأیید شد.',FirstProtection:'پلهٔ اول محافظت از معامله فعال شد.',RiskFreeReached:'معامله به محدودهٔ ریسک‌فری رسید.',Target:'سیگنال به تارگت رسید.',StopLoss:'معامله با استاپ‌لاس پایان یافت.',RiskFree:'معامله با ریسک‌فری بسته شد.',Expired:'سیگنالی که قبلاً نزدیک ورود شده بود، منقضی شد.'};
  const exits={FirstStepLimit:'پلهٔ اول ریسک‌فری (استاپ‌لیمیت)',SecondStepLimit:'پلهٔ دوم ریسک‌فری (استاپ‌لیمیت)',SafetyStopMarket:'محافظ ریسک‌فری (استاپ‌مارکت)'};
- const resultKinds=new Set(['Target','RiskFree','StopLoss']),tabs=[...document.querySelectorAll('[data-journal-tab]')];
+ const resultKinds=new Set(['Target','RiskFree','StopLoss','ManualClosed','EntryError']),tabs=[...document.querySelectorAll('[data-journal-tab]')];
  const fresh=()=>({entries:new Map(),before:null,hasMore:false,busy:false,initialized:false});
  const sources={normal:{all:fresh(),results:fresh()},manual:{all:fresh(),results:fresh()}};
  let source=params.get('source')==='manual'?'manual':'normal',states=sources[source],view=initialView;
@@ -20,8 +20,8 @@
    const code=e.kind==='Target'?'TP':e.kind==='StopLoss'?'SL':e.kind==='FirstProtection'?'RF1':e.kind==='RiskFree'?(e.exitKind==='FirstStepLimit'?'RF1':e.exitKind==='SecondStepLimit'?'RF2':'RF'):e.kind==='RiskFreeReached'?'RF':null;
    const head=document.createElement('div');head.className='event-top';
    const badge=Object.assign(text('span',code||titles[e.kind]||e.kind),{className:'event-kind'});badge.title=titles[e.kind]||e.kind;badge.setAttribute('aria-label',(titles[e.kind]||e.kind)+(e.kind==='RiskFree'&&exits[e.exitKind]?' · '+exits[e.exitKind]:''));
-   head.append(Object.assign(text('b',e.symbol||'Phoenix'),{className:'event-symbol'}),badge);card.append(head);
-   card.append(Object.assign(text('p',messages[e.kind]||'رویداد سیگنال ثبت شد.'),{className:'event-message'}));
+   const direction=text('span',e.direction==='Long'?'Long ↗':e.direction==='Short'?'Short ↘':'');direction.className='event-direction';direction.dataset.side=e.direction;head.append(Object.assign(text('b',e.symbol||'Phoenix'),{className:'event-symbol'}),direction,badge);card.append(head);
+   card.append(Object.assign(text('p',e.reason||messages[e.kind]||'رویداد سیگنال ثبت شد.'),{className:'event-message'}));
    const detail=document.createElement('details');detail.className='event-detail';
    const summary=text('summary','نمودار و جزئیات');summary.setAttribute('aria-label','نمودار ثبت‌شدهٔ سیگنال و جزئیات '+(e.symbol||'Phoenix'));detail.append(summary);
    const body=text('div','');body.className='event-detail-body';
@@ -42,7 +42,7 @@
    if(e.walletSource==='BybitTransaction')body.append(Object.assign(text('small','پس از تسویه در بای‌بیت'+(e.walletAtUtc?' · '+new Date(e.walletAtUtc).toLocaleString('fa-IR'):'')),{className:'wallet-source'}));
    detail.append(body);detail.open=openedDetails.has(e.id);if(detail.open)showChart();
    detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;if(detail.open){openedDetails.add(e.id);showChart();}else{openedDetails.delete(e.id);liveChart?.stop();liveChart=null;chartRequested=false;body.querySelector('.signal-live-host')?.remove();body.querySelector('.signal-archive-chart')?.remove();}});card.append(detail);
-   if(resultKinds.has(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));
+   if(resultKinds.has(e.kind)&&e.kind!=='EntryError'){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));
     wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));card.append(wallet);}
    fragment.append(card);
   }

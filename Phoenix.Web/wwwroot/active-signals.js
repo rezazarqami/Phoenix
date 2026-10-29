@@ -2,7 +2,7 @@
  'use strict';
  function mount({list,controls,all,cancel,status,refresh}) {
  list.replaceChildren();
- let signals=[],admin=false,busy=false;const selected=new Set(),rows=new Map();
+ let signals=[],allSignals=[],admin=false,busy=false,timeframe='all',rules=[],rulesLoading=false;const selected=new Set(),rows=new Map();
  const make=(tag,value,cls)=>Object.assign(document.createElement(tag),{textContent:value,className:cls||''});
  const eligible=s=>['Pending','Submitted'].includes(s.status)&&!s.filledAtUtc&&!s.completedAtUtc;
  const names={Pending:'در انتظار ورود',Submitted:'سفارش منتظر اجرا',Submitting:'در حال ارسال',Filled:'معاملهٔ فعال',Closing:'در حال بستن',RecoveryRequired:'نیازمند تطبیق',Error:'خطا'};
@@ -20,7 +20,15 @@
   symbol.addEventListener('click',expand);toggle.addEventListener('click',expand);toggle.setAttribute('aria-label','نمودار و جزئیات '+s.symbol);toggle.setAttribute('aria-expanded','false');
   remove.addEventListener('click',()=>cancelIds([s.id]));body.append(chartHost,metrics);main.append(check,icon,symbol,direction,phase,remove,toggle);article.append(main,body);return {article,check,direction,phase,cancel:remove,stop:()=>chart?.stop()};
  }
- function render(next){signals=next;const ids=new Set(next.map(s=>s.id));for(const [id,row] of rows)if(!ids.has(id)){row.stop();row.article.remove();rows.delete(id);}
+ const riskPanel=make('div','','timeframe-risk-panel'),tabs=make('div','','timeframe-risk-tabs'),settings=make('div','','timeframe-risk-settings');riskPanel.append(tabs,settings);list.before(riskPanel);
+ if(!document.getElementById('timeframe-risk-style')){const css=document.createElement('link');css.id='timeframe-risk-style';css.rel='stylesheet';css.href='/timeframe-risk.css?v=20261030';document.head.append(css);}
+ const label=key=>({'all':'همه','1':'۱ دقیقه','5':'۵ دقیقه','15':'۱۵ دقیقه','30':'۳۰ دقیقه','60':'۱ ساعت','240':'۴ ساعت','D':'روزانه','W':'هفتگی','M':'ماهانه','3M':'سه‌ماهه','unknown':'نامشخص'})[key]||key;
+ function paintRisk(){tabs.replaceChildren();const keys=['all','1','5','15','60','240',...allSignals.map(s=>s.timeframe||'unknown')];for(const key of [...new Set(keys)]){const count=allSignals.filter(s=>key==='all'||(s.timeframe||'unknown')===key).length;const b=make('button',label(key)+' · '+count);b.type='button';b.setAttribute('aria-pressed',String(timeframe===key));b.dataset.timeframe=key;b.onclick=()=>{timeframe=key;paintRisk();filter();};tabs.append(b);}if(settings.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;settings.replaceChildren();if(timeframe==='all')return;const current=rules.find(x=>x.rule.timeframe===timeframe);if(!current){settings.append(make('span','در حال دریافت قواعد تایم‌فریم…'));return;}const rule=current.rule;settings.append(make('span','معاملات باز: '+current.open+' · '+(rule.blocked?'متوقف پس از دو استاپ متوالی':'فعال')));const field=make('label','سقف معاملات هم‌زمان '),input=make('input','');input.type='number';input.min='1';input.max='100';input.value=rule.maximumOpen;input.setAttribute('aria-label','حداکثر معاملات هم‌زمان '+label(timeframe));input.disabled=!admin;field.append(input);settings.append(field);const save=make('button','ذخیره سقف');save.type='button';save.disabled=!admin;save.onclick=()=>changeRule('/api/signals/timeframe-rules/'+timeframe,{maximumOpen:Number(input.value)});settings.append(save);if(rule.maximumOpen<=2)settings.append(make('small','دو استاپ متوالی این تایم‌فریم را تا آزادسازی دستی متوقف می‌کند.'));if(rule.blocked){const resume=make('button','آزاد کردن');resume.type='button';resume.disabled=!admin;resume.onclick=async()=>{if(await phoenixConfirm('ورودهای جدید این تایم‌فریم دوباره آزاد شوند؟ سیگنال‌هایی که هنگام توقف به ورود رسیده‌اند برنمی‌گردند.'))changeRule('/api/signals/timeframe-rules/'+timeframe+'/resume',{});};settings.append(resume);}}
+ async function changeRule(url,body){settings.querySelectorAll('button,input').forEach(e=>e.disabled=true);try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error((await r.json()).error||'ذخیره انجام نشد.');await loadRules();await refresh();}catch(e){status.textContent=e.message;paintRisk();}}
+ async function loadRules(){if(rulesLoading)return;rulesLoading=true;try{const r=await fetch('/api/signals/timeframe-rules',{cache:'no-store'});if(r.ok){rules=await r.json();if(!Array.isArray(rules))rules=[];paintRisk();}}catch{}finally{rulesLoading=false;}}
+ function filter(){renderRows(allSignals.filter(s=>timeframe==='all'||(s.timeframe||'unknown')===timeframe));}
+ function render(next){allSignals=next;paintRisk();filter();loadRules();}
+ function renderRows(next){signals=next;const ids=new Set(next.map(s=>s.id));for(const [id,row] of rows)if(!ids.has(id)){row.stop();row.article.remove();rows.delete(id);}
   if(!next.length){list.replaceChildren(make('p','سیگنال فعالی وجود ندارد.','active-empty'));selection();return;}list.querySelector('.active-empty')?.remove();
   for(const s of next){let row=rows.get(s.id);if(!row){row=create(s);rows.set(s.id,row);}row.direction.textContent=s.direction==='Long'?'Long ↗':'Short ↘';row.direction.dataset.side=s.direction;row.phase.textContent=names[s.status]||s.status;row.phase.dataset.filled=String(Boolean(s.filledAtUtc)||s.status==='Filled');row.cancel.textContent=s.filledAtUtc||['Filled','Closing'].includes(s.status)?'پوزیشن باز':'لغو سیگنال';row.article.dataset.id=s.id;list.append(row.article);}
   selection();
@@ -33,7 +41,7 @@
   }catch(error){status.textContent=error.message;}finally{busy=false;selection();}
  }
  all.addEventListener('click',()=>{const available=signals.filter(eligible);const clear=available.every(s=>selected.has(s.id));for(const s of available)clear?selected.delete(s.id):selected.add(s.id);selection();});cancel.addEventListener('click',()=>cancelIds([...selected]));
- fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.json()).then(session=>{admin=!!session.isAdmin;controls.hidden=!admin;selection();}).catch(()=>{admin=false;selection();});
+ fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.json()).then(session=>{admin=!!session.isAdmin;controls.hidden=!admin;selection();paintRisk();}).catch(()=>{admin=false;selection();});
  return {render,stop(){for(const row of rows.values())row.stop();}};
  }
  window.PhoenixActiveSignalsUI={mount};

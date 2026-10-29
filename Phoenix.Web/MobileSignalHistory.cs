@@ -6,7 +6,7 @@ public sealed partial class MobileSignalFeed
 {
     private static async Task SaveHistoryAsync(SqliteConnection db,SqliteTransaction tx,string owner,ServerSignal s,MobileSignalEvent e,CancellationToken ct)
     {
-        var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" or "StopLoss" ? s.ResultWalletBalanceUsdt : null,s.ResultWalletAtUtc,s.ResultWalletBalanceUsdt.HasValue?"LocalSnapshot":null,s.Origin);
+        var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" or "StopLoss" or "ManualClosed" ? s.ResultWalletBalanceUsdt : null,s.ResultWalletAtUtc,s.ResultWalletBalanceUsdt.HasValue?"LocalSnapshot":null,s.Origin,EventReason(s));
         using var cmd=db.CreateCommand();cmd.Transaction=tx;
         cmd.CommandText="INSERT INTO device_signal_history(owner,event_id,payload,at_utc) VALUES($o,$id,$p,$at) ON CONFLICT(owner,event_id) DO UPDATE SET payload=excluded.payload WHERE json_extract(device_signal_history.payload,'$.WalletBalanceUsdt') IS NULL AND json_extract(excluded.payload,'$.WalletBalanceUsdt') IS NOT NULL";
         cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
@@ -21,7 +21,7 @@ public sealed partial class MobileSignalFeed
         if(view is not (null or "all" or "results"))throw new ArgumentException("سربرگ معتبر نیست.");
         if(source is not (null or "normal" or "manual"))throw new ArgumentException("منشأ سیگنال معتبر نیست.");
         var sourceFilter=source=="manual" ? " AND json_extract(payload,'$.Origin')='ManualChart'" : source=="normal" ? " AND COALESCE(json_extract(payload,'$.Origin'),'')!='ManualChart'" : "";
-        var resultFilter=view=="results" ? " AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss')" : "";
+        var resultFilter=view=="results" ? " AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError')" : "";
         resultFilter+=sourceFilter;
         if(before is <=0 || eventId?.Length>120)throw new ArgumentException("نشانگر رویداد معتبر نیست.");
         await CaptureAsync(owner,ct);await gate.WaitAsync(ct);

@@ -546,7 +546,7 @@ app.MapGet("/api/analysis/proposals/{key}/image", async (string key,HttpRequest 
 });
 app.MapPost("/api/analysis/proposals/{key}/decision", async (string key,InAppDecisionRequest decision,HttpRequest request,SignalBatchService batches,CancellationToken ct)=>{
     PhoenixSessionAuth.TryGetIdentity(request,out var identity);
-    var error=await batches.DecideInAppAsync(identity.Username ?? "",key,decision.Action,decision.Reason,ct);
+    var error=await batches.DecideInAppAsync(identity.Username ?? "",key,decision.Action,decision.Reason,CancellationToken.None);
     return error is null?Results.Ok():Results.Conflict(new {error});
 });
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
@@ -745,6 +745,7 @@ app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoCl
 });
 
 ManualSignals.Map(app);
+TimeframeRiskEndpoints.Map(app);
 
 app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpRequest,
     SignalSubmissionService submission, CancellationToken token) =>
@@ -826,7 +827,7 @@ app.MapGet("/api/positions/live", async (HttpContext context, BybitDemoClient cl
             var signal = matches.Length == 1 ? matches[0] : null;
             return new { position = p, signalId = signal?.Id, timeframe = signal?.Timeframe,
                 protectionStage = signal?.ProtectionStage, riskFreeReached = signal?.RiskFreeReachedAtUtc is not null,
-                firstProtection = signal?.EarlyProtectionAtUtc is not null, matchedSignals = matches.Length };
+                firstProtection = signal?.EarlyProtectionAtUtc is not null, closing = matches.Any(s=>s.Status=="Closing"), matchedSignals = matches.Length };
         }).ToArray();
         return Results.Ok(new { updatedAtUtc = DateTime.UtcNow, items });
     }
@@ -837,10 +838,10 @@ app.MapGet("/api/positions/live", async (HttpContext context, BybitDemoClient cl
     }
 });
 
-app.MapPost("/api/positions/close-preview", async (HttpRequest request, BulkPositionService bulk, CancellationToken token) =>
+app.MapPost("/api/positions/close-preview", async (HttpRequest request, BulkPositionService bulk, CancellationToken token,string? symbol,string? side,int? positionIndex) =>
 {
     if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin) return Results.StatusCode(403);
-    try { return Results.Ok(await bulk.PreviewAsync(token)); }
+    try { return Results.Ok(await bulk.PreviewAsync(token,symbol,side,positionIndex,identity.Username)); }
     catch { return Results.BadRequest(new { error = "دریافت پوزیشن‌های صرافی ناموفق بود؛ هیچ تغییری انجام نشد." }); }
 });
 app.MapPost("/api/positions/close-all/{previewId:guid}", async (Guid previewId, HttpRequest request,

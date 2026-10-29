@@ -34,11 +34,11 @@
     if (!preview.positions.length) { status.textContent = 'پوزیشن باز USDT در این حساب وجود ندارد.'; return; }
     const list = preview.positions.map(p => p.symbol + ' · ' + p.side + ' · حجم ' + p.size).join('\n');
     if (!await phoenixConfirm('حساب: ' + preview.account + '\n' + list +
-        '\n\nهمه پوزیشن‌های USDT بالا (حتی دستی) با سفارش بازار بسته شوند؟ ورودهای جدید تا انتخاب «ادامه ورودها» متوقف می‌مانند. دمو تغییر نمی‌کند.')) { status.textContent = 'عملیات انجام نشد.'; return; }
+        '\n\nهمه پوزیشن‌های USDT بالا (حتی دستی) با سفارش بازار بسته شوند؟ نتیجه پس از تأیید بسته‌شدن در صرافی ثبت می‌شود.')) { status.textContent = 'عملیات انجام نشد.'; return; }
     const data = await request('/api/positions/close-all/' + preview.id);
     status.textContent = data.items.map(x => x.symbol + ': ' + (x.submitted
       ? 'درخواست بستن ارسال شد؛ بسته‌شدن هنوز باید در صرافی تأیید شود.'
-      : x.error)).join('\n') + '\nورودهای جدید متوقف است. برای حجم باقی‌مانده یا خطا، وضعیت صرافی را بررسی و دوباره اقدام کنید.';
+      : x.error)).join('\n') + '\nبرای حجم باقی‌مانده یا خطا، وضعیت صرافی را بررسی و دوباره اقدام کنید.';
   });
   resume.onclick = () => run(async () => {
     if (!await phoenixConfirm('ورودهای جدید استراتژی اصلی دوباره فعال شوند؟')) { status.textContent = 'عملیات انجام نشد.'; return; }

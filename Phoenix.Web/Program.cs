@@ -362,7 +362,7 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
     SignalSimilarityService similarity, CancellationToken token) =>
 {
     var signals = await store.GetAllAsync(token);
-    foreach (var signal in signals.Where(x => x.Status == "Pending" && x.LeverageSource != "PhoenixFormula"))
+    foreach (var signal in signals.Where(x => x.Status == "Pending" && x.LeverageSource is not ("PhoenixFormula" or "Manual")))
     {
         try
         {
@@ -743,6 +743,8 @@ app.MapGet("/api/instruments/{symbol}/limits", async (string symbol, BybitDemoCl
         return Results.BadRequest(new { error = exception.Message });
     }
 });
+
+ManualSignals.Map(app);
 
 app.MapPost("/api/signals", async (SignalRequest request, HttpRequest httpRequest,
     SignalSubmissionService submission, CancellationToken token) =>

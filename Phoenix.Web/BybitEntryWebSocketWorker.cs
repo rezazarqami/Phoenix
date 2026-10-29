@@ -127,7 +127,7 @@ public sealed class BybitEntryWebSocketWorker(
         order.Status = "Submitting";
         try
         {
-            if (order.LeverageSource != "PhoenixFormula")
+            if (order.LeverageSource is not ("PhoenixFormula" or "Manual"))
             {
                 order.ApplyPhoenixLeverage(await client.GetInstrumentRulesAsync(order.Symbol, token));
                 await store.UpdateAsync(order, token);

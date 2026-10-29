@@ -20,6 +20,7 @@ public sealed class ServerSignal
     public decimal PositionSizeUsdt { get; set; }
     public decimal? Leverage { get; set; }
     public string? LeverageSource { get; set; }
+    public string? Origin { get; set; }
     public decimal Quantity { get; set; }
     public decimal EntryPrice { get; set; }
     public decimal TakeProfit { get; set; }
@@ -114,6 +115,7 @@ public sealed class ServerSignal
     public void ApplyPhoenixLeverage(
         BybitInstrumentRules rules, decimal targetReturnPercent = 50m)
     {
+        if (LeverageSource == "Manual") return;
         Leverage = BybitLeverageRules.Normalize(
             StrategyCalculator.CalculateLeverage(
                 EntryPrice, TakeProfit, targetReturnPercent), rules);
@@ -424,6 +426,8 @@ public sealed class ServerOrderStore
     public async Task<ServerSignal?> FindSignalAsync(Guid id,CancellationToken token=default)=>
         (await GetAllAsync(token)).SingleOrDefault(s=>s.Id==id)??await _history.FindSignalAsync(id,token);
 
+    public Task<ManualSignalReport> GetManualReportAsync(int offset, CancellationToken token = default) => _history.GetManualReportAsync(offset, token);
+
     public Task<byte[]?> GetHistoryImageAsync(Guid id, CancellationToken token = default) =>
         _history.GetImageAsync(id, token);
 
@@ -505,7 +509,7 @@ public sealed class ServerOrderStore
         Id = signal.Id, Symbol = signal.Symbol, Direction = signal.Direction,
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,
         Leverage = signal.Leverage,
-        LeverageSource = signal.LeverageSource,
+        LeverageSource = signal.LeverageSource, Origin = signal.Origin,
         Quantity = signal.Quantity, EntryPrice = signal.EntryPrice, TakeProfit = signal.TakeProfit,
         StopLoss = signal.StopLoss, LastPrice = signal.LastPrice, Status = signal.Status,
         ExpirePrice = signal.ExpirePrice, ExpireActivationPrice = signal.ExpireActivationPrice,

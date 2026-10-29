@@ -8,6 +8,8 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Manual chart plans retain explicit levels, leverage and both directional protection policies", ManualSignalTests.Plans);
+Run("Manual chart source and initial expiry results survive restart independently", ManualSignalTests.Archive);
 Run("Live positions retain exchange PnL, hedge sides and unknown margins", LivePositionTests.ExchangeValues);
 Run("Result wallet snapshots persist and enrich existing history without changing old balances", LivePositionTests.WalletSnapshot);
 Run("Telegram exports restore only unambiguous recent result wallet balances", TelegramWalletImportTests.Import);

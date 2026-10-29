@@ -1,7 +1,7 @@
 (() => {
  'use strict';
  const panel=document.getElementById('signal-pane-positions'),list=document.getElementById('positionsList'),status=document.getElementById('positionsStatus'),refresh=document.getElementById('refreshPositions');
- let busy=false,lastSuccess=null;
+ let busy=false,lastSuccess=null,admin=false;const closing=new Set();fetch('/api/auth/me').then(r=>r.json()).then(s=>{admin=!!s.isAdmin;}).catch(()=>{});
  const node=(tag,value,cls)=>Object.assign(document.createElement(tag),{textContent:value,className:cls||''});
  const number=value=>value==null?'—':Number(value).toLocaleString('en-US',{maximumFractionDigits:8});
  const signed=(value,digits=2)=>value==null?'—':(Number(value)>0?'+':'')+Number(value).toLocaleString('en-US',{maximumFractionDigits:digits,minimumFractionDigits:2});
@@ -10,16 +10,17 @@
   for(const item of items){
    const p=item.position,card=node('article','','position-card'),top=node('div','','position-top');
    top.append(node('b',p.symbol),node('span',(p.side==='Buy'?'Long':'Short')+' · '+number(p.leverage)+'×','position-side'));card.append(top);
-   const stage=item.riskFreeReached?'محدودهٔ ریسک‌فری · پلهٔ دوم':item.firstProtection?'ریسک‌فری · پلهٔ اول':item.signalId?'معاملهٔ فعال':item.matchedSignals>1?'پوزیشن تجمیعی بای‌بیت':'پوزیشن باز بای‌بیت';
+   const stage=item.closing?'درخواست بستن؛ منتظر تأیید صرافی':item.riskFreeReached?'محدودهٔ ریسک‌فری · پلهٔ دوم':item.firstProtection?'ریسک‌فری · پلهٔ اول':item.signalId?'معاملهٔ فعال':item.matchedSignals>1?'پوزیشن تجمیعی بای‌بیت':'پوزیشن باز بای‌بیت';
    card.append(node('span',stage+(item.timeframe?' · تایم‌فریم '+item.timeframe:''),'position-stage'));
    const pnl=node('div','','position-pnl '+(p.unrealisedPnl==null||Number(p.unrealisedPnl)===0?'neutral':p.unrealisedPnl>0?'positive':'negative'));
    pnl.append(node('strong',signed(p.unrealisedPnl)+' USDT'),node('span',signed(p.returnPercent)+'%'));card.append(pnl);
    const metrics=node('dl','','position-metrics');
    for(const [label,value] of [['ورود میانگین',p.averagePrice],['قیمت مارک',p.markPrice],['مارجین اولیه',p.initialMargin],['اندازهٔ پوزیشن',p.size],['تارگت',p.takeProfit>0?p.takeProfit:null],['استاپ صرافی',p.stopLoss>0?p.stopLoss:null],['لیکویید',p.liquidationPrice>0?p.liquidationPrice:null]]){const cell=node('div','');cell.append(node('dt',label),node('dd',number(value)));metrics.append(cell);}
-   card.append(metrics);fragment.append(card);
+   card.append(metrics);if(admin){const close=node('button',closing.has(p.symbol+':'+p.positionIndex)?'در حال ارسال…':'بستن معامله','position-close-one');close.type='button';close.disabled=closing.has(p.symbol+':'+p.positionIndex);close.addEventListener('click',()=>{close.disabled=true;closeOne(p).finally(()=>{close.disabled=false;});});card.append(close);}fragment.append(card);
   }
   list.replaceChildren(fragment);if(!items.length)list.append(node('p','در حال حاضر پوزیشن بازی در بای‌بیت ندارید.','positions-empty'));
  }
+ async function closeOne(p){const key=p.symbol+':'+p.positionIndex;if(closing.has(key))return;closing.add(key);try{const params=new URLSearchParams({symbol:p.symbol,side:p.side,positionIndex:p.positionIndex});const r=await fetch('/api/positions/close-preview?'+params,{method:'POST'});const preview=await r.json();if(!r.ok)throw Error(preview.error||'دریافت تأیید ناموفق بود.');if(!preview.positions.length)throw Error('این پوزیشن دیگر باز نیست.');const actual=preview.positions[0];if(!await phoenixConfirm('فقط '+actual.symbol+' · '+(actual.side==='Buy'?'Long':'Short')+' با حجم '+number(actual.size)+' در حساب '+preview.account+' با سفارش بازار بسته شود؟'))return;const response=await fetch('/api/positions/close-all/'+preview.id,{method:'POST'});const data=await response.json();if(!response.ok)throw Error(data.error||'ارسال بستن ناموفق بود.');status.textContent=data.items.map(x=>x.submitted?'درخواست بستن ارسال شد؛ منتظر تأیید صرافی.':x.error).join(' · ');}catch(e){status.textContent=e.message;}finally{closing.delete(key);window.dispatchEvent(new Event('phoenix-positions-refresh'));}}
  async function load(){
   if(busy||panel.hidden||document.hidden)return;busy=true;refresh.disabled=true;
   try{

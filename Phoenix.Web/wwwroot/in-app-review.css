@@ -30,3 +30,5 @@ body.review-focus .review-chart img{height:100%;max-height:100%;width:100%;objec
 @media(min-width:900px){body.review-focus #market-pane-review{max-width:1100px;left:0!important;right:0!important;margin:0 auto!important}body.review-focus #market-pane-review .review-workspace{grid-template-columns:150px minmax(0,1fr);grid-template-rows:minmax(0,1fr)}body.review-focus #reviewList{flex-direction:column}body.review-focus .review-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
 #market-pane-review .review-workspace:has(#reviewList:empty){grid-template-columns:1fr}
+
+.review-chart{aspect-ratio:4/3;min-height:0;height:auto}.review-chart img{width:100%;height:100%;max-height:none;object-fit:contain}#reviewDetail{overflow-anchor:none}

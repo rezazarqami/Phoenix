@@ -4,19 +4,21 @@ using Phoenix.Engine.Exchanges.Bybit;
 namespace Phoenix.Web;
 
 public sealed record ClosePreview(Guid Id, DateTime ExpiresUtc, string Account,
-    IReadOnlyList<BybitOpenPosition> Positions);
+    IReadOnlyList<BybitOpenPosition> Positions, bool Single=false,string? Owner=null);
 public sealed record CloseItem(string Symbol, string Side, bool Submitted, string? Error);
 
 public sealed class BulkPositionService(ServerOrderStore store, BybitDemoClient client,
     BybitDemoOptions options, ILogger<BulkPositionService> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, ClosePreview> _previews = new();
-    public async Task<ClosePreview> PreviewAsync(CancellationToken token)
+    public async Task<ClosePreview> PreviewAsync(CancellationToken token,string? symbol=null,string? side=null,int? positionIndex=null,string? owner=null)
     {
         foreach (var pair in _previews.Where(x => x.Value.ExpiresUtc < DateTime.UtcNow))
             _previews.TryRemove(pair.Key, out _);
+        var positions=await client.GetOpenPositionsAsync(token);
+        if(symbol is not null){if(side is not ("Buy" or "Sell")||positionIndex is null)throw new ArgumentException("پوزیشن معتبر نیست.");positions=positions.Where(p=>p.Symbol==symbol&&p.Side==side&&p.PositionIndex==positionIndex).ToArray();}
         var preview = new ClosePreview(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(2),
-            options.EnvironmentName, await client.GetOpenPositionsAsync(token));
+            options.EnvironmentName, positions,symbol is not null,owner);
         _previews[preview.Id] = preview;
         return preview;
     }
@@ -30,7 +32,7 @@ public sealed class BulkPositionService(ServerOrderStore store, BybitDemoClient 
         {
             await store.SetEntriesPausedAsync(true, token);
             var signals = await store.GetAllAsync(token);
-            if (signals.Any(x => x.Status is "Submitting" or "Submitted"))
+            if (signals.Any(x => (x.Status is "Submitting" or "Submitted") && (!preview.Single || preview.Positions.Any(p=>p.Symbol==x.Symbol&&x.Direction==(p.Side=="Buy"?"Long":"Short")))))
                 throw new InvalidOperationException("ورودها متوقف شد. سفارش در حال ارسال یا منتظر اجرا وجود دارد؛ ابتدا وضعیت آن را تعیین کنید و دوباره تأیید کنید.");
             var current = await client.GetOpenPositionsAsync(token);
             var result = new List<CloseItem>();
@@ -47,6 +49,7 @@ public sealed class BulkPositionService(ServerOrderStore store, BybitDemoClient 
                 var linked = signals.Where(x => x.CompletedAtUtc is null &&
                     x.Status is "Filled" or "Closing" && x.Symbol == p.Symbol &&
                     x.Direction == (p.Side == "Buy" ? "Long" : "Short")).ToArray();
+                if(linked.Length==0){var audit=new ServerSignal{Id=Guid.NewGuid(),CreatedAtUtc=DateTime.UtcNow,Symbol=p.Symbol,Direction=p.Side=="Buy"?"Long":"Short",Status="Closing",EntryPrice=p.AveragePrice??0,FilledAtUtc=DateTime.UtcNow,Quantity=p.Size,PositionSizeUsdt=p.InitialMargin??0,Leverage=p.Leverage,RequestedByUsername=preview.Owner,Origin="ExternalPosition"};await store.AddAsync(audit,token);linked=[audit];}
                 // Persist intent before the exchange call; a timeout must never be
                 // reported as a confirmed close or become a target/stop result.
                 foreach (var s in linked) { s.Status = "Closing"; await store.UpdateAsync(s, token); }
@@ -95,6 +98,7 @@ public sealed class BulkPositionService(ServerOrderStore store, BybitDemoClient 
                             s.Outcome = "ManualClosed";
                             s.CompletedAtUtc = DateTime.UtcNow;
                             await store.UpdateAsync(s, token);
+                            await WalletNotification.CaptureAsync(client,store,s,token);
                         }
                     }
                 }

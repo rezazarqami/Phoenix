@@ -322,6 +322,8 @@ function isFinished(signal) {
 }
 
 function resultLabel(signal) {
+  if (signal.outcome === 'EntryError') return 'خطای ورود';
+  if (signal.expireReason === 'TimeframeBlocked') return 'انقضا هنگام توقف تایم‌فریم';
   if (signal.outcome === 'ManualClosed') return 'بسته‌شده پس از درخواست دستی';
   if (signal.outcome === 'Target') return 'تارگت خورده';
   if (signal.outcome === 'RiskFree') return 'ریسک‌فری';
@@ -346,7 +348,7 @@ function renderHistory(){
       const s = item.signal;
       const ended = s.completedAtUtc || s.targetReachedAtUtc || s.riskFreeClosedAtUtc || s.stopLossReachedAtUtc || s.expiredAtUtc || item.removedAtUtc || item.updatedAtUtc;
       const reason = s.outcome === 'Expired' ? `<em class="expire-reason">${s.expireReason === 'InitialBoundary' ? 'عبور از مرز اولیه سقف/کف' : 'بازگشت به تارگت بعد از فعال‌شدن اکسپایر'}</em>` : '';
-      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${s.leverageSource === 'Manual' ? 'MANUAL LEVERAGE' : s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
+      return `<article class="history-item"><div><strong>${escapeHtml(s.symbol)} · ${escapeHtml(s.direction)}</strong><span class="result ${s.outcome === 'Target' || s.outcome === 'RiskFree' ? 'win' : s.outcome === 'StopLoss' ? 'loss' : ''}">${resultLabel(s)}</span></div><small>ENTRY ${fa.format(s.entryPrice)} · TP ${fa.format(s.takeProfit)} · SL ${fa.format(s.stopLoss)} · ${s.leverageSource === 'Manual' ? 'MANUAL LEVERAGE' : s.leverageSource === 'PhoenixFormula' ? 'LEVERAGE' : 'LEGACY BYBIT'} ${s.leverage ? fa.format(s.leverage) + '×' : '—'} · ${fa.format(s.positionSizeUsdt)} USDT</small>${reason}${s.outcome==='EntryError'?'<em>'+escapeHtml(s.error||'ورود انجام نشد')+'</em>':''}<time>${new Date(ended).toLocaleString('fa-IR')}</time></article>`;
     }).join('') : '<div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div>';
 }
 document.querySelectorAll('[data-history-source]').forEach(button=>button.addEventListener('click',()=>{historySource=button.dataset.historySource;document.querySelectorAll('[data-history-source]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));historyItems=historyCache[historySource];renderHistory();refreshHistory();}));
@@ -400,3 +402,6 @@ setInterval(refreshStatus, 1000); setInterval(refreshSignals, 5000); setInterval
 
 // Resume the live data feeds without replacing the document or user input.
 window.addEventListener('phoenix-native-resume',()=>{refreshStatus();refreshSignals();refreshHistory();});
+
+window.addEventListener('phoenix-signals-invalidated',()=>{refreshSignals();refreshHistory();});
+window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='phoenix-signals-invalidated'&&[...document.querySelectorAll('iframe')].some(f=>f.contentWindow===e.source)){refreshSignals();refreshHistory();}});

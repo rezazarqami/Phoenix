@@ -8,6 +8,8 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Single close isolates hedge side, confirms closure and records manual results", SinglePositionCloseTests.Close);
+Run("Timeframe reservations enforce caps, durable two-stop brake, release and failure reporting", TimeframeRiskTests.Limits);
 Run("Journal sources filter before paging and preserve legacy wallets across restart", JournalSourceTests.Isolation);
 Run("Manual chart plans retain explicit levels, leverage and both directional protection policies", ManualSignalTests.Plans);
 Run("Manual chart source and initial expiry results survive restart independently", ManualSignalTests.Archive);

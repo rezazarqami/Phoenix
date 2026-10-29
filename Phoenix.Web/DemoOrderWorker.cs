@@ -51,7 +51,7 @@ public sealed class DemoOrderWorker(
                             var entryReached = EntryReached(order, ticker.LastPrice);
                             if (entryReached && IsTradingEnabled(options))
                             {
-                                if (await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken))
+                                if (await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken,ticker.ReceivedAtUtc))
                                     claimed = (await store.GetAllAsync(stoppingToken)).Single(x => x.Id == order.Id);
                                 // Another entry worker already claimed it. Never write this stale Pending copy back.
                             }
@@ -214,10 +214,11 @@ public sealed class DemoOrderWorker(
             }
             else
             {
-                order.Status = "Error";
+                order.Status = exception is HttpRequestException or OperationCanceledException ? "RecoveryRequired" : "Error";
                 order.Error = exception.Message;
                 logger.LogError(exception, "{Environment} order {OrderLinkId} was not confirmed",
                     options.EnvironmentName, order.OrderLinkId);
+                await store.UpdateAsync(order, token);
                 await telegram.OrderErrorAsync(order, token);
             }
         }

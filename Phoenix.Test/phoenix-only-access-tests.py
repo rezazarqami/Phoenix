@@ -43,8 +43,16 @@ with tempfile.TemporaryDirectory() as tmp:
     assert request(c,'/api/mobile/history/wallet-recovery')[0]==403
     assert request(c,'/api/mobile/history/recover-wallets',{})[0]==403
     assert request(c,'/api/mobile/history/import-wallets',{'export':{'messages':[]}})[0]==403
+    assert request(c,'/api/signals/timeframe-rules/1',{'maximumOpen':3})[0]==403
+    assert request(c,'/api/signals/timeframe-rules/1/resume',{})[0]==403
+    assert request(c,'/api/positions/close-preview?symbol=BTCUSDT&side=Buy&positionIndex=1',{})[0]==403
     assert request(c,'/api/positions/live')[0]==403
     assert request(c,'/api/personal/entries')[0]==404
+   assert request(client(),'/api/signals/timeframe-rules')[0]==401
+   assert request(owner,'/api/signals/timeframe-rules/1',{'maximumOpen':101})[0]==400
+   assert request(owner,'/api/signals/timeframe-rules/1',{'maximumOpen':3})[0]==200
+   assert next(x for x in json.loads(request(owner,'/api/signals/timeframe-rules')[1]) if x['rule']['timeframe']=='1')['rule']['maximumOpen']==3
+   assert request(owner,'/api/signals/timeframe-rules/1/resume',{})[0]==200
    assert request(client(),'/api/positions/live')[0]==401
    assert request(client(),'/api/signals')[0]==401
    assert request(client(),'/api/signals/00000000-0000-4000-8000-000000000001/live-chart')[0]==401

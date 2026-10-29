@@ -125,7 +125,7 @@ public sealed class ServerSignal
     }
 }
 
-public sealed class ServerOrderStore
+public sealed partial class ServerOrderStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -223,6 +223,10 @@ public sealed class ServerOrderStore
             signal.PublicTelegramMessageId ??= signals[index].PublicTelegramMessageId;
             signal.PublicSignalNumber ??= signals[index].PublicSignalNumber;
             signal.PublicReviewImageSentAtUtc ??= signals[index].PublicReviewImageSentAtUtc;
+            if(signal.FilledAtUtc is null && signal.Status is "Error" or "Rejected" or "Deactivated") {
+                signal.Outcome="EntryError";signal.CompletedAtUtc??=DateTime.UtcNow;
+            }
+            await RecordRiskCompletionUnsafeAsync(signal,token);
             signals[index] = Clone(signal);
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "SignalUpdated", token);
@@ -338,7 +342,7 @@ public sealed class ServerOrderStore
         finally { _gate.Release(); }
     }
 
-    public async Task<bool> TryClaimSubmissionAsync(Guid id, decimal price, CancellationToken token = default)
+    public async Task<bool> TryClaimSubmissionAsync(Guid id, decimal price, CancellationToken token = default,DateTime? observedAtUtc=null)
     {
         await _gate.WaitAsync(token);
         try
@@ -347,6 +351,7 @@ public sealed class ServerOrderStore
             var signal = signals.SingleOrDefault(x => x.Id == id);
             if (signals.Any(x => x.Status == "RecoveryRequired")) return false;
             if (signal is null || signal.Status != "Pending") return false;
+            if(!await RiskAllowsUnsafeAsync(signal,signals,price,token,observedAtUtc)) return false;
             signal.Status = "Submitting";
             signal.EntryTriggeredAtUtc = DateTime.UtcNow;
             signal.LastPrice = price;

@@ -32,9 +32,9 @@ const scripts=new Set(['live-positions.js','home-tabs.js','phoenix-ice.js','cryp
  const page=await browser.newPage();
  try{
   for(const [width,height] of [[360,640],[390,780],[412,820],[1280,800]]){
-   await page.setViewportSize({width,height});await page.unroute('**/*');page.removeAllListeners('pageerror');let proposals=[];const errors=[];page.on('pageerror',e=>errors.push(e.message));
+   await page.setViewportSize({width,height});await page.unroute('**/*');page.removeAllListeners('pageerror');let proposals=[],imageHold=null,decisionHold=null;const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',async route=>{
-    const url=new URL(route.request().url());
+    const url=new URL(route.request().url());if(url.pathname==='/fixture-chart.svg'&&imageHold)await imageHold;if(url.pathname.includes('/decision')&&decisionHold)await decisionHold;
     if(url.pathname.startsWith('/api/')){
      let data={};if(url.pathname==='/api/positions/live')data={updatedAtUtc:'2026-10-27T01:00:00Z',items:[{position:{symbol:'BTCUSDT',side:'Buy',size:0.015,leverage:20,averagePrice:79826.7,markPrice:80000,unrealisedPnl:2.5995,initialMargin:59.87,returnPercent:4.34,takeProfit:82000,stopLoss:79500,liquidationPrice:76000},signalId:'fixture',firstProtection:true,timeframe:'15'},{position:{symbol:'ETHUSDT',side:'Sell',size:0.5,leverage:10,averagePrice:3000,markPrice:3010,unrealisedPnl:-5,initialMargin:150,returnPercent:-3.33},signalId:'fixture2',riskFreeReached:true,timeframe:'60'}]};else if(url.pathname==='/api/analysis/proposals')data=proposals;else if(url.pathname.includes('signal-batch'))data={running:false,message:'آماده'};else if(url.pathname.includes('market/overview'))data={closes:[100,102,99,104]};else if(url.pathname.includes('coins'))data={assets:[]};else if(url.pathname.includes('shadow'))data={summary:{total:0},signals:[]};else if(url.pathname.includes('learning'))data={entrySamples:100,proposalSamples:50};
      await route.fulfill({json:data});return;
@@ -56,9 +56,10 @@ const scripts=new Set(['live-positions.js','home-tabs.js','phoenix-ice.js','cryp
    await page.locator('#tab-crypto').click();const frame=page.frameLocator('#panel-crypto iframe');await frame.locator('#market-tab-review').click();
    assert.equal(await frame.locator('.review-heading').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','Review heading must not inherit the dark global header');
    if(process.env.REVIEW_SCREENSHOTS)await page.screenshot({path:process.env.REVIEW_SCREENSHOTS+`/empty-${width}.png`,fullPage:true});
+   let releaseImage;imageHold=new Promise(r=>releaseImage=r);
    proposals=[{key:'fixture',symbol:'MUSDT',caption,image:'/fixture-chart.svg',createdAt:'2026-01-01T00:00:00Z',state:'Ready'}];
    await frame.locator('#market-tab-review').click();await frame.locator('#reviewDetail .review-actions').waitFor();
-   assert.equal(await page.locator('.home-tab:visible').count(),6,'Review keeps the six main tabs');assert.equal(await page.locator('.phoenix-sky').isVisible(),true);assert.equal(await page.locator('body').evaluate(e=>e.classList.contains('review-focus-host')),false,'Review must not cover the shared header');await frame.locator('.review-chart img').evaluate(img=>img.decode());await frame.locator('body').evaluate(()=>document.fonts.ready);
+   assert.equal(await page.locator('.home-tab:visible').count(),6,'Review keeps the six main tabs');assert.equal(await page.locator('.phoenix-sky').isVisible(),true);assert.equal(await page.locator('body').evaluate(e=>e.classList.contains('review-focus-host')),false,'Review must not cover the shared header');const reserved=await frame.locator('.review-actions').boundingBox();releaseImage();imageHold=null;await frame.locator('.review-chart img').evaluate(img=>img.decode());const loaded=await frame.locator('.review-actions').boundingBox();assert.ok(Math.abs(reserved.y-loaded.y)<2,'Loading a chart image must not move the decision row');await frame.locator('body').evaluate(()=>document.fonts.ready);
    const measurements=await frame.locator('#market-pane-review').evaluate(e=>{
     const box=s=>document.querySelector(s).getBoundingClientRect().toJSON();
     return {width:innerWidth,height:innerHeight,scroll:document.documentElement.scrollHeight,panel:box('#market-pane-review'),chart:box('.review-chart'),actions:box('.review-actions'),fields:[...document.querySelectorAll('.review-metrics b')].map(x=>x.textContent),reason:box('#reviewDetail>textarea'),overflow:document.documentElement.scrollWidth>innerWidth+1};

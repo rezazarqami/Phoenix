@@ -170,7 +170,7 @@ public static class MobileEndpoints
             do
             {
                 page=await feed.ReadAsync(Owner(request),after,ct);
-                if(after is null || page.Events.Count>0 || DateTime.UtcNow>=until)return Results.Ok(page);
+                if(after is null || page.Events.Count>0 || DateTime.UtcNow>=until)return Results.Ok(MobileSignalFeed.ForClient(page,int.TryParse(request.Headers["X-Phoenix-Event-Version"],out var version)?version:1));
                 await Task.Delay(1000,ct);
             }while(true);
         });

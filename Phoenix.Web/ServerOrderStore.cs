@@ -411,7 +411,7 @@ public sealed class ServerOrderStore
         _history.GetLearningAsync(token);
 
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryAsync(int days = 30, int limit = 1000,
-        CancellationToken token = default) => _history.GetAsync(days, limit, token);
+        CancellationToken token = default, string? source = null) => _history.GetAsync(days, limit, token, source);
 
     public Task<IReadOnlyList<SignalHistoryItem>> GetHistoryRangeAsync(DateTime fromUtc, DateTime toUtc,
         int limit = 20000, CancellationToken token = default) =>

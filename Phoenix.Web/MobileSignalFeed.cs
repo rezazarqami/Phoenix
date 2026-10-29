@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Phoenix.Web;
 
-public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null, decimal? WalletBalanceUsdt=null, DateTime? WalletAtUtc=null, string? WalletSource=null);
+public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateTime At,string Symbol,string Direction,string? ExitKind, decimal? EntryPrice=null, decimal? TakeProfit=null, decimal? StopLoss=null, string? Timeframe=null, decimal? WalletBalanceUsdt=null, DateTime? WalletAtUtc=null, string? WalletSource=null, string? Origin=null);
 public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<DeviceSignalAlert> Events,DateTime ServerTimeUtc);
 
 // First-party authenticated feed. No Telegram, Firebase, third-party account or device secret is needed.
@@ -22,6 +22,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
             CREATE TABLE IF NOT EXISTS device_signal_history(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,at_utc TEXT NOT NULL,UNIQUE(owner,event_id));
             CREATE INDEX IF NOT EXISTS device_history_time ON device_signal_history(owner,at_utc,seq);
             CREATE TABLE IF NOT EXISTS device_history_initialized(owner TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS device_history_sources_initialized(owner TEXT PRIMARY KEY);
             """;await cmd.ExecuteNonQueryAsync(token);return db;
     }
     public async Task CaptureAsync(string owner,CancellationToken token)
@@ -38,7 +39,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
                 var e=pair.Event;var s=pair.Signal;
                 if(e.At.Kind!=DateTimeKind.Utc || e.At<now.AddDays(-1) || e.At>now)continue;
                 using var cmd=db.CreateCommand();cmd.Transaction=tx;
-                var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind);
+                var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,Origin:s.Origin);
                 cmd.CommandText="INSERT OR IGNORE INTO device_signal_events(owner,event_id,payload,at_utc) VALUES($owner,$id,$payload,$at)";
                 cmd.Parameters.AddWithValue("$owner",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
                 cmd.Parameters.AddWithValue("$payload",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));

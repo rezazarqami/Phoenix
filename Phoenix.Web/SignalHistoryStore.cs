@@ -164,8 +164,9 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
-    public async Task<IReadOnlyList<SignalHistoryItem>> GetAsync(int days, int limit, CancellationToken token = default)
+    public async Task<IReadOnlyList<SignalHistoryItem>> GetAsync(int days, int limit, CancellationToken token = default, string? source = null)
     {
+        if(source is not (null or "normal" or "manual")) throw new ArgumentException("Invalid signal source.");
         days = Math.Clamp(days, 1, 3650);
         limit = Math.Clamp(limit, 1, 5000);
         await _gate.WaitAsync(token);
@@ -176,8 +177,10 @@ public sealed class SignalHistoryStore
             command.CommandText = """
                 SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
                 FROM signals WHERE created_at_utc >= $from
+                  AND ($source IS NULL OR ($source='manual' AND json_extract(payload,'$.origin')='ManualChart') OR ($source='normal' AND COALESCE(json_extract(payload,'$.origin'),'')!='ManualChart'))
                 ORDER BY created_at_utc DESC LIMIT $limit;
                 """;
+            AddNullable(command,"$source",source);
             Add(command, "$from", DateTime.UtcNow.AddDays(-days).ToString("O"));
             Add(command, "$limit", limit);
             var result = new List<SignalHistoryItem>();

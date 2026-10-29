@@ -28,6 +28,8 @@
   const tabs=[...document.querySelectorAll('[data-market-tab]')];
   function activate(name,focus=false){
     if(!tabs.some(t=>t.dataset.marketTab===name))name='create';
+    document.body.classList.toggle('manual-desk-open',name==='manual');
+    document.getElementById('manualChartCard').hidden=name!=='manual';
     if(name==='approved')document.getElementById('refreshShadow').click();
     for(const tab of tabs){const selected=tab.dataset.marketTab===name;tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;const pane=document.getElementById(tab.getAttribute('aria-controls'));pane.hidden=!selected;if(pane.tagName==='DETAILS')pane.open=true;if(selected&&focus)tab.focus();}
   }

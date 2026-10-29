@@ -13,7 +13,7 @@ const base=path.join(__dirname,'../Phoenix.Web/wwwroot');const {chromium}=requir
   });
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   for(const [width,height] of [[360,640],[390,780],[412,820],[1280,800]]){
-   chartRequests=0;await page.setViewportSize({width,height});await page.goto('http://127.0.0.1:'+server.address().port+'/notifications');await page.locator('.event-card').first().waitFor();await page.evaluate(()=>document.fonts.ready);
+   chartRequests=0;await page.setViewportSize({width,height});await page.goto('http://127.0.0.1:'+server.address().port+'/notifications?embed=1');await page.locator('.event-card').first().waitFor();await page.evaluate(()=>document.fonts.ready);
    assert.ok(await page.locator('.journal-hero').evaluate(e=>getComputedStyle(e).backgroundImage.includes('phoenix-ice-sky.webp')),'Reuse home sky asset');assert.ok(await page.locator('.journal-brand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Reuse real Phoenix logo');
    await page.locator('#journal-tab-results').click();await page.waitForFunction(()=>document.querySelectorAll('.event-wallet').length===20);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Journal must not overflow horizontally');

@@ -27,7 +27,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #289bff;outline-offset:3p
 .settings-menu{display:grid;gap:8px}.settings-menu>.security-button{width:100%;justify-content:flex-start;padding:10px 12px;text-decoration:none}
 
 /* Crypto Markets supplies its own six section tabs directly below the sky. */
-body.crypto-market-open .home-tabs{display:none}body.crypto-market-open #panel-crypto{margin-top:-45px;position:relative}body.crypto-market-open .home-content-frame{border:0;border-radius:0;background:transparent}
+body.crypto-market-open #panel-crypto{margin-top:0;position:relative}body.crypto-market-open .home-content-frame{border:0;border-radius:0;background:transparent}
 
 #deviceAlertsDialog{max-width:520px;width:calc(100% - 28px);border-radius:24px;padding:20px}#deviceAlertsDialog .dialog-head{display:flex;align-items:center;justify-content:space-between;background:transparent}#deviceAlertsDialog h2{font-size:21px}#deviceAlertsDialog p{font-size:13px;line-height:1.9}#deviceAlertsDialog .device-alert-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}#deviceAlertsDialog button{font:inherit;border:1px solid #061b3a;border-radius:12px;background:#061b3a;color:#1473b6;padding:12px;cursor:pointer}#deviceAlertsDialog #enableDeviceAlerts{background:linear-gradient(110deg,#29b9ed,#087fff);color:#061b3a;border:0}#deviceAlertsDialog #disableDeviceAlerts{color:#d24d65;background:#061b3a}#deviceAlertsDialog button:disabled{opacity:.5;cursor:default}#deviceAlertsDialog .device-alert-note{font-size:11px;color:#b6cbea;border-top:1px solid #061b3a;padding-top:15px}#deviceAlertsMessage{color:#b83b58}#deviceAlertsState{font-weight:700;color:#157cac}
 
@@ -39,9 +39,6 @@ body.crypto-market-open .home-tabs{display:none}body.crypto-market-open #panel-c
 #notificationMenu .notification-history-link:after{content:'‹';font:22px Arial;color:#4097cf}
 #notificationMenu p{margin:0;font-size:11px;line-height:1.8}
 #notificationMenu button{font-size:12px;line-height:1.6}
-body.review-focus-host{overflow:hidden!important}
-body.review-focus-host #panel-crypto{position:fixed!important;inset:0!important;z-index:200!important;padding:0!important;margin:0!important;background:#061b3a!important;height:100dvh!important;overflow:hidden!important}
-body.review-focus-host #panel-crypto iframe{display:block!important;width:100%!important;height:100dvh!important;min-height:0!important;border:0!important}
 
 /* Live exchange positions share the light Phoenix signal-center theme. */
 .signal-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}

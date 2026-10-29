@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 
 <html dir="rtl" lang="fa">
-<head>
+<head><script src="/shell-route.js?v=20261029"></script>
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
 <script>if (/PhoenixAndroid\//.test(navigator.userAgent)) document.documentElement.classList.add('android-shell');</script>
@@ -16,7 +16,7 @@
 <link href="/security.css?v=2" rel="stylesheet"/>
 <link href="/crypto-statistics.css?v=1" rel="stylesheet"/>
 <title>Phoenix Trading Panel</title>
-<link href="/phoenix-ice.css?v=20261028-neon" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=1"><link rel="stylesheet" href="/phoenix-neon.css?v=20261029-scroll"></head>
+<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=1"><link rel="stylesheet" href="/phoenix-neon.css?v=20261029-scroll"></head>
 <body>
 <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <main>
@@ -79,6 +79,7 @@
 </section></section>
 <footer><span>PHOENIX • BYBIT REAL</span><span>استراتژی اصلی حساب واقعی</span></footer>
 </div>
+<section class="home-section embedded-section" hidden id="panel-notifications" aria-label="رویدادها و نتایج"></section>
 <section aria-labelledby="tab-crypto" class="home-section embedded-section" hidden="" id="panel-crypto" role="tabpanel"></section>
 <section aria-labelledby="tab-signal" class="home-section embedded-section" hidden="" id="panel-signal" role="tabpanel"></section>
 <section aria-labelledby="tab-elliott" class="home-section embedded-section" hidden="" id="panel-elliott" role="tabpanel"></section>
@@ -157,6 +158,6 @@
 <script src="/crypto-statistics.js?v=1"></script>
 <script src="/live-positions.js?v=20261027-controls"></script>
 <script src="/hero-motion.js?v=1"></script>
-<script src="/home-tabs.js?v=20261029-session"></script>
+<script src="/home-tabs.js?v=20261029-shell"></script>
 <script src="/phoenix-ice.js?v=1"></script><script defer src="/device-alerts.js?v=1"></script><dialog id="deviceAlertsDialog" class="security-dialog" aria-labelledby="deviceAlertsTitle"><div class="dialog-head"><h2 id="deviceAlertsTitle">اعلان زندهٔ گوشی</h2><button type="button" id="closeDeviceAlerts" aria-label="بستن">×</button></div><div class="dialog-body"><p>اتصال مستقیم به سرور فونیکس؛ مستقل از تلگرام. فقط نزدیک ورود، ورود تأییدشدهٔ صرافی، پله‌های ریسک‌فری، تارگت، استاپ و انقضای سیگنال نزدیک‌شده اعلان می‌شوند.</p><p id="deviceAlertsState" role="status">در حال بررسی…</p><p id="deviceAlertsConnection"></p><label>صدای پیام <select id="deviceAlertSound"><option value="crystal">کریستال</option><option value="pulse">ضربان</option><option value="beacon">فانوس</option><option value="soft">ملایم</option></select></label><div class="device-alert-actions"><button type="button" id="soundDeviceAlerts">تنظیم صدا در اندروید</button><button type="button" id="connectionDeviceAlerts">مخفی‌کردن اعلان اتصال</button><button type="button" id="enableDeviceAlerts">فعال‌سازی اعلان زنده</button><button type="button" id="testDeviceAlerts">تست اعلان گوشی</button><button type="button" id="batteryDeviceAlerts">تنظیم باتری گوشی</button><button type="button" id="disableDeviceAlerts">توقف اعلان زنده</button></div><p id="deviceAlertsMessage" role="alert"></p><p class="device-alert-note">هنگام فعال‌بودن، یک اعلان ثابت وضعیت اتصال را نشان می‌دهد. برای جلوگیری از تأخیر در پس‌زمینه، باتری فونیکس را روی «بدون محدودیت» بگذار. پس از توقف اجباری برنامه توسط اندروید، فونیکس را دوباره باز کن. خروج از حساب، اعلان زنده را متوقف می‌کند. ارسال تلگرام فعلاً برقرار می‌ماند.</p></div></dialog></body>
 </html>

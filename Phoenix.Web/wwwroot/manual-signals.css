@@ -53,3 +53,5 @@ body.manual-desk-open main.market-page{width:100%;max-width:none}
 .manual-tools button.active{color:#8ce8ff;background:#074779}
 
 .manual-tools select[hidden]{display:none}
+
+.manual-controls{grid-template-columns:repeat(3,minmax(0,1fr))}

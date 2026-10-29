@@ -71,7 +71,7 @@ public sealed class SignalHistoryStore
 
             if (eventType is not null)
                 await InsertEventAsync(connection, (SqliteTransaction)transaction, signal.Id, eventType, now, payload, token);
-            if (signal.Outcome == "Expired" && signal.ExpireReason == "InitialBoundary")
+            if (signal.Origin != ManualSignals.Origin && signal.Outcome == "Expired" && signal.ExpireReason == "InitialBoundary")
                 await CompactInitialExpiryAsync(connection, (SqliteTransaction)transaction, signal, now, token);
             await transaction.CommitAsync(token);
         }
@@ -217,6 +217,42 @@ public sealed class SignalHistoryStore
                     reader.GetBoolean(3)));
             }
             return result;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<ManualSignalReport> GetManualReportAsync(int offset, CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var db = await OpenAsync(token);
+            var counts = db.CreateCommand();
+            counts.CommandText = """
+                SELECT COUNT(*),
+                  COALESCE(SUM(json_extract(payload,'$.status') IN ('Pending','Submitting','Submitted','Filled','Closing')),0),
+                  COALESCE(SUM(json_extract(payload,'$.outcome')='Target'),0),
+                  COALESCE(SUM(json_extract(payload,'$.outcome')='StopLoss'),0),
+                  COALESCE(SUM(json_extract(payload,'$.outcome')='RiskFree'),0),
+                  COALESCE(SUM(json_extract(payload,'$.outcome')='Expired'),0)
+                FROM signals WHERE json_extract(payload,'$.origin')='ManualChart'
+                """;
+            var totals = new int[6];
+            await using (var reader = await counts.ExecuteReaderAsync(token))
+                if (await reader.ReadAsync(token)) for (var i=0; i<6; i++) totals[i] = reader.GetInt32(i);
+            var command = db.CreateCommand();
+            command.CommandText = """
+                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL FROM signals
+                WHERE json_extract(payload,'$.origin')='ManualChart'
+                ORDER BY created_at_utc DESC,id DESC LIMIT 51 OFFSET $offset
+                """;
+            Add(command, "$offset", offset);
+            var rows = new List<SignalHistoryItem>();
+            await using (var reader = await command.ExecuteReaderAsync(token))
+                while (await reader.ReadAsync(token))
+                    if (JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0), JsonOptions) is { } signal)
+                        rows.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(), reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(), reader.GetBoolean(3)));
+            return new(totals[0],totals[1],totals[2],totals[3],totals[4],totals[5],rows.Take(50).ToArray(),rows.Count>50);
         }
         finally { _gate.Release(); }
     }

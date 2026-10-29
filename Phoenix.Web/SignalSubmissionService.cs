@@ -85,6 +85,32 @@ public sealed class SignalSubmissionService(
         catch (Exception exception) { return new(null, exception.Message); }
     }
 
+    public async Task<IResult> SubmitManualAsync(ManualSignalRequest input, string? username, CancellationToken token)
+    {
+        if (input.Validate() is { } error) return Results.BadRequest(new { error });
+        await store.ExecutionGate.WaitAsync(token);
+        ServerSignal queued;
+        try
+        {
+            // Stable client IDs make an uncertain-response retry safe across restart.
+            if (await store.FindSignalAsync(input.RequestId, token) is { } existing)
+            {
+                if (existing.Origin != ManualSignals.Origin || existing.RequestedByUsername != NormalizeUsername(username))
+                    return Results.Conflict(new { error = "شناسه ثبت قبلاً استفاده شده است." });
+                return Results.Ok(existing);
+            }
+            if (!await catalog.ContainsAsync(input.Symbol, token)) return Results.BadRequest(new { error = "نماد معتبر نیست." });
+            queued = ManualSignals.Build(input, await bybit.GetInstrumentRulesAsync(input.Symbol, token));
+            queued.RequestedByUsername = NormalizeUsername(username);
+            await store.AddAsync(queued, token);
+        }
+        catch (Exception exception) { return Results.BadRequest(new { error = exception.Message }); }
+        finally { store.ExecutionGate.Release(); }
+        // The durable queue is authoritative; Telegram delivery cannot undo registration.
+        try { await telegram.SignalQueuedAsync(queued, token); } catch { }
+        return Results.Created($"/api/signals/{queued.Id}", queued);
+    }
+
     private static string? NormalizeUsername(string? username) =>
         string.IsNullOrWhiteSpace(username) ? null : username.Trim().ToLowerInvariant();
 }

@@ -145,6 +145,8 @@ async function loadMarket() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'اطلاعات بازار دریافت نشد.');
     marketAssets = data.assets || [];
+    if (typeof window !== "undefined") { window.phoenixMarketAssets = marketAssets;
+      window.dispatchEvent(new CustomEvent("phoenix-market-assets", {detail:marketAssets})); }
     document.querySelector('#assetCount').textContent = faMarket.format(marketAssets.length);
     document.querySelector('#activeCount').textContent = faMarket.format(marketAssets.reduce((sum, asset) => sum + asset.activeCount, 0));
     renderMarket();

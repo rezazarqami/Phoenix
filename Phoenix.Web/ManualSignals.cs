@@ -9,7 +9,7 @@ public sealed record ManualSignalRequest(Guid RequestId, string Symbol, string D
         if (RequestId == Guid.Empty) return "شناسه ثبت معتبر نیست.";
         if (string.IsNullOrWhiteSpace(Symbol) || Symbol.Length > 40 || Symbol.Any(c => !char.IsAsciiLetterOrDigit(c))) return "نماد معتبر نیست.";
         if (Direction is not ("Long" or "Short")) return "جهت معامله معتبر نیست.";
-        if (Timeframe is not ("1" or "5" or "15" or "60" or "240" or "D")) return "تایم‌فریم معتبر نیست.";
+        if (Timeframe is not ("1" or "5" or "15" or "30" or "60" or "240" or "D" or "W" or "M" or "3M")) return "تایم‌فریم معتبر نیست.";
         if (new[] { EntryPrice, TakeProfit, StopLoss, ExpirePrice }.Any(x => x <= 0 || x > 1000000000000m)) return "قیمت خطوط باید مثبت و معتبر باشد.";
         if (PositionSizeUsdt is <= 0 or > 1000000m || Leverage is < 1 or > 1000m) return "ورودی یا لوریج معتبر نیست.";
         if (Direction == "Long" ? !(StopLoss < EntryPrice && TakeProfit > EntryPrice && ExpirePrice > EntryPrice)
@@ -46,13 +46,18 @@ public static class ManualSignals
             OrderLinkId = $"phoenix-{input.RequestId:N}"[..36], CreatedAtUtc = DateTime.UtcNow
         };
     }
+    public static IReadOnlyList<BybitKline> AggregateQuarters(IEnumerable<BybitKline> monthly) => monthly
+        .OrderBy(c => c.OpenTime)
+        .GroupBy(c => { var t = DateTimeOffset.FromUnixTimeMilliseconds(c.OpenTime); return new DateTimeOffset(t.Year, (t.Month - 1) / 3 * 3 + 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(); })
+        .Select(g => new BybitKline(g.Key, g.First().Open, g.Max(c => c.High), g.Min(c => c.Low), g.Last().Close, g.Sum(c => c.Volume))).ToArray();
+
     public static void Map(WebApplication app)
     {
         app.MapGet("/api/manual-signals/candles", async (string symbol, string? interval, BybitDemoClient bybit, BybitInstrumentCatalog catalog, CancellationToken token) => {
             if (!await catalog.ContainsAsync(symbol, token)) return Results.BadRequest(new { error = "نماد معتبر نیست." });
-            if (interval is not ("1" or "5" or "15" or "60" or "240" or "D")) return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
+            if (interval is not ("1" or "5" or "15" or "30" or "60" or "240" or "D" or "W" or "M" or "3M")) return Results.BadRequest(new { error = "تایم‌فریم معتبر نیست." });
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(12));
-            try { var candles = await bybit.GetKlinesAsync(symbol, interval, 500, timeout.Token); var rules = await bybit.GetInstrumentRulesAsync(symbol, timeout.Token);
+            try { var candles = await bybit.GetKlinesAsync(symbol, interval == "3M" ? "M" : interval, 500, timeout.Token); if (interval == "3M") candles = AggregateQuarters(candles); var rules = await bybit.GetInstrumentRulesAsync(symbol, timeout.Token);
                 return Results.Ok(new { symbol, interval, candles, tickSize = rules.TickSize, quantityStep = rules.QuantityStep, maximumLeverage = rules.MaximumLeverage }); }
             catch (Exception) when (!token.IsCancellationRequested) { return Results.Json(new { error = "دریافت نمودار ناموفق بود؛ دوباره تلاش کن." }, statusCode:503); }
         });

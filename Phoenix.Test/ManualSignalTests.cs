@@ -6,6 +6,12 @@ internal static class ManualSignalTests
     public static void Plans()
     {
         var rules=new BybitInstrumentRules("BTCUSDT",.01m,.001m,.001m,5m,100m,1m,.01m);
+        foreach(var timeframe in new[]{"1","5","15","30","60","240","D","W","M","3M"})
+            Check(new ManualSignalRequest(Guid.NewGuid(),"BTCUSDT","Long",timeframe,100,110,95,120,10,10).Validate() is null,"Accept requested timeframe "+timeframe);
+        long Month(int year,int month)=>new DateTimeOffset(year,month,1,0,0,0,TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var quarter=ManualSignals.AggregateQuarters(new[]{new BybitKline(Month(2026,3),120,150,100,140,3),new BybitKline(Month(2026,1),100,120,90,110,1),new BybitKline(Month(2026,2),110,140,80,120,2),new BybitKline(Month(2026,4),140,160,130,150,4),new BybitKline(Month(2025,12),90,100,70,100,5)});
+        Check(quarter.Count==3&&quarter[1]==new BybitKline(Month(2026,1),100,150,80,140,6),"Quarter candles respect UTC calendar boundaries, sorted OHLC and summed volume");
+        Check(quarter[2].OpenTime==Month(2026,4)&&quarter[2].Close==150,"Current incomplete quarter remains live");
         foreach(var direction in new[]{"Long","Short"})
         {
             var d=direction=="Long"?1m:-1m;

@@ -771,10 +771,10 @@ app.MapGet("/api/signals/{id:guid}/live-chart",async (Guid id,ServerOrderStore s
     using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(8));
     try
     {
-        var candlesTask=bybit.GetKlinesAsync(signal.Symbol,interval,150,timeout.Token);
+        var candlesTask=bybit.GetKlinesAsync(signal.Symbol,interval=="3M"?"M":interval,150,timeout.Token);
         var tickerTask=bybit.GetLastPriceAsync(signal.Symbol,timeout.Token);await Task.WhenAll(candlesTask,tickerTask);
         return Results.Ok(new{signal.Id,signal.Symbol,signal.Direction,interval,updatedAtUtc=DateTime.UtcNow,
-            lastPrice=tickerTask.Result.LastPrice,candles=candlesTask.Result,
+            lastPrice=tickerTask.Result.LastPrice,candles=interval=="3M"?ManualSignals.AggregateQuarters(candlesTask.Result):candlesTask.Result,
             levels=new[]{new{label="CEILING",price=signal.Ceiling},new{label="FLOOR",price=signal.Floor},
                 new{label="ENTRY",price=signal.EntryPrice},new{label="TP",price=signal.TakeProfit},new{label="SL",price=signal.StopLoss},
                 new{label="RF",price=signal.RiskFreePrice??0m},new{label="RF1 SL",price=signal.EarlyStopLimit??0m},new{label="RF2 SL",price=signal.StopLoss2??0m}}.Where(x=>x.price>0)});

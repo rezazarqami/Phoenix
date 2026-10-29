@@ -29,3 +29,27 @@ body .market-stats b{font-size:20px!important;line-height:1.2}body .market-stats
 #manualAssetMore{display:block;margin:10px auto}.manual-active{background:#04172f;border:1px solid #1d4c75;border-radius:12px;padding:12px}.manual-active-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.manual-active-head h2{font-size:16px;margin:0}.manual-active .active-signal-row{border:1px solid #1b5183;border-radius:9px;padding:9px;margin-top:7px;min-width:0}.manual-active .active-signal-main{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11px}.manual-active .active-symbol{font:700 13px Arial;padding:5px;border:0;background:transparent}.manual-active .active-direction{font:11px Arial;color:#62d8bf}.manual-active .active-direction[data-side=Short]{color:#ff93a7}.manual-active .active-phase{color:#a4bfd8;font-size:10px}.manual-active .active-cancel{margin-right:auto;font-size:10px}.manual-active .active-signal-check{width:16px;height:16px;padding:0}.manual-active .active-coin{font:12px Arial;color:#8dcef1}.manual-active .active-expand{padding:4px 8px}.manual-active .active-signal-detail{padding-top:10px}.manual-active .active-signal-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0;font-size:10px}.manual-active .active-signal-metrics div{display:grid;gap:4px}.manual-active .active-signal-metrics small{color:#a4bfd8}.manual-active .active-empty{color:#a4bfd8;font-size:12px;padding:18px;text-align:center}#manualActiveSelectionControls{display:flex;gap:6px;margin:9px 0;font-size:10px}
 @media(max-width:600px){body .market-stats>button{min-height:60px;gap:5px;padding:7px 4px!important}body .market-stats>button>span:first-child{width:18px;height:22px}body .market-stats>button svg{width:18px;height:18px}body .market-stats b{font-size:18px!important}body .market-stats small{font-size:9px!important}.manual-controls{padding:10px 8px;gap:7px}.manual-controls label{font-size:10px}.manual-controls input,.manual-controls select{padding:5px;font-size:11px}.manual-symbol strong{font-size:17px}.manual-symbol small{font-size:9px}.manual-chart{height:max(450px,calc(var(--phoenix-viewport-height,100svh) - 158px))}.manual-tools{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain}.manual-tools button{white-space:nowrap;flex-shrink:0}.manual-tools span{display:none}.manual-level-handle span{font-size:9px}.manual-footer,.manual-status,.manual-note{padding-inline:8px}}
 body.manual-desk-open main.market-page{width:100%;max-width:none}
+
+/* The SVG itself passes pan/zoom through; only drawings and handles receive input. */
+.manual-drawing g[data-drawing] line{stroke:currentColor;stroke-width:inherit}
+.manual-drawing g[data-drawing] line[stroke="transparent"]{stroke:transparent;stroke-width:16}
+.manual-drawing g[data-drawing] text{fill:currentColor;font-family:Arial,sans-serif}
+
+.manual-tools label{display:flex;align-items:center;gap:4px}.manual-tools select{max-width:95px}
+.manual-tool-picker{width:min(640px,calc(100% - 24px))}.manual-tool-picker header{display:flex;align-items:center;justify-content:space-between}
+#manualToolList{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px;direction:ltr}
+#manualToolList button{min-height:64px;margin:0;font:12px/1.4 Arial,sans-serif;padding:8px;overflow-wrap:anywhere}
+.manual-drawing-settings{display:grid;gap:14px}.manual-drawing-settings label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px}.manual-drawing-settings input[type=range]{width:150px}.manual-drawing-settings select{max-width:65%;padding:8px;background:#082443;color:#fff;border:1px solid #245582;border-radius:8px}.manual-drawing-settings [hidden]{display:none}
+.manual-desk button:disabled{cursor:default}
+@media(max-width:480px){#manualToolList{grid-template-columns:repeat(2,minmax(0,1fr))}.manual-tools{gap:4px}.manual-tools button{padding:7px 8px}.manual-drawing-settings input[type=range]{width:120px}}
+
+/* One compact, horizontally scrollable icon strip above the chart. */
+.manual-tools{display:flex;flex-wrap:nowrap;overflow-x:auto;max-width:100%;gap:3px;padding:5px 0;direction:ltr;scrollbar-width:thin;align-items:center}
+#manualToolList{display:contents}
+.manual-tools button,#manualToolList button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;min-height:34px;height:34px;padding:6px;margin:0;border-radius:6px}
+.manual-tools svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.manual-tools label{flex:0 0 auto}.manual-tools select{height:34px;max-width:90px;padding:4px;font-size:11px;flex:0 0 auto}
+.manual-tools #manualChartType{width:48px;font-size:20px}
+.manual-tools button.active{color:#8ce8ff;background:#074779}
+
+.manual-tools select[hidden]{display:none}

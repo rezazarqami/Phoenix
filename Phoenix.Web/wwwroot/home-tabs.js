@@ -26,7 +26,7 @@
           frame.style.height = `${height}px`;
       });
     };
-    frame.addEventListener('load', () => {
+    const initialize = () => {
       observer?.disconnect();
       try {
         const doc = frame.contentDocument;
@@ -35,6 +35,10 @@
         observer.observe(doc.body);
         measure();
       } catch { /* External navigation cannot be measured. */ }
+    };
+    frame.addEventListener('load', initialize);
+    window.addEventListener('message', event => {
+      if(event.origin===location.origin&&event.source===frame.contentWindow&&event.data?.type==='phoenix-frame-ready')initialize();
     });
     window.addEventListener('resize', measure);
     window.addEventListener('phoenix-tab-changed', measure);

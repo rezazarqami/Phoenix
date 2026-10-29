@@ -1,6 +1,8 @@
 (() => {
  'use strict';
  const $=id=>document.getElementById(id),pane=$('market-pane-manual');if(!pane)return;
+ // The child can become interactive before iframe load (for example while fonts load).
+ if(window.frameElement){try{document.documentElement.style.setProperty('--phoenix-viewport-height',window.parent.innerHeight+'px');window.parent.postMessage({type:'phoenix-frame-ready'},location.origin);}catch{}}
  const host=$('manualChart'),dialog=$('manualConfirm'),status=$('manualStatus');
  const definitions={entry:{label:'ورود',color:'#1681c1'},target:{label:'تارگت',color:'#16886b'},stop:{label:'استاپ',color:'#ce425b'},expire:{label:'اکسپایر',color:'#a17a16'}};
  const fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:8}),cash=n=>(n>=0?'+':'−')+Math.abs(n).toFixed(2)+' $';

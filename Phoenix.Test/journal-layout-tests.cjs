@@ -14,14 +14,14 @@ const base=path.join(__dirname,'../Phoenix.Web/wwwroot');const {chromium}=requir
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   for(const [width,height] of [[360,640],[390,780],[412,820],[1280,800]]){
    chartRequests=0;await page.setViewportSize({width,height});await page.goto('http://127.0.0.1:'+server.address().port+'/notifications?embed=1');await page.locator('.event-card').first().waitFor();await page.evaluate(()=>document.fonts.ready);
-   assert.ok(await page.locator('.journal-hero').evaluate(e=>getComputedStyle(e).backgroundImage.includes('phoenix-ice-sky.webp')),'Reuse home sky asset');assert.ok(await page.locator('.journal-brand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Reuse real Phoenix logo');
+   assert.ok(await page.locator('.journal-hero').evaluate(e=>getComputedStyle(e).backgroundImage.includes('phoenix-matrix.png')),'Reuse current Phoenix matrix asset');assert.ok(await page.locator('.journal-brand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Reuse real Phoenix logo');
    await page.locator('#journal-tab-results').click();await page.waitForFunction(()=>document.querySelectorAll('.event-wallet').length===20);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Journal must not overflow horizontally');
    const boxes=await page.locator('[role=tab]').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().toJSON()));assert.ok(boxes.every(b=>b.x>=0&&b.right<=width+1),'Tabs must fit mobile');
    assert.ok(await page.locator('.event-card').evaluateAll(es=>es.every(e=>e.lastElementChild.classList.contains('event-wallet'))),'Balances must be at bottom of every result');
    assert.equal(await page.locator('.wallet-missing').count(),1,'Unknown balances must be explicit');
    assert.deepEqual(await page.locator('.event-kind').allTextContents().then(xs=>xs.slice(0,5)),['TP','RF1','SL','RF2','RF']);
-   assert.equal(await page.locator('.event-levels:visible').count(),0,'Prices must be hidden until details are opened');assert.equal(chartRequests,0,'Closed cards must not fetch chart images');
+   assert.equal(await page.locator('.event-card').first().evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(6, 26, 55)','Result cards match Phoenix navy');assert.equal(await page.locator('body').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(6, 26, 55)','Embedded background matches result cards');assert.equal(await page.locator('.event-levels:visible').count(),0,'Prices must be hidden until details are opened');assert.equal(chartRequests,0,'Closed cards must not fetch chart images');
    await page.locator('.event-card').first().evaluate(e=>window.scrollTo(0,e.getBoundingClientRect().top+scrollY));
    const visible=await page.locator('.event-card').evaluateAll(es=>es.filter(e=>{const r=e.getBoundingClientRect();return r.top>=-1&&r.bottom<=innerHeight;}).length);
    assert.ok(visible>=10,`At least ten collapsed results must fit in ${height}px; got ${visible}`);

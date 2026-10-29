@@ -10,3 +10,18 @@ main{position:relative;max-width:820px;margin:-50px auto 0;padding:0 18px 40px}.
 /* Compact journal chrome leaves more room for the result list. */
 .journal-hero{min-height:180px;padding-top:20px}.journal-heading{padding:12px 16px;border-radius:16px}.journal-heading h1{font-size:19px;margin:4px 0}.journal-heading p{font-size:10px}.journal-tabs{margin:12px 0 5px;padding:3px;border-radius:11px}.journal-tabs button{padding:7px 8px;font-size:11px}.tools p{font-size:9px;margin:5px 0}.tools button{padding:6px 9px;font-size:10px}#historyStatus{font-size:9px;min-height:14px;margin:5px 0 7px}
 @media(max-width:500px){.journal-hero{min-height:150px;padding-top:18px}.journal-brand img{width:50px;height:50px}.journal-brand b{font-size:22px}.journal-brand small{font-size:6px}.journal-brand span span{font-size:7px}main{margin-top:-24px}.journal-heading{padding:10px 12px}.journal-heading h1{font-size:17px}.journal-heading p{font-size:9px}.journal-heading small{font-size:7px}.journal-tabs button{font-size:11px}.event-card{border-radius:8px}.event-detail>summary{min-height:14px}}
+
+/* Match the current Phoenix navy and cyan shell, including the embedded journal. */
+html body,html.embedded-view body{background:#061a37!important;color:#edf5ff;color-scheme:dark}
+.journal-hero{background:linear-gradient(180deg,#020d2320,#061a37),url('/analysis-assets/phoenix-matrix.png') center/cover}
+.journal-brand b,.journal-heading h1,.event-symbol,.event-levels b{color:#edf5ff}
+.journal-heading,.event-card,.wallet-import{background:#061a37;border-color:#21598b;box-shadow:none;backdrop-filter:none}
+.journal-heading small,.event-detail>summary,.signal-archive-chart,.wallet-import summary{color:#74deff}
+.journal-heading p,.tools p,#historyStatus,.event-card .event-message,.event-detail-body p,.wallet-source,.event-levels small,.event-meta,.event-detail time,.wallet-import,.journal-brand small,.journal-brand span span{color:#b4c6e4}
+.journal-tabs,.event-levels{background:#09274d;border-color:#21598b}
+.journal-tabs button{color:#c6d8ef}.journal-tabs button[aria-selected=true]{background:#073764;color:#74deff;border-color:#009dff}
+.tools button,#loadOlder,.wallet-import button,.back{background:#09274d;color:#74deff;border-color:#21598b}
+.live{background:#062f36;color:#00e6bd}
+.event-card .event-wallet{border-color:#21598b;color:#b4c6e4}.event-wallet b{color:#74deff}.event-wallet .wallet-missing{color:#b4c6e4}
+.event-card[data-kind=Target] .event-kind{color:#00e6bd}.event-card[data-kind=StopLoss] .event-kind{color:#ff7894}
+.event-card[data-kind=RiskFree] .event-kind,.event-card[data-kind=FirstProtection] .event-kind,.event-card[data-kind=RiskFreeReached] .event-kind{color:#50d9d2}

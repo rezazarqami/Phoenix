@@ -58,6 +58,25 @@ internal static class ScanPerformanceTests
         await Fetch(default);
         if(calls != 1)throw new Exception("Cache lifetime must be preserved");
     }
+    public static void AnalysisCacheIsBounded()=>BoundedCache().GetAwaiter().GetResult();
+    private static async Task BoundedCache()
+    {
+        int calls=0;
+        using var http=new HttpClient(new Handler(token=>{
+            calls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent("{\"retCode\":0,\"result\":{\"list\":[[\"1000\",\"1\",\"2\",\"1\",\"2\",\"1\"]]}}")});
+        }));
+        var service=new ProfessionalSignalAnalysisService(new(new(null,null),http),null!);
+        for(var i=0;i<200;i++)await service.GetReviewCandlesAsync($"COIN{i}USDT","15",null,default);
+        if(service.CachedHistoryCount>128)throw new Exception("Full-market scans must not retain unbounded candle arrays");
+        var before=calls;await service.GetReviewCandlesAsync("COIN199USDT","15",null,default);
+        if(calls!=before)throw new Exception("Recent review history must stay cached");
+        await service.GetReviewCandlesAsync("COIN0USDT","15",null,default);
+        if(calls!=before+1)throw new Exception("Old evicted histories must be fetched afresh");
+        service.TrimCache(DateTime.UtcNow.AddSeconds(46));
+        if(service.CachedHistoryCount!=0)throw new Exception("Expired cache entries must release candle arrays");
+    }
+
     private sealed class Handler(Func<CancellationToken,Task<HttpResponseMessage>> send) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)=>send(token);

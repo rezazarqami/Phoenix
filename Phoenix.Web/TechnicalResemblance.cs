@@ -5,7 +5,7 @@ namespace Phoenix.Web;
 internal sealed record TechnicalResemblance(double Score, bool Comparable,
     IReadOnlyDictionary<string, double> Distances)
 {
-    internal const string Metric = "technical-neighborhood-v4";
+    internal const string Metric = "technical-neighborhood-v5";
     // Overall technical radius, with explicit vetoes only for major contradictions.
     // The old intersection of every independent group shrank as context was added.
     internal bool Nearby => Comparable && Score >= Math.Exp(-.5d) &&
@@ -25,16 +25,17 @@ internal sealed record TechnicalResemblance(double Score, bool Comparable,
         Distance(x.SupportDistanceAtr, sign==otherSign ? y.SupportDistanceAtr : y.ResistanceDistanceAtr);
         Distance(x.ResistanceDistanceAtr, sign==otherSign ? y.ResistanceDistanceAtr : y.SupportDistanceAtr);
         var measuredDistances=support.Count;
+        var rawMeasuredDistances=0;
         Pair(x.EntryLevelStrength, y.EntryLevelStrength, .25m, support);
         Pair(x.StopLevelStrength, y.StopLevelStrength, .25m, support);
         Pair(x.TargetLevelStrength, y.TargetLevelStrength, .25m, support);
         Add("support-resistance", support, 4);
-        var clouds = new List<double> {
-            Difference((x.IchimokuEntryPosition ?? x.IchimokuPosition)*sign,
-                (y.IchimokuEntryPosition ?? y.IchimokuPosition)*otherSign, .35m),
-            Difference(x.IchimokuCloudBias*sign,y.IchimokuCloudBias*otherSign,.35m) };
-        Pair(x.IchimokuStopPosition*sign,y.IchimokuStopPosition*otherSign,.35m,clouds);
-        Pair(x.IchimokuTargetPosition*sign,y.IchimokuTargetPosition*otherSign,.35m,clouds);
+        var clouds = new List<double>();
+        ClippedCloud(x.IchimokuEntryPosition ?? x.IchimokuPosition,
+            y.IchimokuEntryPosition ?? y.IchimokuPosition, clouds);
+        ClippedCloud(x.IchimokuCloudBias,y.IchimokuCloudBias,clouds);
+        ClippedCloud(x.IchimokuStopPosition,y.IchimokuStopPosition,clouds);
+        ClippedCloud(x.IchimokuTargetPosition,y.IchimokuTargetPosition,clouds);
         Add("ichimoku", clouds, 2);
         if(x.LevelContext is { } lx && y.LevelContext is { } ly)
         {
@@ -44,10 +45,7 @@ internal sealed record TechnicalResemblance(double Score, bool Comparable,
             CompareLevel(lx.Entry,ly.Entry,geometry,rawClouds);
             CompareLevel(lx.Stop,ly.Stop,geometry,rawClouds);
             CompareLevel(lx.Target,ly.Target,geometry,rawClouds);
-            measuredDistances+=new[]{(lx.Entry,ly.Entry),(lx.Stop,ly.Stop),(lx.Target,ly.Target)}.Sum(pair=>
-                (pair.Item1.SupportDistanceAtr.HasValue && pair.Item2.SupportDistanceAtr.HasValue?1:0)+
-                (pair.Item1.ResistanceDistanceAtr.HasValue && pair.Item2.ResistanceDistanceAtr.HasValue?1:0));
-            rawClouds.Add(Difference(x.IchimokuCloudBias*sign,y.IchimokuCloudBias*otherSign,.35m));
+            ClippedCloud(x.IchimokuCloudBias,y.IchimokuCloudBias,rawClouds);
             Add("level-geometry",geometry,4);
             Add("ichimoku",rawClouds,2);
         }
@@ -71,10 +69,10 @@ internal sealed record TechnicalResemblance(double Score, bool Comparable,
                     Difference(l.StopStrength,r.StopStrength,.25m),Difference(l.TargetStrength,r.TargetStrength,.25m)]);
                 fib.AddRange([Difference(l.FibonacciEntry,r.FibonacciEntry,.25m),
                     Difference(l.FibonacciStop,r.FibonacciStop,.25m),Difference(l.FibonacciTarget,r.FibonacciTarget,.25m)]);
-                contextCloud.AddRange([Difference(l.CloudEntry*sign,r.CloudEntry*otherSign,.35m),
-                    Difference(l.CloudStop*sign,r.CloudStop*otherSign,.35m),
-                    Difference(l.CloudTarget*sign,r.CloudTarget*otherSign,.35m),
-                    Difference(l.CloudBias*sign,r.CloudBias*otherSign,.35m)]);
+                ClippedCloud(l.CloudEntry,r.CloudEntry,contextCloud);
+                ClippedCloud(l.CloudStop,r.CloudStop,contextCloud);
+                ClippedCloud(l.CloudTarget,r.CloudTarget,contextCloud);
+                ClippedCloud(l.CloudBias,r.CloudBias,contextCloud);
             }
             Add("multiscale-levels",levels,2);Add("fibonacci",fib,2);Add("multiscale-cloud",contextCloud,1);
         }
@@ -95,19 +93,33 @@ internal sealed record TechnicalResemblance(double Score, bool Comparable,
         // Volatility is compared relatively. RSI, volume, BTC alignment, current entry
         // distance and the result label never enter this ruler.
         if(x.AtrPercent>0 && y.AtrPercent>0)Add("volatility",[Ratio(x.AtrPercent,y.AtrPercent)],1);
-        var comparable=measuredDistances>0 && support.Count>=2 && x.AtrPercent>0 && y.AtrPercent>0;
+        var comparable=(rawMeasuredDistances>0 || measuredDistances>0 && support.Count>=2) && x.AtrPercent>0 && y.AtrPercent>0;
         var distance=groups.Count==0?double.PositiveInfinity:
             groups.Sum(g=>g.Value*g.Value*weights[g.Key])/weights.Values.Sum();
         return new(comparable?Math.Exp(-.5d*distance):0d,comparable,groups);
 
+        void ClippedCloud(decimal? left,decimal? right,List<double> result)
+        {
+            if(!left.HasValue || !right.HasValue)return;
+            var l=left.Value*sign;var r=right.Value*otherSign;
+            // Equal saturated bounds are unknown, not zero-distance evidence.
+            if(Math.Abs(l)>=1m && Math.Abs(r)>=1m && Math.Sign(l)==Math.Sign(r))return;
+            result.Add(Difference(l,r,.35m));
+        }
         void CompareLevel(TechnicalLevelGeometry l,TechnicalLevelGeometry r,List<double> levels,List<double> cloud)
         {
             var rightSupport=sign==otherSign?r.SupportDistanceAtr:r.ResistanceDistanceAtr;
             var rightResistance=sign==otherSign?r.ResistanceDistanceAtr:r.SupportDistanceAtr;
             if(l.SupportDistanceAtr.HasValue && rightSupport.HasValue)
+            {
+                rawMeasuredDistances++;
                 levels.Add(Math.Log((1d+(double)l.SupportDistanceAtr)/(1d+(double)rightSupport))/Math.Log(1.5d));
+            }
             if(l.ResistanceDistanceAtr.HasValue && rightResistance.HasValue)
+            {
+                rawMeasuredDistances++;
                 levels.Add(Math.Log((1d+(double)l.ResistanceDistanceAtr)/(1d+(double)rightResistance))/Math.Log(1.5d));
+            }
             levels.Add(Math.Log((1d+l.NearbyPivots)/(1d+r.NearbyPivots))/Math.Log(2d));
             cloud.Add(Difference(l.CloudDistanceAtr*sign,r.CloudDistanceAtr*otherSign,1m));
         }

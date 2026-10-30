@@ -70,6 +70,19 @@ public sealed class ProfessionalSignalAnalysisService(
         return new(enriched, prediction, regime, [], []) { ObservedAtUtc = observedAtUtc };
     }
 
+    internal async Task<ProfessionalSignalAnalysis> RefreshSimilarityAsync(SignalCandidate candidate,
+        string interval, ProfessionalSignalAnalysis analysis, CancellationToken token)
+    {
+        if (analysis.ObservedAtUtc is not { } observed) return analysis;
+        var prediction = await predictor.CalculateAsync(new ServerSignal
+        {
+            Symbol=candidate.Symbol, Direction=candidate.Direction, Timeframe=interval,
+            EntryPrice=candidate.EntryPrice, TakeProfit=candidate.TakeProfit, StopLoss=candidate.StopLoss,
+            CreatedAtUtc=observed, TechnicalFeatures=analysis.Features
+        }, token);
+        return analysis with { Prediction=prediction };
+    }
+
     // One versioned extraction path for live entry reviews and historical reconstruction.
     internal static TechnicalFeatureSnapshot BuildFeatures(SignalCandidate candidate, string interval,
         IReadOnlyDictionary<string, IReadOnlyList<BybitKline>> histories)

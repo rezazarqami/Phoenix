@@ -31,6 +31,9 @@ Run("Risk-free Telegram text and image label the exact exit type", RiskFreeExitM
 Run("Public notification Telegram rate limits persist across restart", NotificationReliabilityTests.RateLimitSurvivesRestart);
 Run("Public notification photo errors fall back to text without false image acknowledgments", NotificationReliabilityTests.PhotoFailureFallsBackToText);
 Run("Market monitoring isolates one failing symbol from later signals", NotificationReliabilityTests.FailedMarketSymbolDoesNotStarveOtherSignals);
+Run("Similarity migrates queued counts without future outcomes or new candles", ResemblanceRegressionTests.QueuedProposalMigration);
+Run("Similarity prepares 183 mixed-version archive samples without a sixty-row ceiling", ResemblanceRegressionTests.LegacyArchiveBeyondSixty);
+Run("Similarity uses raw levels independently of saturated legacy fields", ResemblanceRegressionTests.RawLevelsWithoutLegacyReadings);
 Run("Similarity regression reproduces repeated 4/3/4 counts and real zero matches", ResemblanceRegressionTests.RepeatedCountsAndGenuineZeros);
 Run("Similarity different technical queries select different neighbors", ResemblanceRegressionTests.DifferentQueriesChangeNeighbors);
 Run("Similarity new snapshots distinguish clipped cloud and level readings", ResemblanceRegressionTests.UncappedStoredTradeLevels);

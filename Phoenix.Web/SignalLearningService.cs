@@ -54,32 +54,7 @@ public sealed class SignalLearningService(
         {
             var outcomeHistory = (await store.GetLearningHistoryAsync(token)).Select(x=>(Source:"main",Item:x))
                 .Concat((await shadow.Store.GetLearningHistoryAsync(token)).Select(x=>(Source:"observation",Item:x))).ToArray();
-            var history=outcomeHistory.Select(x=>x.Item);
-            var completed = history.Select(x => x.Signal)
-                .Where(x => x.Outcome is "Target" or "StopLoss" or "RiskFree")
-                .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
-                .GroupBy(x => x.Id).Select(x => x.First()).ToArray();
-            var patterns = new List<LearnedSignalPattern>(completed.Length);
-            foreach (var signal in completed)
-            {
-                // Proposal-time snapshots and archived review candles describe
-                // a different moment. Never relabel them as entry-time evidence.
-                if (signal.EntryTriggeredAtUtc is not null && signal.CompletedAtUtc > signal.EntryTriggeredAtUtc &&
-                    signal.EntryTechnicalFeatures is { } features)
-                    patterns.Add(new(signal, signal.Outcome!, features));
-            }
-            var proposals = completed.Where(x => x.EntryTriggeredAtUtc is not null &&
-                    x.CompletedAtUtc > x.EntryTriggeredAtUtc && x.ProposalEvidence is { } p &&
-                    p.Features.SimilarityContextVersion >= 3 && p.ObservedAtUtc <= x.EntryTriggeredAtUtc)
-                .Select(x => new LearnedSignalPattern(new ServerSignal
-                    {
-                        Id=x.Id, Symbol=x.ProposalEvidence!.Symbol, Direction=x.ProposalEvidence.Direction,
-                        Timeframe=x.ProposalEvidence.Timeframe, EntryPrice=x.ProposalEvidence.EntryPrice,
-                        TakeProfit=x.ProposalEvidence.TakeProfit, StopLoss=x.ProposalEvidence.StopLoss,
-                        EntryTriggeredAtUtc=x.EntryTriggeredAtUtc, CompletedAtUtc=x.CompletedAtUtc,
-                        CreatedAtUtc=x.ProposalEvidence.ObservedAtUtc
-                    }, x.Outcome!, x.ProposalEvidence!.Features)
-                    { ObservedAtUtc = x.ProposalEvidence!.ObservedAtUtc, EvidenceStage = "proposal" }).ToArray();
+            var (patterns, proposals) = BuildPatterns(outcomeHistory.Select(x=>x.Item));
             _snapshot = new(patterns, DateTime.UtcNow)
             {
                 OutcomeHistory = outcomeHistory,
@@ -90,4 +65,37 @@ public sealed class SignalLearningService(
         }
         finally { _refreshGate.Release(); }
     }
+    // Validity depends on the measurements actually shared, not the schema age.
+    internal static (List<LearnedSignalPattern> Entries, LearnedSignalPattern[] Proposals)
+        BuildPatterns(IEnumerable<SignalHistoryItem> items)
+    {
+        var history=items;
+        var completed = history.Select(x => x.Signal)
+            .Where(x => x.Outcome is "Target" or "StopLoss" or "RiskFree")
+            .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
+            .GroupBy(x => x.Id).Select(x => x.First()).ToArray();
+        var patterns = new List<LearnedSignalPattern>(completed.Length);
+        foreach (var signal in completed)
+        {
+            // Proposal-time snapshots and archived review candles describe
+            // a different moment. Never relabel them as entry-time evidence.
+            if (signal.EntryTriggeredAtUtc is not null && signal.CompletedAtUtc > signal.EntryTriggeredAtUtc &&
+                signal.EntryTechnicalFeatures is { } features)
+                patterns.Add(new(signal, signal.Outcome!, features));
+        }
+        var proposals = completed.Where(x => x.EntryTriggeredAtUtc is not null &&
+                x.CompletedAtUtc > x.EntryTriggeredAtUtc && x.ProposalEvidence is { } p &&
+                p.ObservedAtUtc <= x.EntryTriggeredAtUtc)
+            .Select(x => new LearnedSignalPattern(new ServerSignal
+                {
+                    Id=x.Id, Symbol=x.ProposalEvidence!.Symbol, Direction=x.ProposalEvidence.Direction,
+                    Timeframe=x.ProposalEvidence.Timeframe, EntryPrice=x.ProposalEvidence.EntryPrice,
+                    TakeProfit=x.ProposalEvidence.TakeProfit, StopLoss=x.ProposalEvidence.StopLoss,
+                    EntryTriggeredAtUtc=x.EntryTriggeredAtUtc, CompletedAtUtc=x.CompletedAtUtc,
+                    CreatedAtUtc=x.ProposalEvidence.ObservedAtUtc
+                }, x.Outcome!, x.ProposalEvidence!.Features)
+                { ObservedAtUtc = x.ProposalEvidence!.ObservedAtUtc, EvidenceStage = "proposal" }).ToArray();
+        return (patterns, proposals);
+    }
+
 }

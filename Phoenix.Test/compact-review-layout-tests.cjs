@@ -55,6 +55,9 @@ const scripts=new Set(['live-positions.js','home-tabs.js','phoenix-ice.js','cryp
    if(process.env.REVIEW_SCREENSHOTS)await page.locator('.signal-center').screenshot({path:process.env.REVIEW_SCREENSHOTS+`/positions-${width}.png`});
    await page.locator('#tab-crypto').click();const frame=page.frameLocator('#panel-crypto iframe');await frame.locator('#market-tab-review').click();
    assert.equal(await frame.locator('.review-heading').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','Review heading must not inherit the dark global header');
+   const heading=await frame.locator('.review-heading').evaluate(e=>{const rect=x=>x.getBoundingClientRect().toJSON();return {box:rect(e),title:rect(e.querySelector('h2')),copy:rect(e.querySelector('p')),clear:rect(e.querySelector('#clearReviewDesk')),restore:rect(e.querySelector('#restoreReviewDesk'))};});
+   assert.ok(heading.title.height<40,'Review title must not become vertical');
+   if(width<=700){assert.ok(heading.title.width>width*.65,'Mobile title needs its own full row');assert.ok(heading.clear.top>=heading.copy.bottom,'Actions belong below the title and description');assert.ok(Math.abs(heading.clear.top-heading.restore.top)<2,'Desk actions share a compact row');assert.ok(heading.box.height<170,'Mobile review heading must stay compact');assert.ok(heading.clear.height<=32&&heading.restore.height<=32,'Desk action buttons must remain small');assert.ok(heading.clear.width<140&&heading.restore.width<140,'Desk action buttons use content width');}
    if(process.env.REVIEW_SCREENSHOTS)await page.screenshot({path:process.env.REVIEW_SCREENSHOTS+`/empty-${width}.png`,fullPage:true});
    let releaseImage;imageHold=new Promise(r=>releaseImage=r);
    proposals=[{key:'fixture',symbol:'MUSDT',caption,image:'/fixture-chart.svg',createdAt:'2026-01-01T00:00:00Z',state:'Ready'}];

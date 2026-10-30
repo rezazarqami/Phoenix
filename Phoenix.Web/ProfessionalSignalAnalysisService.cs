@@ -25,14 +25,17 @@ public sealed class ProfessionalSignalAnalysisService(
 
     public async Task<ProfessionalSignalAnalysis> AnalyzeAsync(SignalCandidate candidate,
         IReadOnlyList<BybitKline> signalCandles, string signalInterval, CancellationToken token,
-        DateTime? asOfUtc = null)
+        DateTime? asOfUtc = null,
+        IReadOnlyDictionary<string,IReadOnlyList<BybitKline>>? knownHistories = null)
     {
         var observedAtUtc = asOfUtc ?? DateTime.UtcNow;
         var symbolTasks = ContextIntervals.ToDictionary(x => x,
-            x => x == signalInterval && signalCandles.Count >= 720
+            x => knownHistories?.TryGetValue(x,out var known)==true
+                ? Task.FromResult(known) : x == signalInterval && signalCandles.Count >= 720
                 ? Task.FromResult(signalCandles) : GetCandlesAsync(candidate.Symbol, x, 1000, token));
         var extendedTasks = ExtendedIntervals.ToDictionary(x => x,
-            x => x == signalInterval && signalCandles.Count >= 80
+            x => knownHistories?.TryGetValue(x,out var known)==true
+                ? Task.FromResult<IReadOnlyList<BybitKline>?>(known) : x == signalInterval && signalCandles.Count >= 80
                 ? Task.FromResult<IReadOnlyList<BybitKline>?>(signalCandles)
                 : TryGetCandlesAsync(candidate.Symbol, x, token));
         // SR comparison needs this symbol's pivots only. An unrelated BTC
@@ -64,6 +67,10 @@ public sealed class ProfessionalSignalAnalysisService(
         // generating generic positive/negative commentary for proposals.
         return new(enriched, prediction, regime, [], []) { ObservedAtUtc = observedAtUtc };
     }
+
+    internal Task<IReadOnlyList<BybitKline>> GetReviewCandlesAsync(string symbol,string interval,
+        IReadOnlyDictionary<string,IReadOnlyList<BybitKline>>? knownHistories,CancellationToken token) =>
+        knownHistories?.TryGetValue(interval,out var known)==true ? Task.FromResult(known) : GetCandlesAsync(symbol,interval,1000,token);
 
     internal async Task<ProfessionalSignalAnalysis> RefreshSimilarityAsync(SignalCandidate candidate,
         string interval, ProfessionalSignalAnalysis analysis, CancellationToken token)
@@ -154,9 +161,22 @@ public sealed class ProfessionalSignalAnalysisService(
                 return cached.Candles;
             var candles = await bybit.GetKlinesAsync(symbol, interval, limit, token);
             _cache[key] = new(DateTime.UtcNow, candles);
+            TrimCache(DateTime.UtcNow);
             return candles;
         }
         finally { gate.Release(); }
+    }
+
+    internal int CachedHistoryCount => _cache.Count;
+    internal void TrimCache(DateTime now)
+    {
+        // Expiry must release old candle arrays, not merely stop returning them.
+        // A full-market scan previously retained every symbol/timeframe forever.
+        var entries=(ICollection<KeyValuePair<string,CacheEntry>>)_cache;
+        foreach(var item in _cache)
+            if(now-item.Value.AtUtc>=TimeSpan.FromSeconds(45))entries.Remove(item);
+        foreach(var item in _cache.OrderBy(x=>x.Value.AtUtc).Take(Math.Max(0,_cache.Count-128)).ToArray())
+            entries.Remove(item); // Conditional removal cannot evict a refreshed entry.
     }
 
     private static decimal DirectionalTrend(TechnicalFeatureSnapshot f, decimal direction) =>

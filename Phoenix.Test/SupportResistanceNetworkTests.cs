@@ -32,6 +32,15 @@ internal static class SupportResistanceNetworkTests
             var analysis=await service.AnalyzeAsync(candidate,candles,"15",timeout.Token);
             if(calls.Count!=6 || calls.Any(x=>x.Contains("BTCUSDT")) || analysis.MarketRegime!="حمایت و مقاومت")
                 throw new Exception("SR proposal must use only the six additional symbol intervals; an unavailable BTC route must not affect it.");
+            calls.Clear();
+            var known=new[]{"1","5","15","60","240"}.ToDictionary(x=>x,x=>(IReadOnlyList<BybitKline>)candles);
+            var reusedService=new ProfessionalSignalAnalysisService(client,new SignalSimilarityService(learning));
+            var reused=await reusedService.AnalyzeAsync(candidate,candles,"15",timeout.Token,knownHistories:known);
+            if(calls.Count!=3 || JsonSerializer.Serialize(reused.Features)!=JsonSerializer.Serialize(analysis.Features))
+                throw new Exception("Reusing full scanner histories must remove redundant fetches without changing technical measurements.");
+            await reusedService.GetReviewCandlesAsync(candidate.Symbol,"240",known,timeout.Token);
+            await reusedService.GetReviewCandlesAsync(candidate.Symbol,"D",known,timeout.Token);
+            if(calls.Count!=3)throw new Exception("The review chart must reuse scan or analysis candles instead of fetching them again.");
         }
         finally {Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH",oldPath);SignalHistoryStore.ClearConnectionPools();Directory.Delete(root,true);}
     }

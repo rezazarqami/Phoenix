@@ -8,6 +8,8 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Scan analysis cache releases expired histories and bounds full-market memory", ScanPerformanceTests.AnalysisCacheIsBounded);
+Run("Scan overlaps metadata and candles with bounded traffic and cancellation recovery", ParallelScanTests.BoundedOverlapAndCancellation);
 Run("Connection status expires stale checks and separates symbol failures", ConnectionStatusTests.FreshnessAndPartialFailures);
 Run("Connection probes revalidate read-only account access independently of public access", ConnectionStatusTests.PeriodicReadOnlyChecks);
 Run("SR proposal succeeds without unrelated BTC market requests", SupportResistanceNetworkTests.Run);

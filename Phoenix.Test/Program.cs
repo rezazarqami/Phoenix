@@ -8,6 +8,7 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("SR similarity uses entry power, stop/target pivots, all history and excludes other indicators", SupportResistanceOnlyTests.Run);
 Run("Single close isolates hedge side, confirms closure and records manual results", SinglePositionCloseTests.Close);
 Run("Timeframe reservations enforce caps, durable two-stop brake, release and failure reporting", TimeframeRiskTests.Limits);
 Run("Journal sources filter before paging and preserve legacy wallets across restart", JournalSourceTests.Isolation);
@@ -102,7 +103,7 @@ Run("Technical geometry records exact ATR and preserves missing legacy values", 
 Run("Technical evidence delivers long Telegram reports without truncation or premature controls", TechnicalCohortTests.LongTelegramEvidence);
 
 Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
-Run("Similarity uses market context and structure while excluding unapproved indicators", SimilarityTests.ContextStructureAndExcludedIndicators);
+Run("Similarity excludes every non-SR indicator and timeframe from scoring", SimilarityTests.ContextStructureAndExcludedIndicators);
 Run("Historical similarity preserves distinguishing evidence and abstains on missing data", SimilarityTests.HistoricalDispersionAndEvidence);
 Run("Historical similarity preserves timeframe identity and excludes future outcomes", SimilarityTests.TimeframeIdentityAndPastOnly);
 Run("Similarity structural breaks and retests use only confirmed past pivots", SimilarityTests.BreakAndRetestUseConfirmedPastPivots);

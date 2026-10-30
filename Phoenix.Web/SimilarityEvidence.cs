@@ -8,6 +8,10 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
 {
     public int SameTimeframeComparable { get; init; }
     public int OtherTimeframeComparable { get; init; }
+    public int ArchivedCompletedCount { get; init; }
+    public int MissingStageSnapshotCount { get; init; }
+    public int EvaluatedSnapshotCount { get; init; }
+    public DateTime? ReferenceRefreshedAtUtc { get; init; }
     public int ComparisonVersion { get; init; }
     public string? Metric { get; init; }
     public int InsufficientFeatureCount { get; init; }

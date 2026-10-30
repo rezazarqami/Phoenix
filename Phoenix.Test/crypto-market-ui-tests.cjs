@@ -28,7 +28,7 @@ const context={navigator:{clipboard:{async writeText(text){context.copied=text;}
   location:{origin:'https://phoenix.test',replace(){}},
   fetch(url,options){let resolve,reject;const result=new Promise((yes,no)=>{resolve=yes;reject=no;});
     options.signal.addEventListener('abort',()=>reject(Object.assign(new Error('aborted'),{name:'AbortError'})));
-    calls.push({url,options,resolve(data,ok=true){resolve({status:ok?200:409,ok,headers:{get:()=> 'application/zip'},blob:async()=>({}),json:async()=>data});}});return result;}};
+    calls.push({url,options,resolve(data,ok=true){resolve({status:ok?200:409,ok,headers:{get:name=>name.toLowerCase()==='content-type'?'application/json':null},blob:async()=>({}),json:async()=>data});}});return result;}};
 vm.createContext(context);
 // Execute the actual two HTML script files, with no shared test-only formatter.
 for(const file of ['crypto-market.js','signal-batch-controls.js']) vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context);

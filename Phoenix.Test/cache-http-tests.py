@@ -23,7 +23,13 @@ with tempfile.TemporaryDirectory() as tmp:
     except Exception:pass
     time.sleep(.1)
    else:raise AssertionError('Server startup failed')
+   assert request('/api/analysis/connection')[0]==401
    assert request('/api/auth/login',{'username':'owner','password':password})[0]==200
+   status,headers,body=request('/api/analysis/connection');probe=json.loads(body)
+   assert status==200 and probe['status']=='ok' and probe['instance'] and probe['startedAtUtc'] and probe['serverTimeUtc']
+   assert 'no-store' in headers['Cache-Control'] and headers['X-Phoenix-Request-Id'] and headers['X-Phoenix-Instance']==probe['instance']
+   first_trace=headers['X-Phoenix-Request-Id']
+   status,headers,body=request('/api/analysis/connection');assert json.loads(body)['instance']==probe['instance'] and headers['X-Phoenix-Request-Id']!=first_trace
    status,headers,body=request('/notifications');assert status==200 and 'no-store' in headers['Cache-Control']
    status,headers,body=request('/notifications.js?v=cache-test',headers={'Accept-Encoding':'gzip'})
    assert status==200 and headers['Content-Encoding']=='gzip' and 'private' in headers['Cache-Control'] and 'max-age=3600' in headers['Cache-Control']

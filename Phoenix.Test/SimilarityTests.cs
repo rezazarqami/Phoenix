@@ -49,11 +49,11 @@ internal static class SimilarityTests
         double Similar(TechnicalFeatureSnapshot other, ServerSignal? sample = null) =>
             SignalSimilarityService.TechnicalSimilarity(signal, sample ?? signal, features, other);
         Check(Similar(features) == 1d, "Identical evidence must remain fully similar");
-        Check(Similar(features with { MarketRegimeScore = 0.1m }) < 1d, "Ranging and trending contexts must differ");
-        Check(Similar(features with { AtrPercent = 4m }) < 1d, "Different volatility regimes must differ");
-        Check(Similar(features, new ServerSignal { Direction = "Long", Timeframe = "D" }) < 1d, "Different signal timeframes must differ");
+        Check(Similar(features with { MarketRegimeScore = 0.1m }) == 1d, "Market regime is excluded from SR similarity");
+        Check(Similar(features with { AtrPercent = 4m }) == 1d, "Volatility regime is excluded from SR similarity");
+        Check(Similar(features, new ServerSignal { Direction = "Long", Timeframe = "D" }) == 1d, "Timeframe only partitions SR counts");
         Check(Similar(features with { StructureScore = 0m, LiquiditySweepScore = 0m,
-            StructureBreakScore = 0m, StructureRetestScore = 0m }) < 1d, "Opposite structural evidence must differ");
+            StructureBreakScore = 0m, StructureRetestScore = 0m }) == 1d, "Generic structure indicators are excluded from SR similarity");
         Check(Similar(features with { Rsi14 = 0m, VolumeRatio = 3m, BitcoinMarketAlignment = -1m,
             HigherTimeframeAlignment = -1m, PriceActionScore = 0m }) == 1d,
             "Unapproved volume, RSI and directional alignment indicators must not enter scoring");
@@ -122,7 +122,7 @@ internal static class SimilarityTests
             new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
                 Timeframe = "D", CompletedAtUtc = now.AddDays(-1) }, outcome, Features)).ToArray();
         var result = SignalSimilarityService.CalculateFromPatterns(candidate, rows);
-        Check(result.Evidence is { ComparisonVersion: 5, ComparableTargets: 1, ComparableStops: 1,
+        Check(result.Evidence is { ComparisonVersion: 6, ComparableTargets: 1, ComparableStops: 1,
             ComparableRiskFree: 1, OtherTimeframeNearbyTargets: 1, OtherTimeframeNearbyStops: 1,
             OtherTimeframeNearbyRiskFree: 1, SameTimeframeNearbyTargets: 0 },
             "Sparse legacy snapshots and distant timeframes must retain all three outcome counts");

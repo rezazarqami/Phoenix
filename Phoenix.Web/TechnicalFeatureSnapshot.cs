@@ -36,7 +36,12 @@ public sealed record TechnicalFeatureSnapshot(
 }
 
 public sealed record TechnicalLevelGeometry(decimal? SupportDistanceAtr,decimal? ResistanceDistanceAtr,
-    decimal CloudDistanceAtr,int NearbyPivots);
+    decimal CloudDistanceAtr,int NearbyPivots)
+{
+    // Nullable for legacy snapshots: missing touch counts never become zeros.
+    public int? SupportTouches { get; init; }
+    public int? ResistanceTouches { get; init; }
+}
 public sealed record TechnicalLevelContext(TechnicalLevelGeometry Entry,TechnicalLevelGeometry Stop,
     TechnicalLevelGeometry Target);
 
@@ -80,12 +85,16 @@ public static class TechnicalFeatureExtractor
             Clamp(swings.Count(x => Math.Abs(x - level) <= atr * 0.5m) / 4m, 0m, 1m);
         TechnicalLevelGeometry LevelAt(decimal level)
         {
-            var below=swingLows.Where(p=>p<=level).Select(p=>(decimal?)p).Max();
-            var above=swingHighs.Where(p=>p>=level).Select(p=>(decimal?)p).Min();
+            var below=swings.Where(p=>p<=level).Select(p=>(decimal?)p).Max();
+            var above=swings.Where(p=>p>=level).Select(p=>(decimal?)p).Min();
             return new(below.HasValue && atr>0 ? (level-below.Value)/atr:null,
                 above.HasValue && atr>0 ? (above.Value-level)/atr:null,
                 atr>0 ? (level-(cloudTop+cloudBottom)/2m)/atr:0m,
-                atr>0 ? swings.Count(p=>Math.Abs(p-level)<=atr*.5m):0);
+                atr>0 ? swings.Count(p=>Math.Abs(p-level)<=atr*.5m):0)
+            {
+                SupportTouches=below.HasValue && atr>0 ? swings.Count(p=>Math.Abs(p-below.Value)<=atr*.5m):null,
+                ResistanceTouches=above.HasValue && atr>0 ? swings.Count(p=>Math.Abs(p-above.Value)<=atr*.5m):null
+            };
         }
         decimal CloudAt(decimal level) => atr <= 0m ? 0m :
             Clamp((level - (cloudTop + cloudBottom) / 2m) / atr / 3m, -1m, 1m);

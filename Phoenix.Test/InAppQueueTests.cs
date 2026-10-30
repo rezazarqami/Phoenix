@@ -56,7 +56,7 @@ internal static class InAppQueueTests
     {
         var signal=new ServerSignal{Direction="Long",Timeframe="15"};
         var moderate=TechnicalResemblance.Compare(signal,signal,Features,Features with{IchimokuPosition=.9m});
-        Check(moderate.Distances["ichimoku"]>1 && moderate.Nearby,"One moderately different group must not veto otherwise close evidence");
+        Check(!moderate.Distances.ContainsKey("ichimoku") && moderate.Score==1 && moderate.Nearby,"Cloud indicators are completely absent from SR similarity");
         var distant=TechnicalResemblance.Compare(signal,signal,Features,Features with{SupportDistanceAtr=40,ResistanceDistanceAtr=40});
         Check(!distant.Nearby,"Strong geometry contradiction must remain excluded");
         Check(!TechnicalResemblance.Compare(signal,signal,Features,Features with{AtrPercent=0}).Comparable,"Missing data cannot invent a match");

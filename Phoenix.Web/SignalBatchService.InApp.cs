@@ -32,7 +32,7 @@ public sealed partial class SignalBatchService
                 var item=items[i];
                 if(!item.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase) || item.State!="Ready" ||
                     item.Analysis.ObservedAtUtc is null || professional is null ||
-                    item.Analysis.Prediction.Evidence?.ComparisonVersion==5)continue;
+                    item.Analysis.Prediction.Evidence?.ComparisonVersion==TechnicalResemblance.Version)continue;
                 var analysis=await professional.RefreshSimilarityAsync(item.Candidate,item.Interval,item.Analysis,ct);
                 var oldSupport=SignalReviewText.Support(item.Analysis.Prediction.Evidence).Trim();
                 var newSupport=SignalReviewText.Support(analysis.Prediction.Evidence).Trim();

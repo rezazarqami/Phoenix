@@ -12,6 +12,48 @@
  let sourceResolved=!!params.get('source');
  const openedDetails=new Set();
  const text=(tag,value)=>Object.assign(document.createElement(tag),{textContent:value});
+ let cacheKey=null;
+ const cacheLimit=400;
+ function persist(){
+  if(!cacheKey)return;
+  try{
+   const data={version:1,sources:{}};
+   for(const [name,views] of Object.entries(sources)){
+    data.sources[name]={};
+    for(const [tab,state] of Object.entries(views)){
+     const entries=[...state.entries.values()].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||b.sequence-a.sequence).slice(0,cacheLimit);
+     data.sources[name][tab]={entries,before:entries.at(-1)?.sequence??null,hasMore:state.hasMore||state.entries.size>cacheLimit,initialized:state.initialized,etag:state.etag,etagUrl:state.etagUrl};
+    }
+   }
+   localStorage.setItem(cacheKey,JSON.stringify(data));
+  }catch{/* Storage can be full or disabled; live history remains available. */}
+ }
+ function restore(){
+  try{
+   const data=JSON.parse(localStorage.getItem(cacheKey));if(data?.version!==1)return;
+   for(const name of ['normal','manual'])for(const tab of ['all','results']){
+    const saved=data.sources?.[name]?.[tab];if(!saved||!Array.isArray(saved.entries))continue;
+    const state=sources[name][tab];
+    state.entries=new Map(saved.entries.slice(0,cacheLimit).filter(e=>typeof e.id==='string'&&Number.isFinite(e.sequence)).map(e=>[e.id,e]));
+    state.etag=saved.etag;state.etagUrl=saved.etagUrl;state.before=saved.before;state.hasMore=!!saved.hasMore;state.initialized=!!saved.initialized;
+   }
+  }catch{/* Ignore corrupt or older cache records. */}
+ }
+ function visible(){try{return !document.hidden&&(!window.frameElement||window.frameElement.getClientRects().length>0);}catch{return !document.hidden;}}
+ async function start(){
+  try{
+   let identity;
+   if(parent!==window&&parent.location.origin===location.origin)identity=parent.PhoenixSessionIdentity;
+   if(!identity){
+    const response=await fetch('/api/auth/me',{cache:'no-store'});
+    if(response.status===401){status.textContent='برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.';return;}
+    if(response.ok)identity=await response.json();
+   }
+   if(typeof identity?.username==='string'&&identity.username){cacheKey='phoenix-journal-v1:'+identity.username.toLowerCase();restore();}
+  }catch{/* A failed identity check must never expose another account's stored results. */}
+  select(view);recovery();
+  if(focus)[...timeline.children].find(x=>x.dataset.eventId===focus)?.scrollIntoView?.({block:'center'});
+ }
  function eventMessage(e){
   if(e.kind==='FirstProtection'||e.kind==='RiskFreeReached')return messages[e.kind];
   if(e.kind==='RiskFree'){
@@ -62,12 +104,17 @@
   const currentView=view,state=states[currentView];if(state.busy)return;state.busy=true;older.disabled=true;panel.setAttribute('aria-busy','true');
   const first=timeline.querySelector('.event-card'),anchor=first?.getBoundingClientRect().top;
   try{
-   const query=new URLSearchParams({view:currentView,source});if(mode==='older'&&state.before)query.set('before',state.before);else if(!state.initialized&&focus&&currentView===initialView)query.set('eventId',focus);
-   const response=await fetch('/api/mobile/history?'+query,{cache:'no-store'});if(!response.ok)throw Error(response.status===401?'برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.':'دریافت تاریخچه ناموفق بود؛ دوباره تلاش کن.');
+   const query=new URLSearchParams({view:currentView,source});if(mode==='older'&&state.before)query.set('before',state.before);else if(focus&&!state.entries.has(focus)&&currentView===initialView)query.set('eventId',focus);
+   const url='/api/mobile/history?'+query;
+   const headers=state.etag&&state.etagUrl===url&&state.entries.size?{'If-None-Match':state.etag}:{};
+   const response=await fetch(url,{cache:'no-store',headers});
+   if(response.status===304){status.textContent='سوابق به‌روز است.';return;}
+   if(mode!=='older'){state.etag=response.headers?.get('ETag');state.etagUrl=url;}
+   if(response.status===401){try{if(cacheKey)localStorage.removeItem(cacheKey);}catch{}for(const views of Object.values(sources))for(const state of Object.values(views))state.entries.clear();render();}if(!response.ok)throw Error(response.status===401?'برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.':'دریافت تاریخچه ناموفق بود؛ دوباره تلاش کن.');
    const page=await response.json();if(states[currentView]!==state)return;
    if(focus&&!page.focusFound&&!sourceResolved&&source==='normal'){sourceResolved=true;selectSource('manual');return;}
    let changed=false;for(const e of page.events){if(JSON.stringify(state.entries.get(e.id))!==JSON.stringify(e)){state.entries.set(e.id,e);changed=true;}}
-   const wasInitialized=state.initialized;if(!wasInitialized||mode==='older'){state.before=page.before;state.hasMore=page.hasMore;}state.initialized=true;
+   const wasInitialized=state.initialized;if(!wasInitialized||mode==='older'){state.before=page.before;state.hasMore=page.hasMore;}state.initialized=true;persist();
    if(view!==currentView)return;
    if(changed||!wasInitialized)render();older.hidden=!state.hasMore;
    status.textContent=!page.focusFound&&focus&&!wasInitialized&&currentView===initialView?'رویداد انتخاب‌شده در این نما پیدا نشد؛ جدیدترین موارد نمایش داده شده‌اند.':state.entries.size.toLocaleString('fa-IR')+(view==='results'?' نتیجهٔ نهایی':' رویداد')+' نمایش داده شده؛ سوابق قدیمی‌تر محفوظ‌اند.';
@@ -80,7 +127,7 @@
   view=next;for(const tab of tabs){const selected=tab.dataset.journalTab===view;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;if(selected&&focusTab)tab.focus();}
   panel.setAttribute('aria-labelledby','journal-tab-'+view);document.getElementById('viewDescription').textContent=view==='results'?'نتایج نهایی: تارگت، خروج ریسک‌فری و استاپ‌لاس':'تمام اعلان‌ها؛ از نزدیک ورود تا پایان معامله';
   const url=new URL(location.href);url.searchParams.set('view',view);url.searchParams.set('source',source);history.replaceState(null,'',url);
-  status.textContent='در حال دریافت…';render();load();
+  status.textContent=states[view].initialized?'سوابق ذخیره‌شده؛ در حال بررسی موارد تازه…':'در حال دریافت…';render();load();
  }
  function selectSource(next){source=next;states=sources[source];for(const tab of document.querySelectorAll('[data-journal-source]'))tab.setAttribute('aria-pressed',String(tab.dataset.journalSource===source));select(view);}
  document.querySelectorAll('[data-journal-source]').forEach(tab=>tab.addEventListener('click',()=>{sourceResolved=true;selectSource(tab.dataset.journalSource);}));
@@ -105,6 +152,9 @@
   }catch{recoveryStatus.textContent='وضعیت بازیابی فعلاً در دسترس نیست؛ سابقهٔ نتایج محفوظ است.';recoveryButton.disabled=false;}
   finally{recovering=false;}
  }
- recoveryButton.addEventListener('click',()=>recovery(true));setInterval(()=>{if(!document.hidden)recovery();},30000);
- setInterval(()=>{if(!document.hidden)load();},5000);select(view);recovery();
+ recoveryButton.addEventListener('click',()=>recovery(true));setInterval(()=>{if(visible())recovery();},30000);
+ setInterval(()=>{if(visible())load();},5000);
+ document.addEventListener('visibilitychange',()=>{if(visible())load();});
+ window.addEventListener('message',event=>{if(event.origin===location.origin&&event.source===parent&&event.data?.type==='phoenix-frame-visible')load();});
+ start();
 })();

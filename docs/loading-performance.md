@@ -1,0 +1,11 @@
+# Loading and retained history
+
+The journal restores up to 400 previously viewed rows per source/tab from account-scoped local storage after validating the current identity (or reusing the authenticated same-origin parent identity). It renders cached data before awaiting the history response. The authoritative archive remains on the server with its existing older-page pagination; browser storage limits do not remove archived rows.
+
+History responses carry a private, owner-scoped weak ETag derived from the complete page, including wallet recovery values. Unchanged polls return 304 without a JSON body or DOM replacement. New events and changed wallets merge by event ID. Cached focus links still request their selected event if it is absent locally. Storage errors fall back to normal network operation. Unauthorized responses clear the displayed/stored journal, and explicit web logout removes journal caches.
+
+The home archive used to request up to 1,000 rows every 5 seconds. It now polls every 30 seconds while the home panel is visible, refreshes on return/explicit invalidation, and skips unchanged DOM rendering. Slow status, signals and history requests cannot accumulate overlapping polls. Live visible status/signals retain their existing 1/5-second intervals. Hidden journal iframes stop polling and refresh on return.
+
+Authenticated JS/CSS receive compression. Versioned static assets may be retained privately for one hour; unversioned assets revalidate with ETags instead of unconditional redownloads. HTML/authentication/transaction APIs remain uncached. Only the read-only canonical journal API joins asset compression. Asset version strings were bumped for changed files.
+
+Validation includes account-isolated persistence, delayed network/304 DOM retention, wallet changes, expiry cleanup, hidden polling, overlapping-request prevention, HTTP compression/revalidation, routing/authentication and the complete existing C# regression suite. No end-user latency multiplier is claimed; actual improvement depends on connection latency, stored history and server load. Local Chromium layout tests could not launch because the environment lacks the GLES shared library; CI retains the existing browser suite.

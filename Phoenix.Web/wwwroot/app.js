@@ -60,6 +60,7 @@ document.querySelector('#aiParseButton').addEventListener('click', async () => {
 async function loadSession() {
   const response = await fetch('/api/auth/me', { cache: 'no-store' });
   const session = await response.json();
+  if(response.ok)window.PhoenixSessionIdentity=session;
   if (!session.isAdmin) {
     document.querySelector('#securityButton').hidden = true;
     document.querySelector('#usersButton').hidden = true;
@@ -75,7 +76,9 @@ async function loadSession() {
 
 panelKeyInput.value = localStorage.getItem('phoenixPanelKey') || '';
 
+let statusPending=false;
 async function refreshStatus() {
+  if(statusPending)return;statusPending=true;
   try {
     const response = await fetch('/api/status', { cache: 'no-store' });
     const data = await response.json();
@@ -94,7 +97,7 @@ async function refreshStatus() {
   } catch {
     connection.innerHTML = '<i></i>سرور در دسترس نیست';
     connection.className = 'badge bad';
-  }
+  } finally { statusPending=false; }
 }
 
 async function loadInstruments() {
@@ -189,6 +192,7 @@ document.querySelector('#securityButton').addEventListener('click', () => {
 });
 document.querySelector('#logoutButton').addEventListener('click', async () => {
   await fetch('/api/auth/logout', { method: 'POST' });
+  try{for(const key of Object.keys(localStorage))if(key.startsWith('phoenix-journal-v1:'))localStorage.removeItem(key);}catch{}
   location.replace('/login');
 });
 document.querySelector('#closeSecurity').addEventListener('click', () => securityDialog.close());
@@ -305,7 +309,9 @@ document.querySelector('#telegramAccessList').addEventListener('click', async ev
   loadTelegramAccess();
 });
 
+let signalsPending=false;
 async function refreshSignals() {
+  if(signalsPending)return;signalsPending=true;
   try {
     const response = await fetch('/api/signals', { cache: 'no-store' });
     const signals = await response.json();
@@ -313,7 +319,7 @@ async function refreshSignals() {
     document.querySelector('#count').textContent = fa.format(active.length);
     window.phoenixActiveSignals = active;
     window.dispatchEvent(new CustomEvent('phoenix-signals-updated', { detail: active }));
-  } catch { /* status indicator already reports connectivity */ }
+  } catch { /* status indicator already reports connectivity */ } finally { signalsPending=false; }
 }
 
 function isFinished(signal) {
@@ -352,7 +358,8 @@ function renderHistory(){
     }).join('') : '<div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div>';
 }
 document.querySelectorAll('[data-history-source]').forEach(button=>button.addEventListener('click',()=>{historySource=button.dataset.historySource;document.querySelectorAll('[data-history-source]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));historyItems=historyCache[historySource];renderHistory();refreshHistory();}));
-async function refreshHistory(){const source=historySource;try{const response=await fetch('/api/history?days=30&limit=1000&source='+source,{cache:'no-store'});if(!response.ok)return;historyCache[source]=await response.json();if(source===historySource){historyItems=historyCache[source];renderHistory();}}catch{/* Keep the last history while reconnecting. */}}
+const historyPending=new Set();
+async function refreshHistory(){const source=historySource;if(historyPending.has(source))return;historyPending.add(source);try{const response=await fetch('/api/history?days=30&limit=1000&source='+source,{cache:'no-store'});if(!response.ok)return;const items=await response.json();if(JSON.stringify(items)===JSON.stringify(historyCache[source]))return;historyCache[source]=items;if(source===historySource){historyItems=historyCache[source];renderHistory();}}catch{/* Keep the last history while reconnecting. */}finally{historyPending.delete(source);}}
 
 function statusLabel(status) {
   if (status === 'Closing') return 'درخواست بستن؛ منتظر تأیید صرافی';
@@ -398,7 +405,10 @@ form.addEventListener('submit', async event => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
-setInterval(refreshStatus, 1000); setInterval(refreshSignals, 5000); setInterval(refreshHistory, 5000);
+setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshStatus();},1000);
+setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshSignals();},5000);
+setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshHistory();},30000);
+window.addEventListener('phoenix-tab-changed',e=>{if(e.detail==='home'){refreshStatus();refreshSignals();refreshHistory();}});
 
 // Resume the live data feeds without replacing the document or user input.
 window.addEventListener('phoenix-native-resume',()=>{refreshStatus();refreshSignals();refreshHistory();});

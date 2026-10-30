@@ -229,7 +229,7 @@ document.querySelector('#loadResults').addEventListener('click', async () => {
     document.querySelector('#resultsRows').innerHTML = '<div class="results-empty">گزارش دریافت نشد.</div>';
   } finally { button.disabled = false; }
 });
-document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); location.replace('/login'); });
+document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); try{for(const key of Object.keys(localStorage))if(key.startsWith('phoenix-journal-v1:'))localStorage.removeItem(key);}catch{} location.replace('/login'); });
 loadMarket();
 
 })();

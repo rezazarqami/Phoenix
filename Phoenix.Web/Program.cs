@@ -8,6 +8,7 @@ using Phoenix.Engine.Services;
 using Phoenix.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
 builder.Services.Configure<ForwardedHeadersOptions>(options => options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
 builder.Services.AddRateLimiter(options => {
     options.AddPolicy("account-login", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
@@ -198,7 +199,20 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// Only compress public-shaped assets and the read-only event history, never authentication responses.
+app.UseWhen(context => context.Request.Path.Value is { } path &&
+    (path.EndsWith(".js", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ||
+     path == "/api/mobile/history"), branch => branch.UseResponseCompression());
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        var extension = Path.GetExtension(context.File.Name).ToLowerInvariant();
+        if (extension is ".js" or ".css" or ".woff2" or ".png" or ".svg" or ".jpg" or ".webp" or ".mp4")
+            context.Context.Response.Headers.CacheControl = context.Context.Request.Query.ContainsKey("v")
+                ? "private, max-age=3600" : "private, max-age=0, must-revalidate";
+    }
+});
 
 app.MapGet("/", () => Results.Redirect("/phoenix"));
 app.MapGet("/index.html", () => Results.Redirect("/phoenix"));

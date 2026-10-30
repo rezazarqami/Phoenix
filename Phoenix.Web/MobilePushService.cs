@@ -158,7 +158,15 @@ public static class MobileEndpoints
         static string Owner(HttpRequest request) { PhoenixSessionAuth.TryGetIdentity(request, out var user); return user.Username; }
         group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, directFeed = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
         group.MapGet("/history", async (long? before,string? eventId,string? view,string? source,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
-            Results.Ok(await feed.HistoryAsync(Owner(request),before,eventId,ct,view,source)));
+        {
+            var owner=Owner(request);
+            var page=await feed.HistoryAsync(owner,before,eventId,ct,view,source);
+            var bytes=System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new {owner,page});
+            var etag="W/\""+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))+"\"";
+            request.HttpContext.Response.Headers.ETag=etag;
+            if(request.Headers.IfNoneMatch.Any(value=>value==etag))return (IResult)Results.StatusCode(304);
+            return Results.Ok(page);
+        });
         group.MapGet("/history/wallet-recovery", (HttpRequest request,BybitWalletRecovery recovery)=>Results.Ok(recovery.Status(Owner(request))));
         group.MapPost("/history/recover-wallets", async (HttpRequest request,BybitWalletRecovery recovery,CancellationToken ct)=>Results.Ok(await recovery.RecoverAsync(Owner(request),ct)));
         group.MapPost("/history/import-wallets", async (TelegramWalletImportRequest input,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>

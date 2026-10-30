@@ -20,6 +20,8 @@ jobs:
         run: python3 Phoenix.Test/phoenix-only-access-tests.py
       - name: Verify owner-only account removal and session revocation
         run: python3 Phoenix.Test/owner-only-access-tests.py
+      - name: Verify conditional history and static asset caching
+        run: python3 Phoenix.Test/cache-http-tests.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

@@ -57,6 +57,7 @@
     for(const tab of tabs){const selected=tab.dataset.panel===name;tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected||(name==='notifications'&&tab.dataset.panel==='home')?0:-1;}
     document.querySelectorAll('.home-section').forEach(panel=>panel.hidden=panel.id!=='panel-'+name);
     ensureFrame(name,query);
+    document.querySelector('#panel-'+name+' iframe')?.contentWindow?.postMessage({type:'phoenix-frame-visible'},location.origin);
     document.body.classList.remove('review-focus-host');
     document.body.classList.toggle('crypto-market-open',name==='crypto');
     document.querySelector('.market-card').hidden=name!=='home';

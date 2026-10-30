@@ -49,6 +49,45 @@ public sealed partial class SignalBatchService
             items.Add(item);await WriteProposalsAsync(items,ct);}
         finally{reviewGate.Release();}
     }
+    // Only remove desk snapshots; an already claimed submission continues independently.
+    public async Task<int> RemoveProposalsAsync(string owner, IReadOnlyCollection<string> keys, CancellationToken ct)
+    {
+        await reviewGate.WaitAsync(ct);
+        try
+        {
+            var items = await ReadProposalsAsync(ct);
+            var wanted = keys.ToHashSet(StringComparer.Ordinal);
+            var removedItems = items.Where(x => x.Owner.Equals(owner, StringComparison.OrdinalIgnoreCase) && wanted.Contains(x.Key)).ToArray();
+            if(removedItems.Length==0)return 0;
+            // Keep a recoverable snapshot per owner before removing anything from the desk.
+            var backupPath = PendingPath + ".removed.json";
+            var backups = File.Exists(backupPath) ? JsonSerializer.Deserialize<List<PendingProposal>>(await File.ReadAllTextAsync(backupPath,ct),ReviewJson) ?? [] : new List<PendingProposal>();
+            backups.RemoveAll(x => x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase));
+            backups.AddRange(removedItems);
+            await File.WriteAllTextAsync(backupPath+".tmp",JsonSerializer.Serialize(backups,ReviewJson),ct);
+            File.Move(backupPath+".tmp",backupPath,true);
+            var removed = items.RemoveAll(x => removedItems.Any(y => y.Key == x.Key && y.Owner == x.Owner));
+            await WriteProposalsAsync(items, ct);
+            return removed;
+        }
+        finally { reviewGate.Release(); }
+    }
+    public async Task<int> RestoreRemovedProposalsAsync(string owner, CancellationToken ct)
+    {
+        await reviewGate.WaitAsync(ct);
+        try
+        {
+            var backupPath=PendingPath+".removed.json";
+            if(!File.Exists(backupPath))return 0;
+            var backups=JsonSerializer.Deserialize<List<PendingProposal>>(await File.ReadAllTextAsync(backupPath,ct),ReviewJson) ?? [];
+            var items=await ReadProposalsAsync(ct);
+            var restored=backups.Where(x=>x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase) && !items.Any(y=>y.Key==x.Key)).Take(Math.Max(0,10-items.Count)).ToArray();
+            items.AddRange(restored.Select(x=>x with { State="NeedsReview",Error="از حذف بازیابی شد؛ ثبت دوباره غیرفعال است تا سفارش تکراری ایجاد نشود." }));
+            await WriteProposalsAsync(items,ct);
+            return restored.Length;
+        }
+        finally { reviewGate.Release(); }
+    }
     public async Task<string?> DecideInAppAsync(string owner,string key,string action,string? reason,CancellationToken ct)
     {
         if(action is not ("register" or "observe" or "reject"))return "انتخاب معتبر نیست.";
@@ -97,3 +136,5 @@ public sealed partial class SignalBatchService
     }
 }
 public sealed record InAppDecisionRequest(string Action,string? Reason);
+
+public sealed record RemoveProposalsRequest(string[] Keys);

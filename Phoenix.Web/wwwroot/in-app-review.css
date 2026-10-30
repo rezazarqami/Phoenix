@@ -32,3 +32,5 @@ body.review-focus .review-chart img{height:100%;max-height:100%;width:100%;objec
 #market-pane-review .review-workspace:has(#reviewList:empty){grid-template-columns:1fr}
 
 .review-chart{aspect-ratio:4/3;min-height:0;height:auto}.review-chart img{width:100%;height:100%;max-height:none;object-fit:contain}#reviewDetail{overflow-anchor:none}
+
+.review-remove{background:#101e34;color:#f4b3be;border:1px solid #633346;border-radius:10px;padding:8px 12px;font-size:.85rem;min-height:36px}.review-heading{flex-wrap:wrap;gap:10px}

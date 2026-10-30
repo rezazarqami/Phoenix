@@ -125,7 +125,9 @@ internal static class NotificationReliabilityTests
             var symbol=request.RequestUri.Query.Contains("OKUSDT")?"OKUSDT":"BTCUSDT";
             return new(HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new{retCode=0,result=new{list=new[]{new{symbol,lastPrice="110"}}}}))};
         })));
-        using var worker=new DemoOrderWorker(client,new(null,null),new ServerState(),f.Store,null!,NullLogger<DemoOrderWorker>.Instance);
+        var connectionState=new ServerState();
+        connectionState.RecordPublic(true,null,DateTime.UtcNow);connectionState.RecordAccount(true,null,DateTime.UtcNow);
+        using var worker=new DemoOrderWorker(client,new(null,null),connectionState,f.Store,null!,NullLogger<DemoOrderWorker>.Instance);
         await worker.StartAsync(default);
         try
         {
@@ -134,6 +136,8 @@ internal static class NotificationReliabilityTests
                 await Task.Delay(20);
             Check((await f.Store.GetAllAsync()).Single(s=>s.Id==healthy.Id).LastPrice==110m,
                 "A failing first market symbol must not prevent later signals being monitored");
+            Check(connectionState.Read(true) is {PublicApi.Status:"connected",Account.Status:"connected",AffectedSymbolCount:1},
+                "Actual symbol monitoring failure must not overwrite independent API/account probe evidence");
         }
         finally{await worker.StopAsync(default);}
     }

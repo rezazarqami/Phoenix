@@ -68,6 +68,7 @@ builder.Services.AddHttpClient<AiSignalParser>(client =>
     client.BaseAddress = new Uri("https://api.openai.com/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddHostedService<BybitConnectionWorker>();
 builder.Services.AddHostedService<DemoOrderWorker>();
 builder.Services.AddHostedService<ShadowSignalWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<SignalLearningService>());
@@ -381,20 +382,20 @@ app.MapGet("/api/market/overview", async (string? interval, BybitDemoClient bybi
     catch { return Results.Json(new { error = "دادهٔ نمودار در دسترس نیست." }, statusCode: 503); }
 });
 
-app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => Results.Ok(new
-{
-    publicApiConnected = state.PublicApiConnected,
-    demoAuthenticated = state.DemoAuthenticated,
-    tradingEnvironment = options.EnvironmentName,
-    credentialsConfigured = options.HasCredentials,
-    lastPrice = state.LastPrice,
-    lastUpdatedUtc = state.LastUpdatedUtc,
-    error = state.Error,
-    panelLocked = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PHOENIX_PANEL_KEY")),
-    tradingEnabled = DemoOrderWorker.IsTradingEnabled(options),
-    telegramConfigured = telegram.IsConfigured,
-    aiConfigured = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"))
-}));
+app.MapGet("/api/status", (ServerState state, BybitDemoOptions options, TelegramNotifier telegram) => {
+    var connection=state.Read(options.HasCredentials);
+    return Results.Ok(new {
+        publicApiConnected=connection.PublicApi.Status=="connected",
+        demoAuthenticated=connection.Account.Status=="connected",
+        tradingEnvironment=options.EnvironmentName, credentialsConfigured=options.HasCredentials,
+        lastPrice=state.LastPrice, lastUpdatedUtc=state.LastUpdatedUtc,
+        error=state.Error, connection,
+        serverTimeUtc=DateTime.UtcNow,
+        panelLocked=!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PHOENIX_PANEL_KEY")),
+        tradingEnabled=DemoOrderWorker.IsTradingEnabled(options),telegramConfigured=telegram.IsConfigured,
+        aiConfigured=!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"))
+    });
+});
 
 app.MapPost("/api/ai/parse-signal", async (AiSignalTextRequest request, AiSignalParser parser,
     CancellationToken token) =>
@@ -955,15 +956,6 @@ app.Run();
 
 namespace Phoenix.Web
 {
-    public sealed class ServerState
-    {
-        public bool PublicApiConnected { get; set; }
-        public bool DemoAuthenticated { get; set; }
-        public decimal? LastPrice { get; set; }
-        public DateTime? LastUpdatedUtc { get; set; }
-        public string? Error { get; set; }
-    }
-
     public sealed record SignalRequest(string Symbol, string Direction, decimal Ceiling, decimal Floor,
         decimal PositionSizeUsdt)
     {

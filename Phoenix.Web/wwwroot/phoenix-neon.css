@@ -27,3 +27,6 @@ html{scroll-behavior:auto}body{overflow-x:clip}.home-content-frame{touch-action:
 .history-sources{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0}.history-sources button{font:11px PhoenixVazir,Tahoma,sans-serif;padding:9px 6px;border:1px solid #21598b;border-radius:9px;color:#c3d8ed;background:#061a37;cursor:pointer}.history-sources button[aria-pressed=true]{color:#80dfff;border-color:#2395c1;background:#092c4d}
 
 .positions-heading #bulkControls{margin:0;padding:0;display:flex;gap:5px;justify-content:flex-end}.positions-heading #bulkControls[hidden]{display:none}.positions-heading #closePositionsButton,.position-close-one{font:inherit;font-size:11px;border:1px solid #73405c;border-radius:8px;background:#24162e;color:#edb5c9;padding:7px 10px;cursor:pointer}.position-close-one{margin-top:12px;display:block;margin-inline-start:auto}#refreshPositions[hidden]{display:none}
+
+/* Explicit unknown/partial status, distinct from healthy and failed checks. */
+#connection{cursor:pointer}#connection.warn i{background:#f4b740!important;box-shadow:0 0 0 4px #f4b74022!important}#connection.warn{color:#ffe2a0!important}#connectionDetailsBody{overflow-wrap:anywhere;line-height:1.9}#connectionDetailsBody p{margin:8px 0}#connectionDetails{max-height:80dvh;overflow-y:auto;width:min(94vw,480px)}

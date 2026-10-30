@@ -165,16 +165,25 @@ public sealed partial class BybitDemoClient
 
     public async Task<BybitDemoStatus> CheckConnectionAsync(CancellationToken cancellationToken = default)
     {
-        using var publicResponse = await _httpClient.GetAsync("/v5/market/time", cancellationToken);
-        var publicJson = await publicResponse.Content.ReadAsStringAsync(cancellationToken);
-        publicResponse.EnsureSuccessStatusCode();
-        using (var publicDocument = JsonDocument.Parse(publicJson))
-            EnsureSuccess(publicDocument.RootElement);
+        await CheckPublicConnectionAsync(cancellationToken);
+        if(!_options.HasCredentials)return new BybitDemoStatus(true,false,null,$"{_options.EnvironmentName} API keys are not configured.");
+        return await CheckAccountConnectionAsync(cancellationToken);
+    }
 
+    public async Task CheckPublicConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        using var response=await _httpClient.GetAsync("/v5/market/time",cancellationToken);
+        var json=await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document=JsonDocument.Parse(json);
+        EnsureSuccess(document.RootElement);
+    }
+
+    public async Task<BybitDemoStatus> CheckAccountConnectionAsync(CancellationToken cancellationToken = default)
+    {
         if (!_options.HasCredentials)
-            return new BybitDemoStatus(true, false, null,
-                $"Public API connected; {_options.EnvironmentName} API keys are not configured.");
-
+            return new BybitDemoStatus(false, false, null,
+                $"{_options.EnvironmentName} API keys are not configured.");
         const string query = "accountType=UNIFIED&coin=USDT";
         using var request = CreateSignedGetRequest("/v5/account/wallet-balance", query);
         using var privateResponse = await _httpClient.SendAsync(request, cancellationToken);

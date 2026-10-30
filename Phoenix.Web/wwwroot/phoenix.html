@@ -16,7 +16,7 @@
 <link href="/security.css?v=2" rel="stylesheet"/>
 <link href="/crypto-statistics.css?v=20261030-minimal" rel="stylesheet"/>
 <title>Phoenix Trading Panel</title>
-<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-execution"></head>
+<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-status"></head>
 <body>
 <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <main>
@@ -24,7 +24,8 @@
 <div class="brand"><img alt="لوگوی فونیکس" class="home-brand-logo" src="/analysis-assets/phoenix-ice-logo.png"/><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p><small class="brand-persian">تحلیل · استراتژی · اجرای هوشمند</small></div></div>
 <div class="header-actions">
 <button aria-controls="notificationMenu" aria-expanded="false" aria-label="اعلان‌های سیگنال" class="notification-toggle" id="notificationToggle" type="button"><span data-icon="bell"></span><i hidden=""></i></button><div class="notification-menu" hidden="" id="notificationMenu"><b>اعلان‌های سیگنال</b><a class="notification-history-link" href="/notifications">تاریخچهٔ رویدادها و نتایج</a><p id="notificationSummary">در حال دریافت وضعیت سیگنال‌ها…</p><button id="notificationShowActive" type="button">نمایش سیگنال‌های فعال</button><div class="safe" id="modeNote"><i>✓</i><span>در حال بررسی وضعیت موتور سفارش</span></div></div>
-<span class="badge" id="connection"><i></i>در حال بررسی</span>
+<button class="badge warn" id="connection" type="button" aria-haspopup="dialog" aria-controls="connectionDetails"><i></i>در حال بررسی</button>
+<dialog id="connectionDetails" class="security-dialog" aria-labelledby="connectionDetailsTitle"><div class="dialog-head"><h2 id="connectionDetailsTitle">وضعیت واقعی اتصال</h2><button id="closeConnectionDetails" type="button">بستن</button></div><div id="connectionDetailsBody" class="dialog-body"></div></dialog>
 <button aria-controls="settingsMenu" aria-expanded="false" aria-label="باز کردن منوی تنظیمات" class="security-button home-settings-toggle" id="settingsToggle" type="button"><span data-icon="menu"></span></button>
 <div class="settings-menu" hidden="" id="settingsMenu"><button class="security-button" id="deviceAlertsButton" type="button">اعلان‌های گوشی</button><button class="security-button" id="returnHomeButton" type="button">صفحهٔ اصلی فونیکس</button>
 <button class="security-button" id="telegramAccessButton" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
@@ -152,7 +153,7 @@
 <link href="/history.css?v=1" rel="stylesheet"/>
 <script src="/confirmation.js?v=1"></script>
 <script src="/vendor/lightweight-charts.standalone.production.js"></script><script src="/signal-live-chart.js?v=20261029-axis"></script><script src="/active-signals.js?v=20261030-execution"></script>
-<script src="/app.js?v=20261030-cache"></script>
+<script src="/app.js?v=20261030-connection-status"></script>
 <script src="/install-phoenix.js?v=2"></script>
 <script src="/bulk-controls.js?v=20261030-execution"></script>
 <script src="/crypto-statistics.js?v=20261030-riskfree"></script>

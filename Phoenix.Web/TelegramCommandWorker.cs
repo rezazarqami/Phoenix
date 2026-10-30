@@ -172,8 +172,12 @@ public sealed class TelegramCommandWorker(
     private string BuildStatus(IReadOnlyList<ServerSignal> signals)
     {
         var active = signals.Count(x => x.Status is "Pending" or "Submitting" or "Submitted" or "Filled");
-        return $"📡 وضعیت Phoenix\nاتصال عمومی Bybit: {(state.PublicApiConnected ? "متصل ✅" : "قطع ❌")}\n" +
-               $"حساب {options.EnvironmentName}: {(state.DemoAuthenticated ? "متصل ✅" : "قطع ❌")}\n" +
+        var connection=state.Read(options.HasCredentials);
+        static string Label(string status)=>status switch { "connected"=>"تأیید شده ✅", "error"=>"ناموفق ❌",
+            "stale"=>"قدیمی؛ نیازمند بررسی ⚠️", "not_configured"=>"کلید تنظیم نشده ⚠️", _=>"هنوز تأیید نشده ⚠️" };
+        return $"📡 وضعیت Phoenix\nاتصال عمومی Bybit: {Label(connection.PublicApi.Status)}\n" +
+               $"خواندن حساب {options.EnvironmentName}: {Label(connection.Account.Status)}\n" +
+               $"پایش نمادها: {Label(connection.Monitoring.Status)} · اختلال {connection.AffectedSymbolCount} نماد\n" +
                $"موتور سفارش: {(DemoOrderWorker.IsTradingEnabled(options) ? "فعال ✅" : "خاموش ⏸")}\n" +
                $"سیگنال فعال: {active}\nآخرین به‌روزرسانی: {FormatTime(state.LastUpdatedUtc)}";
     }

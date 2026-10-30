@@ -122,7 +122,7 @@ internal static class SimilarityTests
             new LearnedSignalPattern(new ServerSignal { Id = Guid.NewGuid(), Direction = "Long",
                 Timeframe = "D", CompletedAtUtc = now.AddDays(-1) }, outcome, Features)).ToArray();
         var result = SignalSimilarityService.CalculateFromPatterns(candidate, rows);
-        Check(result.Evidence is { ComparisonVersion: 4, ComparableTargets: 1, ComparableStops: 1,
+        Check(result.Evidence is { ComparisonVersion: 5, ComparableTargets: 1, ComparableStops: 1,
             ComparableRiskFree: 1, OtherTimeframeNearbyTargets: 1, OtherTimeframeNearbyStops: 1,
             OtherTimeframeNearbyRiskFree: 1, SameTimeframeNearbyTargets: 0 },
             "Sparse legacy snapshots and distant timeframes must retain all three outcome counts");

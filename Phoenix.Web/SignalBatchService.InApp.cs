@@ -23,7 +23,29 @@ public sealed partial class SignalBatchService
     public async Task<IReadOnlyList<PendingProposal>> PendingAsync(string owner,CancellationToken ct)
     {
         await reviewGate.WaitAsync(ct);
-        try{return (await ReadProposalsAsync(ct)).Where(x=>x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase)).ToArray();}
+        try
+        {
+            var items=await ReadProposalsAsync(ct);
+            var changed=false;
+            for(var i=0;i<items.Count;i++)
+            {
+                var item=items[i];
+                if(!item.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase) || item.State!="Ready" ||
+                    item.Analysis.ObservedAtUtc is null || professional is null ||
+                    item.Analysis.Prediction.Evidence?.ComparisonVersion==5)continue;
+                var analysis=await professional.RefreshSimilarityAsync(item.Candidate,item.Interval,item.Analysis,ct);
+                var oldSupport=SignalReviewText.Support(item.Analysis.Prediction.Evidence).Trim();
+                var newSupport=SignalReviewText.Support(analysis.Prediction.Evidence).Trim();
+                var caption=item.Caption.Contains(oldSupport,StringComparison.Ordinal)
+                    ? item.Caption.Replace(oldSupport,newSupport,StringComparison.Ordinal)
+                    : string.Join("\n",item.Caption.Split('\n').Where(line=>
+                        !(line.Contains("تارگت") && line.Contains("استاپ") && line.Contains("ریسک‌فری"))))+"\n"+newSupport;
+                items[i]=item with {Analysis=analysis,Caption=caption};
+                changed=true;
+            }
+            if(changed)await WriteProposalsAsync(items,ct);
+            return items.Where(x=>x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
         finally{reviewGate.Release();}
     }
     private async Task<int> PendingCountAsync(CancellationToken ct)

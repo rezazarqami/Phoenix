@@ -373,7 +373,7 @@ app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
         catch { /* A temporary Bybit failure must not make the signal panel unavailable. */ }
     }
     foreach (var signal in signals.Where(x => x.CompletedAtUtc is null && x.EntryTriggeredAtUtc is null && x.ProposalEvidence is null &&
-        x.TechnicalFeatures is not null && x.SimilarityEvidence?.ComparisonVersion != 4))
+        x.TechnicalFeatures is not null && x.SimilarityEvidence?.ComparisonVersion != 5))
     {
         try
         {

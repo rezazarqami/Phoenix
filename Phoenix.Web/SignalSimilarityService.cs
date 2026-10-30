@@ -49,7 +49,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         {
             SameTimeframeComparable=usable.Count(x=>Same(x.Pattern)),
             OtherTimeframeComparable=usable.Count(x=>!Same(x.Pattern) && !string.IsNullOrWhiteSpace(x.Pattern.Signal.Timeframe)),
-            ComparisonVersion=4,Metric=TechnicalResemblance.Metric,
+            ComparisonVersion=5,Metric=TechnicalResemblance.Metric,
             ComparableRiskFree=Used("RiskFree"),
             InsufficientFeatureCount=compared.Length-usable.Length,
             SameTimeframeNearbyRiskFree=Close("RiskFree",true),

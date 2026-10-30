@@ -14,7 +14,17 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         // cohorts. Legacy entry fallback is explicitly labeled in the summary.
         var patterns = !atEntry && snapshot.ProposalPatterns.Count > 0
             ? snapshot.ProposalPatterns : snapshot.Patterns;
-        return CalculateFromPatterns(candidate, patterns, token);
+        var result = CalculateFromPatterns(candidate, patterns, token);
+        var cutoff = candidate.EntryTriggeredAtUtc ?? candidate.CreatedAtUtc;
+        var archived = snapshot.OutcomeHistory.Select(x => x.Item.Signal)
+            .Where(x => (x.Id != candidate.Id || candidate.Id == Guid.Empty) && x.Outcome is "Target" or "StopLoss" or "RiskFree")
+            .Where(x => x.CompletedAtUtc is not null && (cutoff == default || x.CompletedAtUtc < cutoff))
+            .Select(x => x.Id).Distinct().Count();
+        return result with { Evidence = result.Evidence! with {
+            ArchivedCompletedCount = archived,
+            MissingStageSnapshotCount = Math.Max(0, archived - result.SampleCount),
+            ReferenceRefreshedAtUtc = snapshot.RefreshedAtUtc
+        }};
     }
 
     internal static SignalSimilarityResult CalculateFromPatterns(ServerSignal candidate,
@@ -26,8 +36,11 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             .Where(x => cutoff is null || x.Signal.CompletedAtUtc < cutoff));
         // Evaluate each historical signal once, before splitting by outcome/timeframe.
         // No minimum counts, class quotas, nearest-N truncation or positive score floor.
-        var compared=patterns.Select(p=>(Pattern:p, Match:TechnicalResemblance.Compare(candidate,p.Signal,
-            candidate.TechnicalFeatures,p.Features))).ToArray();
+        var compared=patterns.Select(p => {
+            token.ThrowIfCancellationRequested();
+            return (Pattern:p, Match:TechnicalResemblance.Compare(candidate,p.Signal,
+                candidate.TechnicalFeatures,p.Features));
+        }).ToArray();
         var usable=compared.Where(x=>x.Match.Comparable).ToArray();
         var nearby=usable.Where(x=>x.Match.Nearby).ToArray();
         bool Same(LearnedSignalPattern p)=>!string.IsNullOrWhiteSpace(candidate.Timeframe) &&
@@ -49,9 +62,10 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         {
             SameTimeframeComparable=usable.Count(x=>Same(x.Pattern)),
             OtherTimeframeComparable=usable.Count(x=>!Same(x.Pattern) && !string.IsNullOrWhiteSpace(x.Pattern.Signal.Timeframe)),
-            ComparisonVersion=5,Metric=TechnicalResemblance.Metric,
+            ComparisonVersion=TechnicalResemblance.Version,Metric=TechnicalResemblance.Metric,
             ComparableRiskFree=Used("RiskFree"),
             InsufficientFeatureCount=compared.Length-usable.Length,
+            EvaluatedSnapshotCount=compared.Length,
             SameTimeframeNearbyRiskFree=Close("RiskFree",true),
             OtherTimeframeNearbyTargets=Close("Target",false),
             OtherTimeframeNearbyStops=Close("StopLoss",false),
@@ -71,7 +85,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         TechnicalFeatureSnapshot candidateFeatures,TechnicalFeatureSnapshot sampleFeatures,bool matchTimeframe=true)
     {
         var comparison=TechnicalResemblance.Compare(candidate,sample,candidateFeatures,sampleFeatures);
-        return comparison.Score*(matchTimeframe ? .9d+.1d*(TimeframeSimilarity(candidate.Timeframe,sample.Timeframe)??1d):1d);
+        return comparison.Score; // Timeframe only partitions the displayed counts.
     }
 
     internal static double? TimeframeSimilarity(string? left, string? right)

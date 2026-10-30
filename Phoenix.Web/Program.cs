@@ -95,6 +95,37 @@ if (ownerOnlyAccess)
     app.Logger.LogInformation("Owner-only access enabled; removed {Count} additional accounts.", removed);
 }
 app.UseForwardedHeaders();
+// Correlate failures without recording cookies, request bodies or credentials.
+var connectionInstance = Guid.NewGuid().ToString("N")[..12];
+var connectionStarted = DateTime.UtcNow;
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Path.StartsWithSegments("/api")) { await next(); return; }
+    var requestId = Guid.NewGuid().ToString("N");
+    var started = System.Diagnostics.Stopwatch.StartNew();
+    context.Response.Headers["X-Phoenix-Request-Id"] = requestId;
+    context.Response.Headers["X-Phoenix-Instance"] = connectionInstance;
+    try { await next(); }
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+    {
+        app.Logger.LogWarning("Phoenix client disconnected {Path} request {RequestId} after {Elapsed}ms instance {Instance}",
+            context.Request.Path, requestId, started.ElapsedMilliseconds, connectionInstance);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Phoenix API failure {Path} request {RequestId} instance {Instance}",
+            context.Request.Path, requestId, connectionInstance);
+        if (context.Response.HasStarted) { context.Abort(); return; }
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new { error = "خطای داخلی سرور؛ کد پیگیری را برای بررسی نگه دارید.", requestId });
+    }
+    finally
+    {
+        if (context.Response.StatusCode >= 500 || started.Elapsed > TimeSpan.FromSeconds(5))
+            app.Logger.LogWarning("Phoenix API {Path} status {Status} request {RequestId} duration {Elapsed}ms instance {Instance}",
+                context.Request.Path, context.Response.StatusCode, requestId, started.ElapsedMilliseconds, connectionInstance);
+    }
+});
 app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
@@ -574,6 +605,11 @@ app.MapPost("/api/analysis/proposals/{key}/decision", async (string key,InAppDec
     var error=await batches.DecideInAppAsync(identity.Username ?? "",key,decision.Action,decision.Reason,CancellationToken.None);
     return error is null?Results.Ok():Results.Conflict(new {error});
 });
+// Authenticated, lightweight diagnostic; independent of exchanges and queue file locks.
+app.MapGet("/api/analysis/connection", () => Results.Ok(new {
+    status = "ok", instance = connectionInstance, startedAtUtc = connectionStarted,
+    serverTimeUtc = DateTime.UtcNow
+}));
 app.MapGet("/api/analysis/signal-batch", (SignalBatchService batches) => Results.Ok(batches.Status));
 app.MapGet("/api/analysis/learning", async (SignalLearningService learning, HttpContext context, CancellationToken token) =>
 {

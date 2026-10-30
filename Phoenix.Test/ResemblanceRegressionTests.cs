@@ -19,11 +19,10 @@ internal static class ResemblanceRegressionTests
         var same=Query(Baseline).Evidence!;
         Check(same.SameTimeframeNearbyTargets==4 && same.SameTimeframeNearbyStops==3 && same.SameTimeframeNearbyRiskFree==4 &&
             same.OtherTimeframeNearbyTargets==8 && same.OtherTimeframeNearbyStops==6 && same.OtherTimeframeNearbyRiskFree==1,"Identical observations must count exactly, without quotas");
-        foreach(var changed in new[]{Baseline with{SupportDistanceAtr=8,ResistanceDistanceAtr=9},
-            Baseline with{TradeGeometry=new(1,8,16,2,1)},Baseline with{IchimokuPosition=3,IchimokuCloudBias=3}})
+        foreach(var changed in new[]{Baseline with{SupportDistanceAtr=8,ResistanceDistanceAtr=9}})
         {
             var result=Query(changed).Evidence!;
-            Check(Total(result)==0,"Contradictory SR, planned stop/target geometry or cloud evidence must genuinely produce six zeros");
+            Check(Total(result)==0,"Contradictory SR distances must genuinely produce six zeros");
             Check(result.ComparableTargets==12 && result.ComparableStops==9 && result.ComparableRiskFree==5,
                 "A measured zero must retain its actual comparison denominator");
             Check(result.NearestExamples!.All(e=>!e.Nearby) && result.Metric==TechnicalResemblance.Metric,
@@ -53,7 +52,7 @@ internal static class ResemblanceRegressionTests
         var candles=Enumerable.Range(0,100).Select(i=>new BybitKline(i*60_000L,100,102,98,100,1)).ToArray();
         SignalCandidate Candidate(decimal entry)=>new("TESTUSDT","15","Long",2200,80,100,entry,entry+20,entry-10,null,null,1,1,0,0,0,0,0,100,"fixture",false,null);
         var first=TechnicalFeatureExtractor.Calculate(candles,Candidate(1000));
-        var second=TechnicalFeatureExtractor.Calculate(candles,Candidate(2000));
+        var second=TechnicalFeatureExtractor.Calculate(candles,Candidate(8000));
         Check(first.IchimokuEntryPosition==1 && second.IchimokuEntryPosition==1 && first.SupportDistanceAtr==10 && second.SupportDistanceAtr==10,
             "Fixture reproduces the old clipped identical readings");
         Check(first.LevelContext!.Entry.CloudDistanceAtr!=second.LevelContext!.Entry.CloudDistanceAtr &&
@@ -61,7 +60,7 @@ internal static class ResemblanceRegressionTests
             "Persist uncapped cloud and actual pivot distances, rather than identical saturated values");
         var signal=new ServerSignal{Direction="Long",Timeframe="15"};
         var match=TechnicalResemblance.Compare(signal,signal,first,second);
-        Check(match.Comparable && !match.Nearby && match.Distances["ichimoku"]>1,
+        Check(match.Comparable && !match.Nearby && match.Distances["support-resistance"]>1,
             "Different uncapped trade levels must no longer become near merely because both old values saturated");
         var historical=first with{LevelContext=null};
         Check(TechnicalResemblance.Compare(signal,signal,historical,historical).Comparable==false,
@@ -141,7 +140,7 @@ internal static class ResemblanceRegressionTests
                 "chart and levels"+SignalReviewText.Support(prediction.Evidence),[1,2],5,observed),default);
             await batches.AddProposalAsync(new("other-key","other",candidate,"60",true,analysis,"other caption",[3],5,observed),default);
             var item=(await batches.PendingAsync("owner",default)).Single();
-            Check(item.Analysis.Prediction.Evidence is {ComparisonVersion:5,SameTimeframeNearbyTargets:1,SameTimeframeNearbyStops:0},
+            Check(item.Analysis.Prediction.Evidence is {ComparisonVersion:6,SameTimeframeNearbyTargets:1,SameTimeframeNearbyStops:0},
                 "Migrate old desk counts with only outcomes known at the original proposal time");
             Check(item.Analysis.Features==Baseline && item.Analysis.ObservedAtUtc==observed && item.Image.SequenceEqual(new byte[]{1,2}) &&
                 item.Caption.StartsWith("chart and levels") && !item.Caption.Contains("60"),

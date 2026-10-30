@@ -72,7 +72,7 @@ public sealed class SignalLearningService(
         var history=items;
         var completed = history.Select(x => x.Signal)
             .Where(x => x.Outcome is "Target" or "StopLoss" or "RiskFree")
-            .Where(x => x.EntryPrice > 0m && x.Ceiling > x.Floor)
+            .Where(x => x.EntryPrice > 0m && x.TakeProfit > 0m && x.StopLoss > 0m)
             .GroupBy(x => x.Id).Select(x => x.First()).ToArray();
         var patterns = new List<LearnedSignalPattern>(completed.Length);
         foreach (var signal in completed)

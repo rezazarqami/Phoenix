@@ -3,6 +3,8 @@ const faMarket = new Intl.NumberFormat('fa-IR');
 const batchError = document.querySelector('#batchError');
 const retryConnection = document.querySelector('#retryBatchConnection');
 let batchConnectionLost = false;
+let connectionFailures = 0;
+let sessionEnded = false;
 function showBatchError(message) {
   if (batchError) batchError.textContent = message;
   document.querySelector('#marketMessage').textContent = message;
@@ -38,21 +40,37 @@ async function batchRequest(url, options, cancellation) {
   const abort = () => controller.abort();
   if (cancellation?.aborted) controller.abort();
   cancellation?.addEventListener('abort', abort, {once: true});
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), options?.method === 'POST' ? 15000 : 30000);
   try {
     const response = await fetch(url, {...options, signal: controller.signal, cache: 'no-store'});
-    if (response.status === 401) { location.replace('/login'); throw new Error('نشست ورود پایان یافته است؛ دوباره وارد شوید.'); }
-    if (response.status >= 500) throw new Error('سرور موقتاً پاسخ نمی‌دهد؛ در حال بررسی دوباره ارتباط…');
-    const data = await response.json().catch(() => { throw new Error('پاسخ سرور کامل دریافت نشد؛ در حال بررسی دوباره ارتباط…'); });
+    const requestId = response.headers?.get('X-Phoenix-Request-Id');
+    const suffix = requestId ? ` · کد پیگیری ${requestId}` : '';
+    if (response.status === 401 || response.redirected && /\/login(?:[/?]|$)/.test(new URL(response.url, location.origin).pathname)) {
+      sessionEnded = true;
+      location.replace('/login'); throw new Error('نشست ورود پایان یافته است؛ دوباره وارد شوید.');
+    }
+    if (response.status >= 500) throw new Error(`سرور موقتاً پاسخ نمی‌دهد (HTTP ${response.status})؛ در حال بررسی دوباره ارتباط…${suffix}`);
+    if (response.status === 429) throw new Error(`درخواست‌ها بیش از حد است؛ کمی بعد دوباره بررسی می‌شود.${suffix}`);
+    const contentType = response.headers?.get('Content-Type');
+    if (contentType && !contentType.toLowerCase().includes('json'))
+      throw new Error(`پاسخ واسط سرور قابل استفاده نیست (HTTP ${response.status})؛ در حال بررسی دوباره ارتباط…${suffix}`);
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+      if (controller.signal.aborted) throw error;
+      throw new Error(`پاسخ سرور ناقص یا نامعتبر است (HTTP ${response.status})؛ در حال بررسی دوباره ارتباط…${suffix}`);
+    }
     if (!response.ok) {
       const error = new Error(data.error || 'دستور انجام نشد؛ وضعیت صف را بررسی کنید.');
       error.commandRejected = true;
       throw error;
     }
+    if (!data || typeof data.running !== 'boolean' || typeof data.message !== 'string')
+      throw new Error(`ساختار پاسخ وضعیت صف معتبر نیست؛ در حال بررسی دوباره ارتباط…${suffix}`);
     return data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('پاسخ سرور طول کشید؛ وضعیت صف در حال بررسی است.');
-    if (error.name === 'TypeError') throw new Error('ارتباط با سرور قطع شد؛ در حال بررسی دوباره ارتباط…');
+    if (error.name === 'TypeError') throw new Error('پاسخ شبکه دریافت نشد؛ مسیر اینترنت یا دسترسی به سرور در حال بررسی است…');
     throw error;
   } finally { clearTimeout(timeout); cancellation?.removeEventListener('abort', abort); }
 }
@@ -166,6 +184,7 @@ async function pollBatch() {
       // no JSON body and previously appeared as an endless connection error.
       const data = await batchRequest('/api/analysis/signal-batch', {}, controller.signal);
       if (revision === batchRevision && !batchCommandPending) {
+        connectionFailures = 0;
         renderBatch(data);
         if (batchConnectionLost) {
           batchConnectionLost = false;
@@ -179,6 +198,7 @@ async function pollBatch() {
       }
     } catch (error) {
       if (revision === batchRevision && !batchCommandPending && !controller.signal.aborted) {
+        connectionFailures++;
         batchConnectionLost = true;
         if (retryConnection) retryConnection.hidden = false;
         showBatchError(error.message);
@@ -190,8 +210,11 @@ async function pollBatch() {
   finally { batchPollTask = null; }
 }
 async function watchBatch() {
-  await pollBatch();
-  setTimeout(watchBatch, batchConnectionLost || lastBatchState?.stopping ? 1500 : lastBatchState?.running ? 3000 : 10000);
+  if (sessionEnded) return;
+  if (!document.hidden && (typeof navigator === 'undefined' || navigator.onLine !== false)) await pollBatch();
+  const delay = batchConnectionLost ? Math.min(30000, 1500 * 2 ** Math.min(5, Math.max(0, connectionFailures - 1)))
+    : lastBatchState?.stopping ? 1500 : lastBatchState?.running ? 3000 : 10000;
+  setTimeout(watchBatch, delay);
 }
 async function reconnectBatch() {
   if (batchCommandPending) return;
@@ -201,6 +224,27 @@ async function reconnectBatch() {
     await pollBatch();
   } finally { if (retryConnection) retryConnection.disabled = false; }
 }
+const diagnoseConnection = document.querySelector('#diagnoseConnection');
+diagnoseConnection?.addEventListener('click', async () => {
+  if (diagnoseConnection.disabled) return;
+  diagnoseConnection.disabled = true;
+  const output = document.querySelector('#connectionDiagnosis');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  const started = Date.now();
+  output.textContent = 'در حال آزمایش ارتباط…';
+  try {
+    const response = await fetch('/api/analysis/connection', {cache:'no-store', signal:controller.signal});
+    if (response.status === 401) { output.textContent = 'ارتباط برقرار است؛ ورود دوباره لازم است.'; return; }
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.status !== 'ok' || !data.instance)
+      throw new Error(`پاسخ معتبر فونیکس نرسید (HTTP ${response.status})؛ واسط سرور یا مسیر شبکه باید بررسی شود.`);
+    output.textContent = `فونیکس پاسخ داد · ${Date.now()-started} میلی‌ثانیه · سرور ${data.instance} · شروع ${data.startedAtUtc} · کد پیگیری ${response.headers.get('X-Phoenix-Request-Id')||'—'}`;
+  } catch (error) {
+    output.textContent = error.name === 'AbortError' ? 'تا ۱۰ ثانیه پاسخی نرسید؛ این آزمایش به‌تنهایی سرور را از مشکل مسیر اینترنت تفکیک نمی‌کند.'
+      : error.name === 'TypeError' ? 'ارتباط شبکه تا فونیکس برقرار نشد؛ همین آزمایش را با اینترنت دیگر مقایسه کنید.' : error.message;
+  } finally { clearTimeout(timeout); diagnoseConnection.disabled = false; }
+});
 retryConnection?.addEventListener('click', reconnectBatch);
 if (typeof window !== 'undefined') window.addEventListener('online', reconnectBatch);
 document.addEventListener?.('visibilitychange', () => {

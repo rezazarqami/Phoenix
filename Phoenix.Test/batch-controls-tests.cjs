@@ -167,5 +167,30 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(disconnected.node('#stopBatch').disabled, true);
   assert.equal(disconnected.node('#batchError').textContent, '');
   assert.equal(disconnected.calls.filter(c=>c.options.method==='POST').length, 1);
+  // HTML with HTTP 200 is a gateway/session response, not a queue state.
+  const html = setup();
+  html.calls[0].resolveResponse({ok:true,status:200,headers:{get(name){return name==='Content-Type'?'text/html':'trace-html';}},json:async()=>{throw Error('must not parse');}});
+  await flush();
+  assert.match(html.node('#batchError').textContent,/واسط سرور/);
+  assert.match(html.node('#batchError').textContent,/trace-html/);
+  // Parsing failures and valid JSON of the wrong shape are distinct diagnostics.
+  const truncated=setup();
+  truncated.calls[0].resolveResponse({ok:true,status:200,json:async()=>{throw new SyntaxError('truncated');}});
+  await flush();assert.match(truncated.node('#batchError').textContent,/ناقص یا نامعتبر/);
+  const malformed=setup();malformed.calls[0].resolve({status:'ok'});
+  await flush();assert.match(malformed.node('#batchError').textContent,/ساختار پاسخ/);
+  // Repeated failures back off instead of flooding a poor connection every 1.5s.
+  const failing=setup();failing.calls[0].reject(new TypeError('offline'));await flush();
+  [...failing.timers.values()].find(t=>t.ms===1500).callback();await flush();
+  failing.calls.at(-1).reject(new TypeError('offline'));await flush();
+  assert.ok([...failing.timers.values()].some(t=>t.ms===3000));
+  // The independent probe uses no trading command and shows a server/trace identity.
+  const probe=setup();probe.calls[0].resolve(state(false));await flush();
+  const diagnosis=probe.node('#diagnoseConnection').click();
+  assert.equal(probe.calls.at(-1).url,'/api/analysis/connection');
+  probe.calls.at(-1).resolveResponse({ok:true,status:200,headers:{get(){return 'trace-probe';}},json:async()=>({status:'ok',instance:'instance-a',startedAtUtc:'2026-10-30'})});
+  await diagnosis;
+  assert.match(probe.node('#connectionDiagnosis').textContent,/instance-a/);
+  assert.match(probe.node('#connectionDiagnosis').textContent,/trace-probe/);
   console.log('PASS batch controls: immediate pending feedback, duplicate prevention, stale poll rejection, stop, timeout reconciliation and single-flight polling.');
 })().catch(error => {console.error(error); process.exit(1);});

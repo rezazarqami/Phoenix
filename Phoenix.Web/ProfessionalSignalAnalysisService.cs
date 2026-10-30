@@ -13,7 +13,7 @@ public sealed record ProfessionalSignalAnalysis(
     public DateTime? ObservedAtUtc { get; init; }
 }
 
-/// <summary>Cached multi-timeframe and BTC context analysis used before human approval.</summary>
+/// <summary>Cached support/resistance snapshots across timeframes, used before human approval.</summary>
 public sealed class ProfessionalSignalAnalysisService(
     BybitDemoClient bybit,
     SignalSimilarityService predictor)
@@ -35,10 +35,9 @@ public sealed class ProfessionalSignalAnalysisService(
             x => x == signalInterval && signalCandles.Count >= 80
                 ? Task.FromResult<IReadOnlyList<BybitKline>?>(signalCandles)
                 : TryGetCandlesAsync(candidate.Symbol, x, token));
-        var bitcoinTasks = new[] { "60", "240", "D" }.ToDictionary(x => x,
-            x => GetCandlesAsync("BTCUSDT", x, 300, token));
-        await Task.WhenAll(symbolTasks.Values.Concat<Task>(bitcoinTasks.Values)
-            .Concat(extendedTasks.Values));
+        // SR comparison needs this symbol's pivots only. An unrelated BTC
+        // endpoint must not delay or prevent a proposal from being reviewed.
+        await Task.WhenAll(symbolTasks.Values.Concat<Task>(extendedTasks.Values));
 
         IReadOnlyList<BybitKline> AtEntry(IReadOnlyList<BybitKline> candles, string interval) =>
             CandlesAvailableAt(candles, interval, observedAtUtc);
@@ -51,11 +50,7 @@ public sealed class ProfessionalSignalAnalysisService(
                 histories[interval] = earlier;
         histories[signalInterval] = signalCandles;
         var enriched = BuildFeatures(candidate, signalInterval, histories);
-        var direction = candidate.Direction == "Long" ? 1m : -1m;
-        var btc = bitcoinTasks.Select(x => TechnicalFeatureExtractor.Calculate(AtEntry(x.Value.Result, x.Key), candidate)).ToArray();
-        enriched = enriched with { BitcoinMarketAlignment = btc.Average(x => DirectionalTrend(x, direction)) };
-        var regime = enriched.MarketRegimeScore >= 0.62m ? "روند قدرتمند"
-            : enriched.MarketRegimeScore <= 0.22m ? "رنج/فشرده" : "روند متوسط";
+        const string regime = "حمایت و مقاومت";
         var serverSignal = new ServerSignal
         {
             Symbol = candidate.Symbol, Direction = candidate.Direction, Timeframe = signalInterval,

@@ -1,141 +1,109 @@
 namespace Phoenix.Web;
 
-// Distances use fixed, versioned technical units, not archive dispersion or outcome labels.
-// A radius of one means the RMS mismatch fits the documented neighborhood.
+// Only frozen support/resistance observations enter this metric. Outcome labels,
+// cloud/Fibonacci, volatility regime and trade reward/risk never enter its score.
 internal sealed record TechnicalResemblance(double Score, bool Comparable,
     IReadOnlyDictionary<string, double> Distances)
 {
-    internal const string Metric = "technical-neighborhood-v5";
-    // Overall technical radius, with explicit vetoes only for major contradictions.
-    // The old intersection of every independent group shrank as context was added.
+    internal const int Version = 6;
+    internal const string Metric = "support-resistance-neighborhood-v6";
     internal bool Nearby => Comparable && Score >= Math.Exp(-.5d) &&
-        Distances.Where(x => x.Key is "support-resistance" or "level-geometry" or "ichimoku" or "trade-geometry")
-            .All(x => x.Value <= 2d);
+        Distances.TryGetValue("support-resistance", out var entry) && entry <= 1.25d &&
+        Distances.Where(x => x.Key is "stop-level" or "target-level" or "entry-strength").All(x => x.Value <= 1.5d);
 
     internal static TechnicalResemblance Compare(ServerSignal a, ServerSignal b,
         TechnicalFeatureSnapshot x, TechnicalFeatureSnapshot y)
     {
         var groups = new Dictionary<string, double>();
         var weights = new Dictionary<string, double>();
-        var sign = a.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
-        var otherSign = b.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) ? 1m : -1m;
-        var support = new List<double>();
-        // log(1+ATR-distance) keeps both close levels and distant levels distinguishable.
-        // Two capped values (10 ATR) say only "far away", not how far: no match credit.
-        Distance(x.SupportDistanceAtr, sign==otherSign ? y.SupportDistanceAtr : y.ResistanceDistanceAtr);
-        Distance(x.ResistanceDistanceAtr, sign==otherSign ? y.ResistanceDistanceAtr : y.SupportDistanceAtr);
-        var measuredDistances=support.Count;
-        var rawMeasuredDistances=0;
-        Pair(x.EntryLevelStrength, y.EntryLevelStrength, .25m, support);
-        Pair(x.StopLevelStrength, y.StopLevelStrength, .25m, support);
-        Pair(x.TargetLevelStrength, y.TargetLevelStrength, .25m, support);
-        Add("support-resistance", support, 4);
-        var clouds = new List<double>();
-        ClippedCloud(x.IchimokuEntryPosition ?? x.IchimokuPosition,
-            y.IchimokuEntryPosition ?? y.IchimokuPosition, clouds);
-        ClippedCloud(x.IchimokuCloudBias,y.IchimokuCloudBias,clouds);
-        ClippedCloud(x.IchimokuStopPosition,y.IchimokuStopPosition,clouds);
-        ClippedCloud(x.IchimokuTargetPosition,y.IchimokuTargetPosition,clouds);
-        Add("ichimoku", clouds, 2);
-        if(x.LevelContext is { } lx && y.LevelContext is { } ly)
+        var mirrored = a.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase) !=
+            b.Direction.Equals("Long", StringComparison.OrdinalIgnoreCase);
+        var measuredEntry = 0;
+        var entry = new List<double>();
+        var stop = new List<double>();
+        var target = new List<double>();
+        var entryStrength = new List<double>(); var stopStrength = new List<double>(); var targetStrength = new List<double>();
+        if (x.LevelContext is { } left && y.LevelContext is { } right)
         {
-            // New snapshots retain uncapped distances at entry, target AND stop.
-            // Legacy clipped readings stay legacy; no reconstruction from future candles.
-            var geometry=new List<double>();var rawClouds=new List<double>();
-            CompareLevel(lx.Entry,ly.Entry,geometry,rawClouds);
-            CompareLevel(lx.Stop,ly.Stop,geometry,rawClouds);
-            CompareLevel(lx.Target,ly.Target,geometry,rawClouds);
-            ClippedCloud(x.IchimokuCloudBias,y.IchimokuCloudBias,rawClouds);
-            Add("level-geometry",geometry,4);
-            Add("ichimoku",rawClouds,2);
+            measuredEntry = Level(left.Entry, right.Entry, entry, entryStrength);
+            Level(left.Stop, right.Stop, stop, stopStrength);
+            Level(left.Target, right.Target, target, targetStrength);
         }
-        if(x.MultiScaleLevels is {Count:>0} && y.MultiScaleLevels is {Count:>0})
+        else
         {
-            var levels=new List<double>();var fib=new List<double>();var contextCloud=new List<double>();
-            // Match the same actual timeframe AND history window, never positional averages.
-            foreach(var pair in x.MultiScaleLevels.Join(y.MultiScaleLevels,
-                v=>(v.Interval,v.Window),v=>(v.Interval,v.Window),(l,r)=>(Left:l,Right:r)))
+            // Saturated legacy readings remain unknown, rather than invented zeros.
+            measuredEntry += Distance(x.SupportDistanceAtr,
+                mirrored ? y.ResistanceDistanceAtr : y.SupportDistanceAtr, entry, clipped: true);
+            measuredEntry += Distance(x.ResistanceDistanceAtr,
+                mirrored ? y.SupportDistanceAtr : y.ResistanceDistanceAtr, entry, clipped: true);
+        }
+        Pair(x.EntryLevelStrength, y.EntryLevelStrength, entryStrength);
+        Pair(x.StopLevelStrength, y.StopLevelStrength, stopStrength);
+        Pair(x.TargetLevelStrength, y.TargetLevelStrength, targetStrength);
+        Add("support-resistance", entry, 4);
+        Add("entry-strength", entryStrength, 2); // Entry is the most important level.
+        Add("stop-level", stop, 1); Add("stop-strength", stopStrength, 1);
+        Add("target-level", target, 1); Add("target-strength", targetStrength, 1);
+        var multi = new List<double>();
+        if (x.MultiScaleLevels is { } mx && y.MultiScaleLevels is { } my)
+        {
+            foreach (var pair in mx.Join(my, l => (l.Interval, l.Window), r => (r.Interval, r.Window),
+                (l, r) => (Left: l, Right: r)))
             {
-                var l=pair.Left;var r=pair.Right;
-                if(l.LevelContext is { } lc && r.LevelContext is { } rc)
+                var l = pair.Left; var r = pair.Right;
+                var scaleEntry = new List<double>(); var scaleStop = new List<double>(); var scaleTarget = new List<double>();
+                if (l.LevelContext is { } lc && r.LevelContext is { } rc)
                 {
-                    var rawLevels=new List<double>();
-                    CompareLevel(lc.Entry,rc.Entry,rawLevels,contextCloud);
-                    CompareLevel(lc.Stop,rc.Stop,rawLevels,contextCloud);
-                    CompareLevel(lc.Target,rc.Target,rawLevels,contextCloud);
-                    levels.AddRange(rawLevels);
+                    Level(lc.Entry, rc.Entry, scaleEntry, scaleEntry);
+                    Level(lc.Stop, rc.Stop, scaleStop, scaleStop);
+                    Level(lc.Target, rc.Target, scaleTarget, scaleTarget);
                 }
-                levels.AddRange([Difference(l.EntryStrength,r.EntryStrength,.25m),
-                    Difference(l.StopStrength,r.StopStrength,.25m),Difference(l.TargetStrength,r.TargetStrength,.25m)]);
-                fib.AddRange([Difference(l.FibonacciEntry,r.FibonacciEntry,.25m),
-                    Difference(l.FibonacciStop,r.FibonacciStop,.25m),Difference(l.FibonacciTarget,r.FibonacciTarget,.25m)]);
-                ClippedCloud(l.CloudEntry,r.CloudEntry,contextCloud);
-                ClippedCloud(l.CloudStop,r.CloudStop,contextCloud);
-                ClippedCloud(l.CloudTarget,r.CloudTarget,contextCloud);
-                ClippedCloud(l.CloudBias,r.CloudBias,contextCloud);
+                Pair(l.EntryStrength, r.EntryStrength, scaleEntry);
+                Pair(l.StopStrength, r.StopStrength, scaleStop);
+                Pair(l.TargetStrength, r.TargetStrength, scaleTarget);
+                // Each named timeframe/window retains its identity; entry has 3x weight.
+                multi.AddRange(scaleEntry); multi.AddRange(scaleEntry); multi.AddRange(scaleEntry);
+                multi.AddRange(scaleStop); multi.AddRange(scaleTarget);
             }
-            Add("multiscale-levels",levels,2);Add("fibonacci",fib,2);Add("multiscale-cloud",contextCloud,1);
         }
-        if(x.TradeGeometry is {StopDistanceAtr:>0,TargetDistanceAtr:>0} gx &&
-           y.TradeGeometry is {StopDistanceAtr:>0,TargetDistanceAtr:>0} gy)
-            Add("trade-geometry",[Ratio(gx.StopDistanceAtr,gy.StopDistanceAtr),
-                Ratio(gx.TargetDistanceAtr,gy.TargetDistanceAtr)],2);
-        var structure=new List<double>();
-        if(x.SimilarityContextVersion>=1 && y.SimilarityContextVersion>=1)
-        {
-            structure.Add(Difference(x.MarketRegimeScore,y.MarketRegimeScore,.25m));
-            structure.Add(Difference(x.StructureScore,y.StructureScore,.25m));
-            structure.Add(Difference(x.LiquiditySweepScore,y.LiquiditySweepScore,.25m));
-        }
-        Pair(x.StructureBreakScore,y.StructureBreakScore,.25m,structure);
-        Pair(x.StructureRetestScore,y.StructureRetestScore,.25m,structure);
-        Add("structure",structure,1);
-        // Volatility is compared relatively. RSI, volume, BTC alignment, current entry
-        // distance and the result label never enter this ruler.
-        if(x.AtrPercent>0 && y.AtrPercent>0)Add("volatility",[Ratio(x.AtrPercent,y.AtrPercent)],1);
-        var comparable=(rawMeasuredDistances>0 || measuredDistances>0 && support.Count>=2) && x.AtrPercent>0 && y.AtrPercent>0;
-        var distance=groups.Count==0?double.PositiveInfinity:
-            groups.Sum(g=>g.Value*g.Value*weights[g.Key])/weights.Values.Sum();
-        return new(comparable?Math.Exp(-.5d*distance):0d,comparable,groups);
+        Add("multiscale-levels", multi, 2);
+        var comparable = measuredEntry > 0 && x.AtrPercent > 0 && y.AtrPercent > 0;
+        var squared = groups.Count == 0 ? double.PositiveInfinity :
+            groups.Sum(g => g.Value * g.Value * weights[g.Key]) / weights.Values.Sum();
+        return new(comparable ? Math.Exp(-.5d * squared) : 0, comparable, groups);
 
-        void ClippedCloud(decimal? left,decimal? right,List<double> result)
+        int Level(TechnicalLevelGeometry l, TechnicalLevelGeometry r, List<double> values, List<double> strength)
         {
-            if(!left.HasValue || !right.HasValue)return;
-            var l=left.Value*sign;var r=right.Value*otherSign;
-            // Equal saturated bounds are unknown, not zero-distance evidence.
-            if(Math.Abs(l)>=1m && Math.Abs(r)>=1m && Math.Sign(l)==Math.Sign(r))return;
-            result.Add(Difference(l,r,.35m));
+            var measured = Distance(l.SupportDistanceAtr,
+                mirrored ? r.ResistanceDistanceAtr : r.SupportDistanceAtr, values);
+            measured += Distance(l.ResistanceDistanceAtr,
+                mirrored ? r.SupportDistanceAtr : r.ResistanceDistanceAtr, values);
+            if (measured == 0) return 0;
+            var touches = new List<double> { CountDistance(l.NearbyPivots, r.NearbyPivots) };
+            CountPair(l.SupportTouches, mirrored ? r.ResistanceTouches : r.SupportTouches, touches);
+            CountPair(l.ResistanceTouches, mirrored ? r.SupportTouches : r.ResistanceTouches, touches);
+            strength.Add(Math.Sqrt(touches.Average(v => v * v)));
+            return measured;
         }
-        void CompareLevel(TechnicalLevelGeometry l,TechnicalLevelGeometry r,List<double> levels,List<double> cloud)
+        void Add(string name, IReadOnlyList<double> values, double weight)
         {
-            var rightSupport=sign==otherSign?r.SupportDistanceAtr:r.ResistanceDistanceAtr;
-            var rightResistance=sign==otherSign?r.ResistanceDistanceAtr:r.SupportDistanceAtr;
-            if(l.SupportDistanceAtr.HasValue && rightSupport.HasValue)
-            {
-                rawMeasuredDistances++;
-                levels.Add(Math.Log((1d+(double)l.SupportDistanceAtr)/(1d+(double)rightSupport))/Math.Log(1.5d));
-            }
-            if(l.ResistanceDistanceAtr.HasValue && rightResistance.HasValue)
-            {
-                rawMeasuredDistances++;
-                levels.Add(Math.Log((1d+(double)l.ResistanceDistanceAtr)/(1d+(double)rightResistance))/Math.Log(1.5d));
-            }
-            levels.Add(Math.Log((1d+l.NearbyPivots)/(1d+r.NearbyPivots))/Math.Log(2d));
-            cloud.Add(Difference(l.CloudDistanceAtr*sign,r.CloudDistanceAtr*otherSign,1m));
-        }
-        void Distance(decimal left,decimal right)
-        {
-            if(left<0 || right<0 || left>=10m && right>=10m)return;
-            support.Add(Math.Log((1d+(double)left)/(1d+(double)right))/Math.Log(1.5d));
-        }
-        void Add(string name,IReadOnlyList<double> readings,double weight)
-        {
-            if(readings.Count==0)return;
-            groups[name]=Math.Sqrt(readings.Average(v=>v*v));weights[name]=weight;
+            if (values.Count == 0) return;
+            groups[name] = Math.Sqrt(values.Average(v => v * v)); weights[name] = weight;
         }
     }
-    private static double Ratio(decimal a,decimal b)=>Math.Log((double)a/(double)b)/Math.Log(2d);
-    private static double Difference(decimal a,decimal b,decimal unit)=>(double)((a-b)/unit);
-    private static void Pair(decimal? a,decimal? b,decimal unit,List<double> result)
-    {if(a.HasValue && b.HasValue)result.Add(Difference(a.Value,b.Value,unit));}
+
+    // One unit means a factor of two in (1 + distance in ATR), or four in
+    // historical pivot touches. Fixed units never adapt to an outcome's size.
+    private static int Distance(decimal? a, decimal? b, List<double> values, bool clipped = false)
+    {
+        if (a is not >= 0 || b is not >= 0 || clipped && a >= 10 && b >= 10) return 0;
+        values.Add(Math.Log((1d + (double)a.Value) / (1d + (double)b.Value)) / Math.Log(2d));
+        return 1;
+    }
+    private static double CountDistance(int a, int b) => Math.Log((1d + Math.Max(0, a)) /
+        (1d + Math.Max(0, b))) / Math.Log(4d);
+    private static void CountPair(int? a, int? b, List<double> values)
+    { if (a.HasValue && b.HasValue) values.Add(CountDistance(a.Value, b.Value)); }
+    private static void Pair(decimal? a, decimal? b, List<double> values)
+    { if (a.HasValue && b.HasValue) values.Add((double)((a.Value - b.Value) / .5m)); }
 }

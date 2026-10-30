@@ -24,8 +24,9 @@ public sealed class DemoOrderWorker(
             {
                 var orders = await store.GetAllAsync(stoppingToken);
                 var symbols = orders.Where(x => x.Status is "Pending" or "Submitted" or "Filled").Select(x => x.Symbol)
-                    .Append("BTCUSDT").Distinct(StringComparer.OrdinalIgnoreCase);
-                string? marketError=null;
+                    .Append("BTCUSDT").Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                state.BeginMonitoring(symbols);
+                var checkedSymbols=0;
                 foreach (var symbol in symbols)
                 {
                     try
@@ -33,8 +34,7 @@ public sealed class DemoOrderWorker(
                     var ticker = await client.GetLastPriceAsync(symbol, stoppingToken);
                     if (symbol == "BTCUSDT")
                     {
-                        state.LastPrice = ticker.LastPrice;
-                        state.LastUpdatedUtc = DateTime.UtcNow;
+                        state.RecordPrice(ticker.LastPrice,DateTime.UtcNow);
                     }
                     foreach (var order in orders.Where(x =>
                                  (x.Status is "Pending" or "Submitted" or "Filled") && x.Symbol == symbol))
@@ -69,26 +69,23 @@ public sealed class DemoOrderWorker(
                         // Never keep entry detection locked while talking to Bybit or Telegram.
                         if (claimed is not null) await SubmitAsync(claimed, stoppingToken);
                     }
+                    state.RecordSymbol(symbol,null);
+                    checkedSymbols++;
                     }
                     catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested){throw;}
                     catch(Exception exception)
                     {
-                        marketError=exception.Message;
+                        state.RecordSymbol(symbol,exception.Message);
                         logger.LogWarning(exception,"Phoenix monitoring failed for {Symbol}; other symbols continue",symbol);
                     }
                 }
-                state.PublicApiConnected = marketError is null;
-                state.Error = marketError;
-
-                if (options.HasCredentials && !state.DemoAuthenticated)
-                    state.DemoAuthenticated = (await client.CheckConnectionAsync(stoppingToken)).Authenticated;
+                // Symbol failures are partial monitoring failures, not API/account outages.
+                state.RecordMonitoring(checkedSymbols>0,checkedSymbols==0?"پایش همهٔ نمادها ناموفق بود.":null,DateTime.UtcNow);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
             catch (Exception exception)
             {
-                state.PublicApiConnected = false;
-                state.DemoAuthenticated = false;
-                state.Error = exception.Message;
+                state.RecordMonitoring(false,exception.Message,DateTime.UtcNow);
                 logger.LogWarning(exception, "Phoenix {Environment} worker cycle failed", options.EnvironmentName);
             }
             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);

@@ -76,28 +76,69 @@ async function loadSession() {
 
 panelKeyInput.value = localStorage.getItem('phoenixPanelKey') || '';
 
-let statusPending=false;
+let statusPending=false, lastStatusReceived=0, lastStatusData=null, statusTransport='checking';
+const connectionDialog=document.getElementById('connectionDetails');
+function connectionBadge(kind,label,reason){
+  connection.className='badge '+(kind==='connected'?'ok':kind==='error'?'bad':'warn');
+  connection.dataset.state=kind;connection.innerHTML='<i></i>';
+  connection.append(document.createTextNode(label));
+  connection.title=reason+'؛ برای جزئیات بزنید';connection.setAttribute('aria-label',label+'؛ '+reason+'؛ جزئیات اتصال');
+}
+function renderConnectionDetails(){
+  const container=document.getElementById('connectionDetailsBody');if(!container)return;container.replaceChildren();
+  const row=(label,value)=>{const line=document.createElement('p');const strong=document.createElement('strong');strong.textContent=label+': ';line.append(strong,document.createTextNode(value));container.append(line);};
+  row('سامانهٔ فونیکس',statusTransport==='connected'?'پاسخ وضعیت دریافت شد':statusTransport==='stale'?'پاسخ قبلی قدیمی است':statusTransport==='auth'?'ورود دوباره لازم است':statusTransport==='checking'?'در حال بررسی':'پاسخ وضعیت دریافت نشد');
+  const names={connected:'تأیید شده',error:'ناموفق',checking:'هنوز بررسی نشده',stale:'قدیمی؛ نیازمند بررسی دوباره',not_configured:'کلید حساب تنظیم نشده'};
+  for(const [key,label] of [['publicApi','دسترسی عمومی Bybit'],['account','خواندن حساب Bybit'],['monitoring','پایش نمادها']]){
+    const item=lastStatusData?.connection?.[key];const age=(item?.ageSeconds??Infinity)+(lastStatusReceived?(Date.now()-lastStatusReceived)/1000:0);const state=item?.status==='connected'&&age>({publicApi:45,account:90,monitoring:120}[key])?'stale':item?.status;row(label,item?(names[state]||'نامشخص'):'نامشخص');
+    if(item?.checkedAtUtc)row('زمان آخرین بررسی '+label,new Date(item.checkedAtUtc).toLocaleString('fa-IR'));
+    if(item?.error)row('خطای '+label,item.error);
+  }
+  const c=lastStatusData?.connection;
+  if(c?.affectedSymbolCount)row('نمادهای دارای اختلال',c.affectedSymbolCount+' مورد · '+(c.affectedSymbols||[]).join('، '));
+  row('موتور ارسال سفارش',lastStatusData?lastStatusData.tradingEnabled?'فعال در تنظیمات':'خاموش در تنظیمات':'نامشخص');
+  row('روش تأیید حساب','خواندن اطلاعات حساب؛ سبزشدن، تضمین مجوز ثبت سفارش یا اجرای موفق همهٔ معاملات نیست.');
+}
+connection.addEventListener('click',()=>{renderConnectionDetails();connectionDialog?.showModal();});
+document.getElementById('closeConnectionDetails')?.addEventListener('click',()=>connectionDialog.close());
+function exchangeChecksFresh(c,elapsed=0){
+  return [['publicApi',45],['account',90],['monitoring',120]].every(([key,ttl])=>{
+    const item=c?.[key];return item?.status==='connected'&&typeof item.ageSeconds==='number'&&item.ageSeconds>=0&&item.ageSeconds+elapsed<=ttl&&typeof item.checkedAtUtc==='string';
+  });
+}
+function expireConnection(){
+  const elapsed=lastStatusReceived?(Date.now()-lastStatusReceived)/1000:0;
+  if(lastStatusData?.connection?.status==='connected'&&!exchangeChecksFresh(lastStatusData.connection,elapsed))
+    connectionBadge('unknown','وضعیت قدیمی','مهلت اعتبار بررسی صرافی یا حساب پایان یافته است؛ نتیجهٔ تازه لازم است');
+  if(lastStatusReceived && Date.now()-lastStatusReceived>15000){statusTransport='stale';connectionBadge('unknown','وضعیت قدیمی','بیش از ۱۵ ثانیه است پاسخ تازه‌ای از سامانه نرسیده');if(connectionDialog?.open)renderConnectionDetails();}
+}
 async function refreshStatus() {
-  if(statusPending)return;statusPending=true;
+  expireConnection();if(statusPending)return;statusPending=true;
+  const controller=new AbortController();const deadline=setTimeout(()=>controller.abort(),12000);
   try {
-    const response = await fetch('/api/status', { cache: 'no-store' });
+    const response = await fetch('/api/status', {cache:'no-store',signal:controller.signal});
+    if(response.status===401){statusTransport='auth';throw Error('نشست ورود پایان یافته است؛ دوباره وارد شوید.');}
+    if(!response.ok)throw Error('دریافت وضعیت سامانه ناموفق بود (HTTP '+response.status+').');
     const data = await response.json();
+    lastStatusData=data;lastStatusReceived=Date.now();statusTransport='connected';
     if (data.lastPrice) { price.textContent = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(data.lastPrice) + ' USDT'; window.dispatchEvent(new CustomEvent('phoenix-market-price', { detail: data.lastPrice })); }
-    const connected = data.publicApiConnected;
     document.querySelector('#keyField').style.display = data.panelLocked ? 'block' : 'none';
     const environment = data.tradingEnvironment === 'Real' ? 'Real' : 'Demo';
     document.body.dataset.tradingEnvironment = environment.toLowerCase();
     document.querySelector('#modeNote').innerHTML = data.tradingEnabled
-      ? `<i>✓</i><span>موتور Bybit ${environment} فعال است؛ سفارش پس از رسیدن قیمت به نقطه ورود ارسال می‌شود.</span>`
+      ? `<i>✓</i><span>موتور Bybit ${environment} در تنظیمات فعال است؛ دسترسی حساب را در جزئیات اتصال بررسی کنید.</span>`
       : '<i>!</i><span>موتور ارسال سفارش خاموش است؛ سیگنال فقط در صف دائمی ذخیره می‌شود.</span>';
-    connection.innerHTML = '<i></i>Bybit Real';
-    connection.title = connected ? (data.demoAuthenticated ? 'اتصال برقرار است' : 'دسترسی عمومی برقرار است؛ اتصال حساب را بررسی کنید') : 'خطای اتصال';
-    connection.className = 'badge ' + (connected ? 'ok' : 'bad');
-    updated.textContent = connected ? 'به‌روزرسانی خودکار هر ۱ ثانیه' : (data.error || 'ارتباط برقرار نشد');
-  } catch {
-    connection.innerHTML = '<i></i>سرور در دسترس نیست';
-    connection.className = 'badge bad';
-  } finally { statusPending=false; }
+    const c=data.connection;
+    if(!c || !['connected','degraded','unknown','error'].includes(c.status))
+      connectionBadge('unknown','Bybit '+environment,'وضعیت قابل تأیید نیست؛ دادهٔ بررسی کامل نرسیده است');
+    else if(c.status==='connected'&&!exchangeChecksFresh(c))connectionBadge('unknown','Bybit '+environment,'شواهد تازهٔ همهٔ بررسی‌ها موجود نیست');
+    else connectionBadge(c.status,'Bybit '+environment,c.reason);
+    updated.textContent=c?.reason||'وضعیت اتصال هنوز تأیید نشده است';
+  } catch(error) {
+    if(statusTransport!=='auth')statusTransport='error';
+    connectionBadge('error',statusTransport==='auth'?'ورود لازم است':'وضعیت دریافت نشد',statusTransport==='auth'?error.message:'ارتباط گوشی با سامانه یا پاسخ سامانه ناموفق است؛ وضعیت خود Bybit نامشخص است');
+    updated.textContent=error.name==='AbortError'?'دریافت وضعیت بیش از ۱۲ ثانیه طول کشید.':error.message;
+  } finally {clearTimeout(deadline);statusPending=false;if(connectionDialog?.open)renderConnectionDetails();}
 }
 
 async function loadInstruments() {
@@ -405,7 +446,8 @@ form.addEventListener('submit', async event => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
-setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshStatus();},1000);
+setInterval(()=>{expireConnection();if(!document.hidden)refreshStatus();},1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){expireConnection();refreshStatus();}});
 setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshSignals();},5000);
 setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshHistory();},30000);
 window.addEventListener('phoenix-tab-changed',e=>{if(e.detail==='home'){refreshStatus();refreshSignals();refreshHistory();}});

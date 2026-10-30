@@ -21,7 +21,7 @@
       const data = await response.json();
       if (controller !== request) return;
       const items = data.items;
-      const totals = { total: 0, targets: 0, stops: 0 };
+      const totals = { total: 0, targets: 0, stops: 0, riskFree: 0 };
       const fragment = document.createDocumentFragment();
       items.forEach((item, index) => {
         for (const key of Object.keys(totals)) totals[key] += item[key];
@@ -33,6 +33,7 @@
             cell.textContent = column === 1 ? value : number.format(value);
             if (column === 4) cell.className = 'stat-target';
             if (column === 5) cell.className = 'stat-stop';
+            if (column === 6) cell.className = 'stat-riskfree';
             row.append(cell);
           });
         fragment.append(row);
@@ -70,7 +71,7 @@
   strategy.addEventListener('change', () => {
     controller?.abort(); controller = null;
     showRow('در حال دریافت آمار…');
-    for (const id of ['Coins', 'Total', 'Targets', 'Stops'])
+    for (const id of ['Coins', 'Total', 'Targets', 'Stops', 'RiskFree'])
       document.querySelector('#statistics' + id).textContent = '—';
     schedule();
   });

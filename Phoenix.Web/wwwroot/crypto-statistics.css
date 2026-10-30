@@ -1,2 +1,44 @@
-.crypto-statistics{padding:26px 0}.statistics-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:20px}.statistics-heading h2{margin:6px 0;color:#f5d275;font-size:26px}.statistics-heading p,.statistics-note,.statistics-status{color:#aeb5bf;font-size:12px;line-height:1.9}.statistics-heading label{display:grid;gap:6px;font-size:12px;color:#d4ba7e}.statistics-heading select{font:inherit;border:1px solid #75603b;border-radius:10px;background:#171b22;color:#f4e3b7;padding:10px;max-width:100%}.statistics-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.statistics-summary>span{padding:15px;border:1px solid #594b30;border-radius:12px;background:#171b22;font-size:12px}.statistics-summary b{display:block;margin-top:6px;font-size:24px}.statistics-table-wrap{border:1px solid #594b30;border-radius:14px;overflow:hidden;background:#14181e}.statistics-table{width:100%;border-collapse:collapse;text-align:center;table-layout:fixed;font-size:13px}.statistics-table th,.statistics-table td{padding:17px 5px;border-bottom:1px solid #ffffff0c}.statistics-table thead{background:#26241d;color:#ddc78e;font-size:12px}.statistics-table th:first-child{width:4%}.statistics-table th:nth-child(2){width:23%;text-align:right;padding-inline:12px}.statistics-table tbody th{text-align:left;overflow-wrap:anywhere;color:#f1deb0;font-family:Arial,sans-serif}.statistics-table tbody tr:nth-child(even){background:#ffffff03}.statistics-table tbody tr:hover{background:#e9bd5809}.statistics-table tbody tr:last-child>*{border-bottom:0}.stat-target{color:#70dcb0!important}.stat-stop{color:#f1848b!important}.statistics-error{color:#f1848b}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-@media(max-width:600px){.crypto-statistics{padding:18px 0}.statistics-heading{align-items:stretch;flex-direction:column;gap:10px}.statistics-heading h2{font-size:22px}.statistics-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.statistics-summary>span{padding:11px}.statistics-summary b{font-size:21px}.statistics-table{font-size:11px}.statistics-table thead{font-size:9px}.statistics-table th,.statistics-table td{padding:13px 2px}.statistics-table th:nth-child(2){width:22%;padding-inline:4px}.statistics-table tbody th{font-size:10px}.statistics-note{font-size:11px}}
+#panel-statistics{padding:16px;border:1px solid #20466c;border-radius:18px;background:#04142be8;color:#dce9fa;margin-top:16px;min-width:0}
+#panel-statistics .statistics-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 14px;padding:0;background:transparent;border:0;min-width:0}
+#panel-statistics .statistics-heading>div{min-width:0}
+#panel-statistics .eyebrow{font:9px/1.5 Arial,sans-serif;letter-spacing:.12em;color:#65b9d4}
+#panel-statistics .statistics-heading h2{margin:4px 0;color:#e3efff;font-size:18px;line-height:1.7}
+#panel-statistics .statistics-heading p,#panel-statistics .statistics-note,#panel-statistics .statistics-status{color:#92a9c5;font-size:10px;line-height:1.9;background:transparent;margin:5px 0}
+#panel-statistics .statistics-heading label{display:grid;gap:4px;font-size:10px;color:#91abc8;min-width:0}
+#panel-statistics .statistics-heading select{box-sizing:border-box;font:inherit;border:1px solid #254b70;border-radius:8px;background:#081e38;color:#d8e8fb;padding:6px 9px;width:auto;min-width:0;max-width:100%;height:34px}
+#panel-statistics .statistics-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;background:transparent}
+#panel-statistics .statistics-summary>span{min-width:0;padding:9px 11px;border:1px solid #1d3d5e;border-radius:10px;background:#071a32;font-size:10px;color:#a9bed8}
+#panel-statistics .statistics-summary b{display:block;margin-top:3px;font-size:20px;font-weight:600;line-height:1.5;color:#e1edff;font-variant-numeric:tabular-nums}
+#panel-statistics .statistics-status{margin:9px 0;min-height:19px}
+#panel-statistics .statistics-table-wrap{border:1px solid #1d3d5e;border-radius:10px;overflow:hidden;background:#06182e}
+#panel-statistics .statistics-table{width:100%;border-collapse:collapse;text-align:center;table-layout:fixed;font-size:11px;background:transparent;color:#c3d5ec}
+#panel-statistics .statistics-table th,#panel-statistics .statistics-table td{padding:10px 3px;border-bottom:1px solid #19324c;font-weight:400}
+#panel-statistics .statistics-table thead{background:#0b2542;color:#a7c2df;font-size:10px}
+#panel-statistics .statistics-table th:first-child{width:4%}
+#panel-statistics .statistics-table th:nth-child(2){width:22%;text-align:right;padding-inline:7px}
+#panel-statistics .statistics-table tbody th{direction:ltr;text-align:left;overflow-wrap:anywhere;color:#deecff;font:600 11px Arial,sans-serif}
+#panel-statistics .statistics-table tbody tr:nth-child(even){background:#0a203652}
+#panel-statistics .statistics-table tbody tr:hover{background:#0c2a46}
+#panel-statistics .statistics-table tbody tr:last-child>*{border-bottom:0}
+#panel-statistics .stat-target,#panel-statistics .stat-target b{color:#53cba7!important}
+#panel-statistics .stat-stop,#panel-statistics .stat-stop b{color:#ef879c!important}
+#panel-statistics .stat-riskfree,#panel-statistics .stat-riskfree b{color:#6fcce7!important}
+#panel-statistics .statistics-error{color:#ef879c!important}
+#panel-statistics .statistics-note{margin:10px 0 0;font-size:9px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-width:600px){
+ #panel-statistics{padding:12px;border-radius:15px}
+ #panel-statistics .statistics-heading{align-items:stretch;flex-direction:column;gap:8px;margin-bottom:11px}
+ #panel-statistics .statistics-heading h2{font-size:17px}
+ #panel-statistics .statistics-heading label{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px}
+ #panel-statistics .statistics-heading select{width:100%;font-size:11px}
+ #panel-statistics .statistics-summary{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+ #panel-statistics .statistics-summary>span{grid-column:span 2;padding:7px 9px}
+ #panel-statistics .statistics-summary>span:nth-child(-n+2){grid-column:span 3}
+ #panel-statistics .statistics-summary b{font-size:19px}
+ #panel-statistics .statistics-table{font-size:10px}
+ #panel-statistics .statistics-table thead{font-size:8px}
+ #panel-statistics .statistics-table th,#panel-statistics .statistics-table td{padding:9px 2px}
+ #panel-statistics .statistics-table th:nth-child(2){padding-inline:4px}
+ #panel-statistics .statistics-table tbody th{font-size:9px}
+}

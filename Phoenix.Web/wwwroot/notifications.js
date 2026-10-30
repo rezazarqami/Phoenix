@@ -2,8 +2,8 @@
  'use strict';
  const timeline=document.getElementById('eventTimeline'),status=document.getElementById('historyStatus'),older=document.getElementById('loadOlder'),panel=document.getElementById('journalPanel');
  const params=new URLSearchParams(location.search),focus=params.get('eventId'),initialView=params.get('view')==='results'?'results':'all';
- const titles={EntryError:'خطای ورود',ManualClosed:'بستن دستی',NearEntry:'نزدیک ورود',Opened:'ورود تأیید شد',FirstProtection:'پلهٔ اول محافظت',RiskFreeReached:'محدودهٔ ریسک‌فری',Target:'تارگت',StopLoss:'استاپ‌لاس',RiskFree:'خروج ریسک‌فری',Expired:'انقضای سیگنال نزدیک ورود'};
- const messages={EntryError:'ورود معامله با خطا مواجه شد.',ManualClosed:'این معامله به صورت دستی بسته شد.',NearEntry:'قیمت به محدودهٔ ورود سیگنال نزدیک شد.',Opened:'ورود معامله در بای‌بیت تأیید شد.',FirstProtection:'پلهٔ اول محافظت از معامله فعال شد.',RiskFreeReached:'معامله به محدودهٔ ریسک‌فری رسید.',Target:'سیگنال به تارگت رسید.',StopLoss:'معامله با استاپ‌لاس پایان یافت.',RiskFree:'معامله با ریسک‌فری بسته شد.',Expired:'سیگنالی که قبلاً نزدیک ورود شده بود، منقضی شد.'};
+ const titles={EntryError:'خطای ورود',ManualClosed:'بستن دستی',NearEntry:'نزدیک ورود',Opened:'ورود تأیید شد',FirstProtection:'پلهٔ اول ریسک‌فری',RiskFreeReached:'پلهٔ دوم ریسک‌فری',Target:'تارگت',StopLoss:'استاپ‌لاس',RiskFree:'خروج ریسک‌فری',Expired:'انقضای سیگنال نزدیک ورود'};
+ const messages={EntryError:'ورود معامله با خطا مواجه شد.',ManualClosed:'این معامله به صورت دستی بسته شد.',NearEntry:'قیمت به محدودهٔ ورود سیگنال نزدیک شد.',Opened:'ورود معامله در بای‌بیت تأیید شد.',FirstProtection:'پلهٔ اول ریسک‌فری فعال شد.',RiskFreeReached:'پلهٔ دوم ریسک‌فری فعال شد.',Target:'سیگنال به تارگت رسید.',StopLoss:'معامله با استاپ‌لاس پایان یافت.',RiskFree:'معامله با ریسک‌فری بسته شد.',Expired:'سیگنالی که قبلاً نزدیک ورود شده بود، منقضی شد.'};
  const exits={FirstStepLimit:'پلهٔ اول ریسک‌فری (استاپ‌لیمیت)',SecondStepLimit:'پلهٔ دوم ریسک‌فری (استاپ‌لیمیت)',SafetyStopMarket:'محافظ ریسک‌فری (استاپ‌مارکت)'};
  const resultKinds=new Set(['Target','RiskFree','StopLoss','ManualClosed','EntryError']),tabs=[...document.querySelectorAll('[data-journal-tab]')];
  const fresh=()=>({entries:new Map(),before:null,hasMore:false,busy:false,initialized:false});
@@ -12,16 +12,25 @@
  let sourceResolved=!!params.get('source');
  const openedDetails=new Set();
  const text=(tag,value)=>Object.assign(document.createElement(tag),{textContent:value});
+ function eventMessage(e){
+  if(e.kind==='FirstProtection'||e.kind==='RiskFreeReached')return messages[e.kind];
+  if(e.kind==='RiskFree'){
+   if(e.exitKind==='FirstStepLimit')return 'معامله با پلهٔ اول ریسک‌فری بسته شد.';
+   if(e.exitKind==='SecondStepLimit')return 'معامله با پلهٔ دوم ریسک‌فری بسته شد.';
+   if(e.exitKind==='SafetyStopMarket')return 'معامله با محافظ ریسک‌فری بسته شد.';
+  }
+  return e.reason||messages[e.kind]||'رویداد سیگنال ثبت شد.';
+ }
  function render(){
   const state=states[view],fragment=document.createDocumentFragment();let count=0;
   for(const e of [...state.entries.values()].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||b.sequence-a.sequence)){
    if(view==='results'&&!resultKinds.has(e.kind))continue;count++;
    const card=document.createElement('article');card.className='event-card'+(e.id===focus?' focused':'');card.dataset.kind=e.kind;card.dataset.eventId=e.id;
-   const code=e.kind==='Target'?'TP':e.kind==='StopLoss'?'SL':e.kind==='FirstProtection'?'RF1':e.kind==='RiskFree'?(e.exitKind==='FirstStepLimit'?'RF1':e.exitKind==='SecondStepLimit'?'RF2':'RF'):e.kind==='RiskFreeReached'?'RF':null;
+   const code=e.kind==='Target'?'TP':e.kind==='StopLoss'?'SL':e.kind==='FirstProtection'?'RF1':e.kind==='RiskFree'?(e.exitKind==='FirstStepLimit'?'RF1':e.exitKind==='SecondStepLimit'?'RF2':'RF'):e.kind==='RiskFreeReached'?'RF2':null;
    const head=document.createElement('div');head.className='event-top';
    const badge=Object.assign(text('span',code||titles[e.kind]||e.kind),{className:'event-kind'});badge.title=titles[e.kind]||e.kind;badge.setAttribute('aria-label',(titles[e.kind]||e.kind)+(e.kind==='RiskFree'&&exits[e.exitKind]?' · '+exits[e.exitKind]:''));
    const direction=text('span',e.direction==='Long'?'Long ↗':e.direction==='Short'?'Short ↘':'');direction.className='event-direction';direction.dataset.side=e.direction;head.append(Object.assign(text('b',e.symbol||'Phoenix'),{className:'event-symbol'}),direction,badge);card.append(head);
-   card.append(Object.assign(text('p',e.reason||messages[e.kind]||'رویداد سیگنال ثبت شد.'),{className:'event-message'}));
+   card.append(Object.assign(text('p',eventMessage(e)),{className:'event-message'}));
    const detail=document.createElement('details');detail.className='event-detail';
    const summary=text('summary','نمودار و جزئیات');summary.setAttribute('aria-label','نمودار ثبت‌شدهٔ سیگنال و جزئیات '+(e.symbol||'Phoenix'));detail.append(summary);
    const body=text('div','');body.className='event-detail-body';

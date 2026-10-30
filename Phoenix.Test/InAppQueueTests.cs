@@ -31,6 +31,14 @@ internal static class InAppQueueTests
             Check(answers.Count(x=>x is null)==1,"Concurrent duplicate decision must be accepted only once");
             await waiting;Check((await Service().PendingAsync("owner",default)).Count==9,"One decision must release one slot durably");
             Check(await service.DecideInAppAsync("owner","proposal1","invalid",null,default)!=null,"Unknown action must not change queue");
+            await service.AddProposalAsync(new("stuck","owner",candidate,"15",false,analysis,"caption",[],5,DateTime.UtcNow,"NeedsReview","failed"),default);
+            Check(await service.RemoveProposalsAsync("other",new[]{"stuck"},default)==0,"Cannot remove another owner's proposal");
+            Check(await service.RemoveProposalsAsync("owner",new[]{"stuck","proposal1"},default)==2,"Ready and stuck proposals must be removable");
+            Check((await Service().PendingAsync("owner",default)).Count==8,"Removal must persist across restart");
+            Check(await service.RemoveProposalsAsync("owner",new[]{"stuck"},default)==0,"Removal must be idempotent");
+            Check(await Service().RestoreRemovedProposalsAsync("other",default)==0,"Restore must isolate owners");
+            Check(await Service().RestoreRemovedProposalsAsync("owner",default)==2,"Last removal must be recoverable");
+            Check((await service.PendingAsync("owner",default)).Single(x=>x.Key=="stuck").State=="NeedsReview","Restore must not replay an uncertain submission");
         }finally{Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH",previous);SignalHistoryStore.ClearConnectionPools();Directory.Delete(dir,true);}
     }
     public static void AlertPolicy()

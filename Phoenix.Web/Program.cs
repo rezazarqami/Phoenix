@@ -544,6 +544,17 @@ app.MapGet("/api/analysis/proposals/{key}/image", async (string key,HttpRequest 
     var item=(await batches.PendingAsync(identity.Username ?? "",ct)).SingleOrDefault(x=>x.Key==key);
     return item is null?Results.NotFound():Results.File(item.Image,"image/png");
 });
+app.MapPost("/api/analysis/proposals/restore", async (HttpRequest request, SignalBatchService batches) => {
+    PhoenixSessionAuth.TryGetIdentity(request, out var identity);
+    return Results.Ok(new { restored = await batches.RestoreRemovedProposalsAsync(identity.Username ?? "", CancellationToken.None) });
+});
+app.MapPost("/api/analysis/proposals/remove", async (RemoveProposalsRequest removal, HttpRequest request, SignalBatchService batches) => {
+    PhoenixSessionAuth.TryGetIdentity(request, out var identity);
+    if (removal.Keys is null || removal.Keys.Length > 100 || removal.Keys.Any(string.IsNullOrWhiteSpace))
+        return Results.BadRequest(new { error = "فهرست پیشنهادها معتبر نیست." });
+    var removed = await batches.RemoveProposalsAsync(identity.Username ?? "", removal.Keys, CancellationToken.None);
+    return Results.Ok(new { removed });
+});
 app.MapPost("/api/analysis/proposals/{key}/decision", async (string key,InAppDecisionRequest decision,HttpRequest request,SignalBatchService batches,CancellationToken ct)=>{
     PhoenixSessionAuth.TryGetIdentity(request,out var identity);
     var error=await batches.DecideInAppAsync(identity.Username ?? "",key,decision.Action,decision.Reason,CancellationToken.None);

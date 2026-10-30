@@ -28,7 +28,15 @@ jobs:
       - name: Verify Phoenix interface
         run: |
           npm ci --prefix Phoenix.Test/ui --ignore-scripts --no-audit --no-fund
-          npm test --prefix Phoenix.Test/ui
+          npm test --prefix Phoenix.Test/ui 2>&1 | tee phoenix-ui-tests.log
+      - name: Preserve interface failure details
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-ui-test-log
+          path: phoenix-ui-tests.log
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Verify Android-compatible cancellation controls
         run: node Phoenix.Test/cancellation-ui-tests.cjs
       - name: Verify batch controls under delayed responses

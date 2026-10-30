@@ -14,7 +14,7 @@
 <link href="/icons/phoenix-192.png" rel="apple-touch-icon"/>
 <link href="/styles.css?v=5" rel="stylesheet"/>
 <link href="/security.css?v=2" rel="stylesheet"/>
-<link href="/crypto-statistics.css?v=1" rel="stylesheet"/>
+<link href="/crypto-statistics.css?v=20261030-minimal" rel="stylesheet"/>
 <title>Phoenix Trading Panel</title>
 <link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-execution"></head>
 <body>
@@ -89,10 +89,10 @@
 <div><span class="eyebrow">TRADE STATISTICS</span><h2>آمار رمز ارزها</h2><p>تمام تاریخچه · مرتب‌شده بر اساس بیشترین تعداد معاملات</p></div>
 <label>استراتژی<select id="statisticsStrategy"><option value="main">استراتژی اصلی · واقعی</option><option value="strategy2">استراتژی ۲ · دمو</option></select></label>
 </div>
-<div aria-live="polite" class="statistics-summary"><span>رمز ارزها <b id="statisticsCoins">—</b></span><span>کل معاملات <b id="statisticsTotal">—</b></span><span class="stat-target">تارگت <b id="statisticsTargets">—</b></span><span class="stat-stop">استاپ <b id="statisticsStops">—</b></span></div>
+<div aria-live="polite" class="statistics-summary"><span>رمز ارزها <b id="statisticsCoins">—</b></span><span>کل معاملات <b id="statisticsTotal">—</b></span><span class="stat-target">تارگت <b id="statisticsTargets">—</b></span><span class="stat-stop">استاپ <b id="statisticsStops">—</b></span><span class="stat-riskfree">ریسک‌فری <b id="statisticsRiskFree">—</b></span></div>
 <p class="statistics-status" id="statisticsStatus" role="status">با باز کردن این سربرگ، آمار دریافت می‌شود.</p>
 <div class="statistics-table-wrap">
-<table class="statistics-table"><caption class="sr-only">نتایج معاملات هر رمز ارز</caption><thead><tr><th scope="col">#</th><th scope="col">رمز ارز</th><th scope="col">کل</th><th scope="col">باز</th><th class="stat-target" scope="col">تارگت</th><th class="stat-stop" scope="col">استاپ</th><th scope="col">ریسک‌فری</th><th scope="col">سایر بسته</th></tr></thead><tbody id="statisticsRows"><tr><td colspan="8">در انتظار دریافت آمار…</td></tr></tbody></table>
+<table class="statistics-table"><caption class="sr-only">نتایج معاملات هر رمز ارز</caption><thead><tr><th scope="col">#</th><th scope="col">رمز ارز</th><th scope="col">کل</th><th scope="col">باز</th><th class="stat-target" scope="col">تارگت</th><th class="stat-stop" scope="col">استاپ</th><th class="stat-riskfree" scope="col">ریسک‌فری</th><th scope="col">سایر بسته</th></tr></thead><tbody id="statisticsRows"><tr><td colspan="8">در انتظار دریافت آمار…</td></tr></tbody></table>
 </div>
 <p class="statistics-note">کل = باز + تارگت + استاپ + ریسک‌فری + سایر بسته‌شده‌ها. سیگنال‌های منتظر ورود و منقضی یا لغوشده پیش از ورود شمرده نمی‌شوند. به‌روزرسانی خودکار هر ۵ ثانیه.</p>
 </section>
@@ -155,7 +155,7 @@
 <script src="/app.js?v=20261030-execution"></script>
 <script src="/install-phoenix.js?v=2"></script>
 <script src="/bulk-controls.js?v=20261030-execution"></script>
-<script src="/crypto-statistics.js?v=1"></script>
+<script src="/crypto-statistics.js?v=20261030-riskfree"></script>
 <script src="/live-positions.js?v=20261030-execution"></script>
 <script src="/hero-motion.js?v=1"></script>
 <script src="/home-tabs.js?v=20261029-shell"></script>

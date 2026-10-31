@@ -19,6 +19,12 @@ internal static class WaveSimilarityTests
         var e=SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!;
         Check(e.SameTimeframeNearbyTargets==31 && e.SameTimeframeNearbyStops==31 && e.SameTimeframeNearbyRiskFree==31 &&
             e.OtherTimeframeNearbyTargets==31 && e.OtherTimeframeNearbyStops==31 && e.OtherTimeframeNearbyRiskFree==31,"All six counts; no sixty-row or nearest-N cap");
+        var summary=SignalReviewText.Support(e);
+        Check(summary=="\nنزدیکِ کل: 62 تارگت / 62 استاپ / 62 ریسک‌فری","Same and other timeframes render one combined row");
+        var caption="levels\nنزدیکِ هم‌تایم‌فریم: 31 تارگت / 31 استاپ / 31 ریسک‌فری\nنزدیکِ سایر تایم‌فریم‌ها: 31 تارگت / 31 استاپ / 31 ریسک‌فری";
+        var combined=SignalReviewText.CurrentSupport(caption,e);
+        Check(combined=="levels"+summary && SignalReviewText.CurrentSupport(combined,e)==combined,
+            "Existing frozen proposals combine counts without duplicated rows or reanalysis");
         patterns.Add(patterns[0] with{Signal=new ServerSignal{Id=Guid.NewGuid(),Symbol=patterns[0].Signal.Symbol,Timeframe="15",CompletedAtUtc=now.AddDays(-1)}});
         Check(SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!.SameTimeframeNearbyTargets==31,"Repeated anchor pair must count once");
         patterns.Add(new(new ServerSignal{Id=Guid.NewGuid(),Symbol="FUTURE",Timeframe="15",CompletedAtUtc=now.AddDays(1)},"Target",features));

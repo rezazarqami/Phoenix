@@ -44,7 +44,8 @@ public sealed partial class SignalBatchService
                 changed=true;
             }
             if(changed)await WriteProposalsAsync(items,ct);
-            return items.Where(x=>x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase)).ToArray();
+            return items.Where(x=>x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase))
+                .Select(x=>x with {Caption=SignalReviewText.CurrentSupport(x.Caption,x.Analysis.Prediction.Evidence)}).ToArray();
         }
         finally{reviewGate.Release();}
     }

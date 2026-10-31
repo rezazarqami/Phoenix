@@ -11,8 +11,7 @@ internal static class SignalReviewText
     {
         if (e is null) return "\nنمونه‌های مشابه: اطلاعات فنی کافی نیست.";
         if (e.ComparisonVersion >= 7)
-            return $"\nنزدیکِ هم‌تایم‌فریم: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
-                $"\nنزدیکِ سایر تایم‌فریم‌ها: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
+            return $"\nنزدیکِ کل: {e.SameTimeframeNearbyTargets + e.OtherTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops + e.OtherTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree + e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
         if (e.ComparableTargets + e.ComparableStops + e.ComparableRiskFree == 0)
             return "\nنمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.";
         var stageNote = e.QueryStage != e.ReferenceStage ? " (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)" : "";
@@ -20,6 +19,13 @@ internal static class SignalReviewText
         var otherDenominator=e.ComparisonVersion>=4?$" (از {e.OtherTimeframeComparable} نمونه)":"";
         return $"\nنزدیکِ هم‌تایم‌فریم{stageNote}{sameDenominator}: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
             $"\nنزدیکِ سایر تایم‌فریم‌ها{otherDenominator}: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
+    }
+    // Reformat frozen pending captions without recomputing matches or loading candles.
+    internal static string CurrentSupport(string caption, SimilarityEvidence? evidence)
+    {
+        if (evidence is not { ComparisonVersion: >= 7 }) return caption;
+        var lines = caption.Split('\n').Where(line => !line.StartsWith("نزدیکِ ", StringComparison.Ordinal));
+        return string.Join("\n", lines).TrimEnd() + Support(evidence);
     }
     internal static string Window(OutcomeWindowEvidence? w)
     {

@@ -22,7 +22,7 @@ public sealed record SignalLearningSnapshot(IReadOnlyList<LearnedSignalPattern> 
 public sealed class SignalLearningService(
     ServerOrderStore store,
     ShadowSignalRuntime shadow,
-    ILogger<SignalLearningService> logger) : BackgroundService
+    ILogger<SignalLearningService> logger, ReviewArchiveStore? archive = null) : BackgroundService
 {
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private volatile SignalLearningSnapshot _snapshot = SignalLearningSnapshot.Empty;
@@ -55,6 +55,24 @@ public sealed class SignalLearningService(
             var outcomeHistory = (await store.GetLearningHistoryAsync(token)).Select(x=>(Source:"main",Item:x))
                 .Concat((await shadow.Store.GetLearningHistoryAsync(token)).Select(x=>(Source:"observation",Item:x))).ToArray();
             var (patterns, proposals) = BuildPatterns(outcomeHistory.Select(x=>x.Item));
+            // Rebuild old proposal fingerprints from archived, exact anchors/candles in the background.
+            // No market requests or historical chart generation enter the proposal hot path.
+            if (archive is not null)
+            {
+                var missing = outcomeHistory.Select(x=>x.Item.Signal.Id).Distinct().ToArray();
+                var rebuilt = await archive.GetTechnicalFeaturesAsync(missing, token);
+                patterns = patterns.Select(p=>p.Features.Wave is null && rebuilt.TryGetValue(p.Signal.Id,out var f)
+                    ? p with { Features=f } : p).ToList();
+                var known = proposals.Select(p=>p.Signal.Id).ToHashSet();
+                var recovered = outcomeHistory.Select(x=>x.Item.Signal).DistinctBy(s=>s.Id)
+                    .Where(s=>!known.Contains(s.Id) && s.Outcome is "Target" or "StopLoss" or "RiskFree")
+                    .Where(s=>s.EntryTriggeredAtUtc is not null && s.CompletedAtUtc>s.EntryTriggeredAtUtc &&
+                        rebuilt.TryGetValue(s.Id,out var f) && f.Wave is not null)
+                    .Select(s=>new LearnedSignalPattern(s,s.Outcome!,rebuilt[s.Id])
+                        {EvidenceStage="proposal",ObservedAtUtc=s.CreatedAtUtc}).ToArray();
+                proposals = proposals.Select(p=>p.Features.Wave is null && rebuilt.TryGetValue(p.Signal.Id,out var f)
+                    ? p with { Features=f } : p).Concat(recovered).ToArray();
+            }
             _snapshot = new(patterns, DateTime.UtcNow)
             {
                 OutcomeHistory = outcomeHistory,

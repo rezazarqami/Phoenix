@@ -10,6 +10,9 @@ internal static class SignalReviewText
     internal static string Support(SimilarityEvidence? e)
     {
         if (e is null) return "\nنمونه‌های مشابه: اطلاعات فنی کافی نیست.";
+        if (e.ComparisonVersion >= 7)
+            return $"\nنزدیکِ هم‌تایم‌فریم: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
+                $"\nنزدیکِ سایر تایم‌فریم‌ها: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
         if (e.ComparableTargets + e.ComparableStops + e.ComparableRiskFree == 0)
             return "\nنمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.";
         var stageNote = e.QueryStage != e.ReferenceStage ? " (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)" : "";

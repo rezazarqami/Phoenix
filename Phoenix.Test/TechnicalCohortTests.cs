@@ -9,12 +9,12 @@ internal static class TechnicalCohortTests
     public static void MembershipAndGeometry()
     {
         var at=new DateTime(2026,10,15,0,0,0,DateTimeKind.Utc);
-        var f=new TechnicalFeatureSnapshot(.6m,1m,.3m,0,0,1,1,.5m,.5m,1.3m,.5m,SimilarityContextVersion:3);
+        var f=new TechnicalFeatureSnapshot(.6m,1m,.3m,0,0,1,1,.5m,.5m,1.3m,.5m,SimilarityContextVersion:3) {Wave=new(1,1,2,90,110,.8m,.8m,.8m,.1m,.1m,.1m,.8m,.1m,new decimal[8])};
         var candidate=new ServerSignal { Direction="Long",Timeframe="5",EntryPrice=100,TakeProfit=110,StopLoss=90,CreatedAtUtc=at,TechnicalFeatures=f };
         LearnedSignalPattern Row(int days,string direction="Long",string tf="5",decimal target=110,decimal stop=90)=>new(new ServerSignal {
             Id=Guid.NewGuid(),Symbol="TEST",Direction=direction,Timeframe=tf,EntryPrice=100,TakeProfit=target,StopLoss=stop,
             EntryTriggeredAtUtc=at.AddDays(-days),CompletedAtUtc=at.AddDays(-days).AddHours(1)
-        },days%2==0?"Target":"StopLoss",f);
+        },days%2==0?"Target":"StopLoss",f with{Wave=f.Wave! with{Start=days}});
         var rows=new[]{Row(1),Row(2),Row(40),Row(3,"Short","5",90,110),Row(4,"Long","15"),Row(5,target:130),Row(6,stop:99)};
         var c=TechnicalCohorts.Build(candidate,rows,rows.Select(x=>(x,1d)).ToArray());
         Check(c.Count==3 && c.Targets==2 && c.Stops==1,"Direction, timeframe, RR and risk distance must all match");

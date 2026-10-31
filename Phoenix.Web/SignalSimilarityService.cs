@@ -1,7 +1,6 @@
 namespace Phoenix.Web;
 
-/// <summary>Independent resemblance to completed target and stop examples.
-/// Scores are not probabilities and need not sum to 100.</summary>
+/// <summary>Counts independent completed waves with comparable price and entry structure.</summary>
 public sealed class SignalSimilarityService(SignalLearningService learning)
 {
     public async Task<SignalSimilarityResult> CalculateAsync(ServerSignal candidate,
@@ -34,6 +33,12 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         var cutoff = candidate.EntryTriggeredAtUtc ?? (candidate.CreatedAtUtc == default ? (DateTime?)null : candidate.CreatedAtUtc);
         patterns = SignalPatternIdentity.Unique(patterns.Where(x => x.Signal.Id != candidate.Id || candidate.Id == Guid.Empty)
             .Where(x => cutoff is null || x.Signal.CompletedAtUtc < cutoff));
+        // A single symbol/anchor pair is one independent wave even if requested repeatedly.
+        patterns = patterns.Where(p=>p.Features.Wave is not null)
+            .GroupBy(p=>(p.Signal.Symbol.ToUpperInvariant(),p.Signal.Timeframe,
+                p.Features.Wave!.Start,p.Features.Wave.End,p.Features.Wave.Floor,p.Features.Wave.Ceiling))
+            .Where(g=>g.Select(p=>p.Outcome).Distinct().Count()==1)
+            .Select(g=>g.First()).ToArray();
         // Evaluate each historical signal once, before splitting by outcome/timeframe.
         // No minimum counts, class quotas, nearest-N truncation or positive score floor.
         var compared=patterns.Select(p => {
@@ -49,11 +54,6 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         int Close(string outcome,bool same)=>nearby.Count(x=>x.Pattern.Outcome==outcome &&
             !string.IsNullOrWhiteSpace(x.Pattern.Signal.Timeframe) &&
             !string.IsNullOrWhiteSpace(candidate.Timeframe) && Same(x.Pattern)==same);
-        decimal? Score(string outcome)
-        {
-            var matches=usable.Where(x=>x.Pattern.Outcome==outcome).Select(x=>x.Match.Score).ToArray();
-            return matches.Length<5?null:Math.Round((decimal)matches.Average()*100m,1);
-        }
         var support=new SimilarityEvidence(candidate.EntryTriggeredAtUtc is null?"proposal":"entry",
             patterns.All(x=>x.EvidenceStage=="proposal")?"proposal":"entry",
             Used("Target"),Used("StopLoss"),nearby.Count(x=>x.Pattern.Outcome=="Target"),
@@ -70,13 +70,10 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             OtherTimeframeNearbyTargets=Close("Target",false),
             OtherTimeframeNearbyStops=Close("StopLoss",false),
             OtherTimeframeNearbyRiskFree=Close("RiskFree",false),
-            // Bounded audit only; every comparable row contributes to the counts above.
-            NearestExamples=usable.OrderByDescending(x=>x.Match.Score).Take(12).Select(x=>
-                new SimilarityExample(x.Pattern.Signal.Id,x.Pattern.Outcome,x.Pattern.Signal.Timeframe,
-                    Math.Round((decimal)x.Match.Score*100m,2),x.Match.Nearby,
-                    x.Match.Distances.ToDictionary(g=>g.Key,g=>Math.Round((decimal)g.Value,3)))).ToArray()
+            // Counts only: do not sort examples or generate historical charts.
+            NearestExamples=[]
         };
-        return new(Score("Target"),Score("StopLoss"),patterns.Count,
+        return new(null,null,patterns.Count,
             patterns.Count(x=>x.Outcome=="Target"),patterns.Count(x=>x.Outcome=="StopLoss"),
             Used("Target")+Used("StopLoss")){Evidence=support};
     }

@@ -29,29 +29,9 @@ public sealed class ProfessionalSignalAnalysisService(
         IReadOnlyDictionary<string,IReadOnlyList<BybitKline>>? knownHistories = null)
     {
         var observedAtUtc = asOfUtc ?? DateTime.UtcNow;
-        var symbolTasks = ContextIntervals.ToDictionary(x => x,
-            x => knownHistories?.TryGetValue(x,out var known)==true
-                ? Task.FromResult(known) : x == signalInterval && signalCandles.Count >= 720
-                ? Task.FromResult(signalCandles) : GetCandlesAsync(candidate.Symbol, x, 1000, token));
-        var extendedTasks = ExtendedIntervals.ToDictionary(x => x,
-            x => knownHistories?.TryGetValue(x,out var known)==true
-                ? Task.FromResult<IReadOnlyList<BybitKline>?>(known) : x == signalInterval && signalCandles.Count >= 80
-                ? Task.FromResult<IReadOnlyList<BybitKline>?>(signalCandles)
-                : TryGetCandlesAsync(candidate.Symbol, x, token));
-        // SR comparison needs this symbol's pivots only. An unrelated BTC
-        // endpoint must not delay or prevent a proposal from being reviewed.
-        await Task.WhenAll(symbolTasks.Values.Concat<Task>(extendedTasks.Values));
-
-        IReadOnlyList<BybitKline> AtEntry(IReadOnlyList<BybitKline> candles, string interval) =>
-            CandlesAvailableAt(candles, interval, observedAtUtc);
-        signalCandles = AtEntry(signalCandles, signalInterval);
-        var symbolHistory = symbolTasks.ToDictionary(x => x.Key, x => AtEntry(x.Value.Result, x.Key));
-
-        var histories = symbolHistory;
-        foreach (var (interval, task) in extendedTasks)
-            if (task.Result is { } candles && AtEntry(candles, interval) is { Count: >= 80 } earlier)
-                histories[interval] = earlier;
-        histories[signalInterval] = signalCandles;
+        // The selected wave already arrives with its candles. Similarity must not fetch seven other charts.
+        signalCandles = CandlesAvailableAt(signalCandles, signalInterval, observedAtUtc);
+        var histories = new Dictionary<string,IReadOnlyList<BybitKline>> { [signalInterval] = signalCandles };
         var enriched = BuildFeatures(candidate, signalInterval, histories);
         const string regime = "حمایت و مقاومت";
         var serverSignal = new ServerSignal
@@ -89,26 +69,9 @@ public sealed class ProfessionalSignalAnalysisService(
     internal static TechnicalFeatureSnapshot BuildFeatures(SignalCandidate candidate, string interval,
         IReadOnlyDictionary<string, IReadOnlyList<BybitKline>> histories)
     {
-        var weights = new Dictionary<string, decimal> { ["15"] = 1m, ["60"] = 1.5m, ["240"] = 2m, ["D"] = 2.5m };
-        if (ContextIntervals.Any(x => !histories.TryGetValue(x, out var candles) || candles.Count < 52))
-            throw new InvalidOperationException("Incomplete closed-candle market context.");
-        var snapshots = ContextIntervals.ToDictionary(x => x,
-            x => TechnicalFeatureExtractor.Calculate(histories[x], candidate));
-        var primary = snapshots.TryGetValue(interval, out var matched) ? matched
-            : TechnicalFeatureExtractor.Calculate(histories[interval], candidate);
-        var direction = candidate.Direction == "Long" ? 1m : -1m;
-        decimal Weighted(Func<TechnicalFeatureSnapshot, decimal> select) =>
-            snapshots.Sum(x => select(x.Value) * weights[x.Key]) / weights.Values.Sum();
-        return primary with
+        return TechnicalFeatureExtractor.Calculate(histories[interval], candidate) with
         {
-            HigherTimeframeAlignment = Weighted(f => DirectionalTrend(f, direction)),
-            MarketRegimeScore = snapshots.Values.Average(f => Math.Abs(f.TrendStrength)),
-            StructureScore = Weighted(f => f.StructureScore),
-            LiquiditySweepScore = Weighted(f => f.LiquiditySweepScore),
-            StructureBreakScore = Weighted(f => f.StructureBreakScore!.Value),
-            StructureRetestScore = Weighted(f => f.StructureRetestScore!.Value),
-            MultiScaleLevels = MultiScaleLevelExtractor.Calculate(histories, candidate),
-            SimilarityContextVersion = 4 // Closed candles, plus uncapped per-trade-level geometry.
+            SimilarityContextVersion = 7
         };
     }
 

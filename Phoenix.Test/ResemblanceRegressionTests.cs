@@ -140,7 +140,7 @@ internal static class ResemblanceRegressionTests
                 "chart and levels"+SignalReviewText.Support(prediction.Evidence),[1,2],5,observed),default);
             await batches.AddProposalAsync(new("other-key","other",candidate,"60",true,analysis,"other caption",[3],5,observed),default);
             var item=(await batches.PendingAsync("owner",default)).Single();
-            Check(item.Analysis.Prediction.Evidence is {ComparisonVersion:6,SameTimeframeNearbyTargets:1,SameTimeframeNearbyStops:0},
+            Check(item.Analysis.Prediction.Evidence is {ComparisonVersion:7,SameTimeframeNearbyTargets:0,SameTimeframeNearbyStops:0},
                 "Migrate old desk counts with only outcomes known at the original proposal time");
             Check(item.Analysis.Features==Baseline && item.Analysis.ObservedAtUtc==observed && item.Image.SequenceEqual(new byte[]{1,2}) &&
                 item.Caption.StartsWith("chart and levels") && !item.Caption.Contains("60"),

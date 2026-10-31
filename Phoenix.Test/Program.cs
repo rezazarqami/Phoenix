@@ -8,12 +8,15 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Wave fingerprint rebuilds legacy archived candles without market requests", WaveSimilarityTests.ArchiveRecovery);
+// Wave tests replace the retired SR-only distance/percentage contract.
+Run("Wave similarity counts independent outcomes across timeframes and returns real zeros", WaveSimilarityTests.Counts);
+Run("Wave fingerprint preserves anchors, log price invariance, first touch and archive roundtrip", WaveSimilarityTests.Extraction);
 Run("Scan analysis cache releases expired histories and bounds full-market memory", ScanPerformanceTests.AnalysisCacheIsBounded);
 Run("Scan overlaps metadata and candles with bounded traffic and cancellation recovery", ParallelScanTests.BoundedOverlapAndCancellation);
 Run("Connection status expires stale checks and separates symbol failures", ConnectionStatusTests.FreshnessAndPartialFailures);
 Run("Connection probes revalidate read-only account access independently of public access", ConnectionStatusTests.PeriodicReadOnlyChecks);
 Run("SR proposal succeeds without unrelated BTC market requests", SupportResistanceNetworkTests.Run);
-Run("SR similarity uses entry power, stop/target pivots, all history and excludes other indicators", SupportResistanceOnlyTests.Run);
 Run("Single close isolates hedge side, confirms closure and records manual results", SinglePositionCloseTests.Close);
 Run("Timeframe reservations enforce caps, durable two-stop brake, release and failure reporting", TimeframeRiskTests.Limits);
 Run("Journal sources filter before paging and preserve legacy wallets across restart", JournalSourceTests.Isolation);
@@ -28,7 +31,6 @@ Run("Selected cancellation isolates IDs, skips executed orders and retains archi
 Run("Device history persists, paginates and isolates event deep links", MobileHistoryTests.History);
 Run("In-app review persists, enforces capacity and isolates owners", InAppQueueTests.CapacityAndRestart);
 Run("Notification policy excludes registration and only expires near signals", InAppQueueTests.AlertPolicy);
-Run("Similarity accepts a moderate contextual difference without hiding contradictions", InAppQueueTests.SimilarityRadius);
 
 Run("Direct device terminal alerts do not wait for Telegram-side network work", MobileFeedTests.TerminalEventPrecedesTelegram);
 Run("Direct device feed persists event cursors, privacy and full lifecycle independently of push providers", MobileFeedTests.DurablePrivateFeed);
@@ -38,17 +40,11 @@ Run("Public notification Telegram rate limits persist across restart", Notificat
 Run("Public notification photo errors fall back to text without false image acknowledgments", NotificationReliabilityTests.PhotoFailureFallsBackToText);
 Run("Market monitoring isolates one failing symbol from later signals", NotificationReliabilityTests.FailedMarketSymbolDoesNotStarveOtherSignals);
 Run("Similarity migrates queued counts without future outcomes or new candles", ResemblanceRegressionTests.QueuedProposalMigration);
-Run("Similarity prepares 183 mixed-version archive samples without a sixty-row ceiling", ResemblanceRegressionTests.LegacyArchiveBeyondSixty);
-Run("Similarity uses raw levels independently of saturated legacy fields", ResemblanceRegressionTests.RawLevelsWithoutLegacyReadings);
-Run("Similarity regression reproduces repeated 4/3/4 counts and real zero matches", ResemblanceRegressionTests.RepeatedCountsAndGenuineZeros);
-Run("Similarity different technical queries select different neighbors", ResemblanceRegressionTests.DifferentQueriesChangeNeighbors);
-Run("Similarity new snapshots distinguish clipped cloud and level readings", ResemblanceRegressionTests.UncappedStoredTradeLevels);
 Run("Public notification retry after completion persists acknowledgments", NotificationReliabilityTests.RetryAndTerminalPersistence);
 Run("Public notification races cannot overwrite trading or delivery state", NotificationReliabilityTests.RaceAndStaleSnapshot);
 Run("Public notifications recover removed signals and retry each chat separately", NotificationReliabilityTests.PerDestinationAndRemovedSignals);
 Run("Public notification failures do not block unrelated direct-entry signals", NotificationReliabilityTests.OneFailureDoesNotBlockOtherSignals);
 Run("Entry image refresh preserves original proposal evidence without reanalysis", FrozenEntryReviewTests.CurrentImageWithInitialEvidence);
-Run("Similarity sparse legacy and distant timeframe regression", SimilarityTests.SparseAndDistantHistoryRemainsComparable);
 Run("Proposal leverage displays raw, capped and unknown values without network calls", ProposalLeverageCacheTests.DisplayAndDailyRefresh);
 Run("Proposal leverage bulk refresh paginates and rejects invalid snapshots", ProposalLeverageCacheTests.PaginationAndFailure);
 
@@ -99,56 +95,14 @@ Run("Outcome calibration isolates audit labels and rejects recent drift", Outcom
 Run("Outcome models keep proposal and entry evidence separate", OutcomeModelTests.SeparatesEvidenceStages);
 Run("Learning reads complete archive without a rolling date window", SimilarityTests.LearningReadsEntireArchive);
 Run("Technical outcome inputs preserve proposed trade geometry", OutcomeModelTests.PlannedLevelGeometry);
-Run("Concise all-time counts include risk-free and separate other timeframes", SimilarityTests.ConciseThreeOutcomeCounts);
-Run("Similarity support excludes economic duplicates and labels historical frequencies", SimilarityTests.SupportAndEconomicDuplicates);
 Run("Technical cohorts enforce geometry, direction, past-only labels and diversity", TechnicalCohortTests.MembershipAndGeometry);
 Run("Outcome windows preserve first events, censoring and other exits", OutcomeWindowTests.FirstEventAndMissingness);
 Run("Outcome windows use all mature outcomes and separate populations", OutcomeWindowTests.DenominatorsAndCohorts);
 Run("Technical geometry records exact ATR and preserves missing legacy values", TechnicalCohortTests.ExactAtrGeometry);
 Run("Technical evidence delivers long Telegram reports without truncation or premature controls", TechnicalCohortTests.LongTelegramEvidence);
 
-Run("Similarity all examples contribute with independently normalized class weights", SimilarityTests.AllExamplesAndIndependentGroups);
-Run("Similarity excludes every non-SR indicator and timeframe from scoring", SimilarityTests.ContextStructureAndExcludedIndicators);
-Run("Historical similarity preserves distinguishing evidence and abstains on missing data", SimilarityTests.HistoricalDispersionAndEvidence);
-Run("Historical similarity preserves timeframe identity and excludes future outcomes", SimilarityTests.TimeframeIdentityAndPastOnly);
 Run("Similarity structural breaks and retests use only confirmed past pivots", SimilarityTests.BreakAndRetestUseConfirmedPastPivots);
 
-Run("Target and stop similarity are independent and ignore price action", () =>
-{
-    var features = new TechnicalFeatureSnapshot(0.5m, 1m, 0m, 0.4m, 0.2m,
-        0.2m, 1.4m, 0.4m, 0m, 1m, 0.5m,
-        EntryLevelStrength: 0.9m, StopLevelStrength: 0.1m,
-        TargetLevelStrength: 0.7m, IchimokuEntryPosition: 0.3m,
-        IchimokuStopPosition: -0.5m, IchimokuTargetPosition: 0.8m);
-    var candidate = new ServerSignal { Direction = "Long", TechnicalFeatures = features };
-    var historic = new ServerSignal { Direction = "Long", TechnicalFeatures = features };
-    var patterns = Enumerable.Range(0, 5).SelectMany(_ => new[]
-    {
-        new LearnedSignalPattern(historic, "Target", features),
-        new LearnedSignalPattern(historic, "StopLoss", features with { PriceActionScore = 1m })
-    }).ToArray();
-    var result = SignalSimilarityService.CalculateFromPatterns(candidate, patterns);
-    Equal(100m, result.TargetPercent!.Value);
-    Equal(100m, result.StopPercent!.Value);
-    Equal(10, result.CalibrationSampleCount);
-    var changed = candidate.TechnicalFeatures with { Rsi14 = 0m, PriceActionScore = 1m,
-        FibonacciAlignment = 0m, VolumeRatio = 3m };
-    Equal(1d, SignalSimilarityService.TechnicalSimilarity(candidate, historic, changed, features));
-    var distinct = features with { StopLevelStrength = 1m, IchimokuStopPosition = 1m };
-    True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, distinct) < 1d);
-    var separate = SignalSimilarityService.CalculateFromPatterns(candidate,
-        Enumerable.Range(0, 5).SelectMany(_ => new[]
-        { patterns[0], new LearnedSignalPattern(historic, "StopLoss", distinct) }).ToArray());
-    Equal(100m, separate.TargetPercent!.Value);
-    True(separate.StopPercent!.Value < separate.TargetPercent.Value);
-    var legacy = features with { EntryLevelStrength = null, StopLevelStrength = null,
-        TargetLevelStrength = null, IchimokuEntryPosition = null,
-        IchimokuStopPosition = null, IchimokuTargetPosition = null };
-    True(SignalSimilarityService.TechnicalSimilarity(candidate, historic, features, legacy) > 0d);
-    var tooFew = SignalSimilarityService.CalculateFromPatterns(candidate,
-        [patterns[0], patterns[1]]);
-    False(tooFew.TargetPercent.HasValue);
-});
 
 Run("Entry fingerprints exclude unfinished and future candles", () =>
 {
@@ -161,34 +115,6 @@ Run("Entry fingerprints exclude unfinished and future candles", () =>
     True(visible.Select(x => x.OpenTime).SequenceEqual([time, time + 60_000L]));
 });
 
-Run("Target and stop similarity uses near and distant Fibonacci, cloud and levels", () =>
-{
-    var proposal = new SignalCandidate("BTCUSDT", "15", "Long", 110m, 90m,
-        101m, 101m, 104m, 98m, null, null, 1m, 1m, 50m,
-        1, 2, 0, 3, 4, "test", false, null);
-    BybitKline[] History(decimal oldHigh) => Enumerable.Range(0, 800).Select(i =>
-    {
-        var center = i < 400 ? oldHigh - 1m + (i % 9) * 0.1m : 101m + (i % 11) * 0.1m;
-        return new BybitKline(i * 60_000L, center, center + 1m, center - 1m, center, 1m);
-    }).ToArray();
-    var recent = History(106m);
-    var changedHistory = History(130m);
-    var initial = MultiScaleLevelExtractor.Calculate(new Dictionary<string, IReadOnlyList<BybitKline>>
-        { ["15"] = recent, ["W"] = recent }, proposal);
-    var changed = MultiScaleLevelExtractor.Calculate(new Dictionary<string, IReadOnlyList<BybitKline>>
-        { ["15"] = changedHistory, ["W"] = changedHistory }, proposal);
-    Equal(6, initial.Count);
-    Equal(initial.Single(x => x.Interval == "W" && x.Window == 80).FibonacciEntry,
-        changed.Single(x => x.Interval == "W" && x.Window == 80).FibonacciEntry);
-    False(initial.Single(x => x.Interval == "W" && x.Window == 720).FibonacciEntry ==
-        changed.Single(x => x.Interval == "W" && x.Window == 720).FibonacciEntry);
-    var baseFeatures = TechnicalFeatureExtractor.Calculate(recent, proposal);
-    var a = baseFeatures with { MultiScaleLevels = initial };
-    var b = baseFeatures with { MultiScaleLevels = changed };
-    var candidate = new ServerSignal { Direction = "Long" };
-    True(SignalSimilarityService.TechnicalSimilarity(candidate, candidate, a, b) <
-        SignalSimilarityService.TechnicalSimilarity(candidate, candidate, a, a));
-});
 
 Run("Second-stage expiry includes a time-ordered evidence photo and risk-free closure a photo", () =>
 {

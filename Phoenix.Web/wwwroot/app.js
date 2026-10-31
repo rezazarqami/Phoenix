@@ -2,6 +2,7 @@ const fa = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 4 });
 
 function similaritySupport(e) {
   if (!e) return '<small>نمونه‌های مشابه: اطلاعات فنی کافی نیست.</small>';
+  if (e.comparisonVersion >= 7) return `<small>نزدیکِ هم‌تایم‌فریم: ${fa.format(e.sameTimeframeNearbyTargets ?? 0)} تارگت / ${fa.format(e.sameTimeframeNearbyStops ?? 0)} استاپ / ${fa.format(e.sameTimeframeNearbyRiskFree ?? 0)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها: ${fa.format(e.otherTimeframeNearbyTargets ?? 0)} تارگت / ${fa.format(e.otherTimeframeNearbyStops ?? 0)} استاپ / ${fa.format(e.otherTimeframeNearbyRiskFree ?? 0)} ریسک‌فری</small>`;
   if (e.comparisonVersion >= 2 && !(e.comparableTargets + e.comparableStops + e.comparableRiskFree)) return '<small>نمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.</small>';
   const n = v => fa.format(v ?? 0);
   const stageNote = e.queryStage !== e.referenceStage ? ' (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)' : '';

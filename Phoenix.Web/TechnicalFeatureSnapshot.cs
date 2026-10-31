@@ -31,6 +31,7 @@ public sealed record TechnicalFeatureSnapshot(
     int SimilarityContextVersion = 0)
 {
     // Exact distances at observation; absent in legacy records, never backfilled.
+    public WaveFingerprint? Wave { get; init; }
     public TradeGeometrySnapshot? TradeGeometry { get; init; }
     public TechnicalLevelContext? LevelContext { get; init; }
 }
@@ -146,6 +147,7 @@ public static class TechnicalFeatureExtractor
             StructureBreakScore: events.Break,
             StructureRetestScore: events.Retest)
         {
+            Wave = WaveFingerprint.Extract(candles, candidate),
             LevelContext=atr>0 ? new(LevelAt(candidate.EntryPrice),LevelAt(candidate.StopLoss),LevelAt(candidate.TakeProfit)):null,
             TradeGeometry = atr > 0m && (candidate.EntryPrice-candidate.StopLoss)*direction > 0m &&
                 (candidate.TakeProfit-candidate.EntryPrice)*direction > 0m

@@ -1,0 +1,33 @@
+/* The chart owns the viewport; gestures stay inside its price/time axes. */
+html.chart-workspace-open,body.chart-workspace-open{height:100%;overflow:hidden!important;overscroll-behavior:none}
+.chart-workspace-open #manualEditor{position:fixed;inset:0;z-index:1000;background:#04172f;overflow:hidden;height:100dvh;height:var(--phoenix-viewport-height,100dvh);width:100%;padding:0;margin:0}
+.chart-workspace-open #manualEditor>.manual-chart-card{height:100%;display:flex;flex-direction:column;min-height:0;padding:0;border:0;border-radius:0;overflow:hidden}
+.chart-workspace-open #manualChart{order:0;flex:1 1 0;min-height:0;height:0!important;width:100%;margin:0;border:0;border-radius:0;touch-action:none}
+.chart-workspace-open .manual-tools{order:1;flex:0 0 64px;display:flex;align-items:center;justify-content:space-between;gap:2px;overflow:visible;padding:0 5px;border:0;border-top:1px solid #24435c;border-radius:0;min-width:0;background:#04111f;direction:ltr}
+.chart-workspace-open .manual-tools>button{flex:0 0 34px;width:34px;height:38px;padding:6px;background:transparent;border:0}
+.chart-workspace-open #manualSymbol{font:600 clamp(11px,3.2vw,16px) Arial;white-space:nowrap;cursor:pointer;max-width:27vw;overflow:hidden;text-overflow:ellipsis}
+.chart-workspace-open .manual-tools>.workspace-interval{display:flex;flex:0 0 44px;height:62px;flex-direction:column;align-items:center;justify-content:center;gap:0;font-family:Arial}
+.workspace-interval>button{border:0!important;background:transparent!important;padding:0!important;height:17px!important;min-height:17px!important;line-height:17px;font:11px Arial!important;color:#7890a5!important;opacity:.65}
+.workspace-current{position:relative;height:26px;display:grid!important;place-items:center;font:600 16px Arial!important;color:#eff7ff}
+.workspace-current select{position:absolute;inset:0;width:100%;height:100%!important;opacity:0;cursor:pointer;max-width:none!important}
+.chart-workspace-open .manual-controls{order:2;flex:0 0 auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:7px 8px calc(7px + env(safe-area-inset-bottom));gap:7px;margin:0;border:0;border-top:1px solid #24435c;border-radius:0;background:#04111f}
+.chart-workspace-open .manual-controls>label{position:relative;display:block;font-size:9px;line-height:15px;padding:3px 8px 0;border:1px solid #29445d;border-radius:7px;background:#0a2034;color:#9eb5c9;overflow:hidden}
+.chart-workspace-open .manual-controls input,.chart-workspace-open .manual-controls select{display:block;width:100%;height:26px;border:0;border-radius:0;background:transparent;padding:0 0 3px;font:13px Arial;color:#eef7ff;outline-offset:-2px}
+.chart-workspace-open .manual-controls option{background:#0a2034;color:#eef7ff}
+.chart-workspace-open .manual-footer,.chart-workspace-open .manual-chart-card>.manual-note,.chart-workspace-open #manualLive{display:none}
+.chart-workspace-open .manual-status{display:none}
+.chart-workspace-open .manual-status[data-error=true]{display:block;position:absolute;top:8px;left:8px;right:76px;z-index:6;background:#331b28eF;border-radius:6px;padding:6px;margin:0;font-size:10px;pointer-events:none}
+.manual-tools [hidden],.manual-controls [hidden]{display:none!important}
+.workspace-palette header{display:flex;justify-content:space-between;align-items:center}
+.workspace-palette #manualToolList{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.workspace-palette #manualToolList button{width:100%;height:54px;display:grid;place-items:center;padding:9px;margin:0;min-width:0}
+.workspace-palette svg,.workspace-drawing-actions svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.workspace-palette button[hidden]{display:none!important}
+.workspace-drawing-actions{display:flex;justify-content:center;border-top:1px solid #29445d;padding-top:8px}
+.workspace-drawing-actions button{width:40px;height:40px;padding:8px;margin:2px}
+body.chart-focus-host{overflow:hidden!important;overscroll-behavior:none}
+body.chart-focus-host #panel-crypto{position:fixed!important;inset:0!important;z-index:10000!important;margin:0!important;padding:0!important;background:#04172f}
+body.chart-focus-host #panel-crypto iframe{position:absolute!important;inset:0!important;width:100%!important;height:100dvh!important;border:0}
+@media(max-width:370px){.chart-workspace-open .manual-tools>button{flex-basis:29px;width:29px;padding:4px}.chart-workspace-open #manualSymbol{font-size:11px}}
+.chart-workspace-open .workspace-current>span{display:block!important;color:#eff7ff;margin:0;font:600 16px Arial}
+.chart-workspace-open .manual-tools .workspace-current{flex:0 0 26px;margin:0;padding:0}

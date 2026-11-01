@@ -27,7 +27,7 @@
    const response=await fetch('/api/positions/live',{cache:'no-store'});
    if(!response.ok)throw Error(response.status===403?'برای مشاهدهٔ حساب واقعی با حساب مالک وارد شو.':'ارتباط با بای‌بیت برقرار نشد.');
    const data=await response.json();render(data.items);lastSuccess=data.updatedAtUtc;
-   status.textContent='آخرین دریافت: '+new Date(lastSuccess).toLocaleTimeString('fa-IR')+' · به‌روزرسانی هر ۵ ثانیه';
+   status.textContent='آخرین دریافت: '+new Date(lastSuccess).toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'});
   }catch(error){status.textContent=error.message+(lastSuccess?' اطلاعات نمایش‌داده‌شده مربوط به '+new Date(lastSuccess).toLocaleTimeString('fa-IR')+' است.':' دوباره تلاش کن.');}
   finally{busy=false;refresh.disabled=false;}
  }

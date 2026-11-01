@@ -13,6 +13,7 @@ const {JSDOM}=require('./ui/node_modules/jsdom');
  timer();await flush();assert.equal(requests,0,'Hidden pane must not poll private exchange information');
  d.querySelector('#signal-pane-positions').hidden=false;w.dispatchEvent(new w.CustomEvent('phoenix-signal-tab-changed',{detail:'positions'}));await flush();
  assert.equal(d.querySelectorAll('.position-card').length,3);assert.ok(d.querySelector('.positive').textContent.includes('+5.25 USDT'));assert.ok(d.querySelector('.negative').textContent.includes('-25.00%'));assert.ok(d.querySelector('.position-stage').textContent.includes('پلهٔ اول'));assert.ok(d.querySelectorAll('.position-stage')[1].textContent.includes('پلهٔ دوم'));assert.equal(d.querySelector('.position-card script'),null);assert.ok(d.querySelectorAll('.position-stage')[2].textContent.includes('تجمیعی'));
+ assert.equal(d.querySelector('.positions-heading p'),null);assert.equal(d.querySelector('.positions-note'),null);assert.ok(!d.querySelector('#positionsStatus').textContent.includes('۵ ثانیه'));assert.equal(d.querySelector('#positionsList').nextElementSibling.id,'positionsStatus');
  fail=true;timer();await flush();assert.equal(d.querySelectorAll('.position-card').length,3,'Network failure must retain the last snapshot');assert.ok(d.querySelector('#positionsStatus').textContent.includes('اطلاعات نمایش‌داده‌شده مربوط'));
  dom.window.close();console.log('PASS live positions: signed exchange values, protection stages, safe text, no hidden polling and stale-data status.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

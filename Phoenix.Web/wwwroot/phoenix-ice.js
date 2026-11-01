@@ -11,9 +11,9 @@
     const path=paths[el.dataset.icon];
     if(path)el.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
   });
-  const tabs=[...document.querySelectorAll('[data-signal-tab]')];
+  const tabs=[...document.querySelectorAll(document.body.classList.contains('organized-shell')?'#panel-tracking [data-signal-tab]':'[data-signal-tab]')];
   function showSignalTab(name,focus=false){
-    if(window.PhoenixNavigate){const route=name==='new'?['crypto','section=manual&mode=form']:name==='history'?['notifications','view=results']:['tracking','view='+(name==='positions'?'positions':'pending')];window.PhoenixNavigate(route[0],true,route[1]);return;}
+    if(window.PhoenixNavigate){const route=name==='new'?['crypto','section=manual&mode=form']:name==='history'?['notifications','view=results']:['tracking','view='+(name==='positions'?'positions':'pending')];window.PhoenixNavigate(route[0],true,route[1]);if(focus)tabs.find(tab=>tab.dataset.signalTab===name)?.focus();return;}
     if(name==='new'&&document.body.classList.contains('viewer-only'))name='active';
     for(const tab of tabs){
       const selected=tab.dataset.signalTab===name;

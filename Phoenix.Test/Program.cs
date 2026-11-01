@@ -8,6 +8,7 @@ using Phoenix.Web;
 var passed = 0;
 var failed = 0;
 var testFilter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+Run("Homepage commodity quotes preserve identity, delay, timestamps, caching and partial failures", CommodityQuoteTests.Run);
 Run("Wave fingerprint rebuilds legacy archived candles without market requests", WaveSimilarityTests.ArchiveRecovery);
 // Wave tests replace the retired SR-only distance/percentage contract.
 Run("Wave similarity counts independent outcomes across timeframes and returns real zeros", WaveSimilarityTests.Counts);

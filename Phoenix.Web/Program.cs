@@ -14,6 +14,11 @@ builder.Services.AddRateLimiter(options => {
     options.AddPolicy("account-login", context => RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.OnRejected = async (context, token) => { context.HttpContext.Response.StatusCode = 429; context.HttpContext.Response.Headers.RetryAfter = "60"; await context.HttpContext.Response.WriteAsJsonAsync(new { error = "تلاش‌های ورود زیاد شده؛ یک دقیقه بعد دوباره امتحان کنید." }, token); };
 });
+builder.Services.AddSingleton<CommodityQuotes>();
+builder.Services.AddHttpClient("CommodityQuotes", client => {
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 PhoenixMarket/1.0");
+});
 builder.Services.AddSingleton<MobilePushService>();
 builder.Services.AddSingleton<MobileSignalFeed>();
 builder.Services.AddSingleton<BybitWalletRecovery>();
@@ -366,6 +371,10 @@ app.MapDelete("/api/telegram/access/{userId:long}", async (long userId, HttpRequ
     if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
         return Results.Forbid();
     return await access.DeleteAsync(userId, token) ? Results.Ok(new { deleted = true }) : Results.NotFound();
+});
+app.MapGet("/api/market/commodities", async (CommodityQuotes quotes, HttpResponse response, CancellationToken token) => {
+    response.Headers.CacheControl = "no-store";
+    return Results.Ok(new { items = await quotes.ReadAsync(token) });
 });
 // Lightweight homepage sparkline: fetch candles without running Elliott analysis.
 app.MapGet("/api/market/overview", async (string? interval, BybitDemoClient bybit, CancellationToken token) =>

@@ -44,7 +44,7 @@
   }
 
   let current={name:'home',query:''},cryptoSection='create';
-  const labels={home:'خانه',crypto:'ایجاد سیگنال',tracking:'پیگیری معاملات',notifications:'رویدادها و نتایج',more:'بیشتر',elliott:'آزمایشگاه الیوت',signal:'آزمایشگاه سیگنال',strategy:'مدیریت استراتژی دو',statistics:'آمار'};
+  const labels={home:'خانه',crypto:'ایجاد سیگنال',tracking:'مدیریت معاملات',notifications:'رویدادها و نتایج',more:'بیشتر',elliott:'آزمایشگاه الیوت',signal:'آزمایشگاه سیگنال',strategy:'مدیریت استراتژی دو',statistics:'آمار'};
   function ensureFrame(name,query='') {
     if(!routes[name])return;
     const host=document.getElementById(name==='crypto'?'cryptoFrameHost':name==='notifications'?'journalFrameHost':'panel-'+name);
@@ -63,7 +63,7 @@
     current={name,query};
     for(const tab of tabs){const selected=tab.dataset.panel===category;tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;}
     const target=name==='statistics'?'notifications':name;
-    document.querySelectorAll('.home-section').forEach(panel=>panel.hidden=panel.id!=='panel-'+target&&!(name==='home'&&panel.id==='panel-tracking'));
+    document.querySelectorAll('.home-section').forEach(panel=>panel.hidden=panel.id!=='panel-'+target);
     const statistics=name==='statistics';
     document.getElementById('panel-statistics').hidden=!statistics;
     document.getElementById('journalFrameHost').hidden=statistics;
@@ -77,10 +77,10 @@
     document.getElementById('manualModes').hidden=!(category==='crypto'&&section==='manual');
     document.querySelectorAll('[data-create-section]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.createSection===section)));
     document.querySelectorAll('[data-manual-mode]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.manualMode===(form?'form':'chart'))));
-    const view=name==='home'||params.get('view')==='positions'?'positions':'pending';
-    document.getElementById('signal-pane-active').hidden=!['home','tracking'].includes(name)||view!=='pending';
-    document.getElementById('signal-pane-positions').hidden=!['home','tracking'].includes(name)||view!=='positions';
-    for(const tab of document.querySelectorAll('[data-signal-tab]')){const selected=['home','tracking'].includes(name)&&tab.dataset.signalTab===(view==='positions'?'positions':'active');tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));}
+    const view=params.get('view')==='positions'?'positions':'pending';
+    document.getElementById('signal-pane-active').hidden=name!=='tracking'||view!=='pending';
+    document.getElementById('signal-pane-positions').hidden=name!=='tracking'||view!=='positions';
+    for(const tab of document.querySelectorAll('[data-signal-tab]')){const selected=name==='tracking'&&tab.dataset.signalTab===(view==='positions'?'positions':'active');tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;}
     document.querySelectorAll('[data-track-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.trackView===view)));
     const nested=['elliott','signal','strategy'].includes(name)||category==='more'&&name==='crypto'||section==='statistics';
     document.getElementById('workspaceBreadcrumb').hidden=!nested;
@@ -95,7 +95,7 @@
     const hash='#'+name+(query?'?'+query:'');if(updateHash&&location.hash!==hash)history.pushState(null,'',hash);
     window.dispatchEvent(new CustomEvent('phoenix-tab-changed',{detail:name}));
     if(updateHash)window.scrollTo({top:0,behavior:'instant'});
-    if(name==='tracking'||name==='home')window.dispatchEvent(new CustomEvent('phoenix-signal-tab-changed',{detail:view==='positions'?'positions':'active'}));
+    if(name==='tracking')window.dispatchEvent(new CustomEvent('phoenix-signal-tab-changed',{detail:view==='positions'?'positions':'active'}));
   }
   window.PhoenixNavigate=activate;
   window.addEventListener('phoenix-session-ready',()=>{if(current.name==='crypto')activate(current.name,false,current.query);});

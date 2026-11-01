@@ -1,0 +1,5 @@
+/* The journal shares the Phoenix shell's existing matrix and navy glass theme. */
+html.embedded-view,html.embedded-view body,html.embedded-view main{background:transparent!important}
+html:not(.embedded-view) body{background:linear-gradient(#020d2320,#020d2350),url('/analysis-assets/phoenix-matrix.png') center top/100% auto repeat-y!important}
+.journal-heading,.journal-shell,.journal-container{background:linear-gradient(125deg,#03152db8,#00091bbf 65%,#031630b3)!important;border-color:#188dff!important;box-shadow:inset 0 0 18px #087bff33,0 0 16px #007bff22}
+.event-card{background:#020e24a6!important;border-color:#1b5183!important}

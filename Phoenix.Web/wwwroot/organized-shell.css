@@ -55,3 +55,14 @@
 .positions-received{margin:4px 0 0;text-align:center;font-size:10px!important;color:#9bb4d3!important}.positions-received:empty{display:none}.positions-empty{margin-bottom:0!important}
 @media(min-width:601px){#panel-home.home-price-grid{gap:14px}#panel-home.home-price-grid>.market-card{padding:16px 20px;border-radius:25px}#panel-home .commodity-title,#panel-home .market-quote>a{height:38px}#panel-home .commodity-icon,#panel-home .bitcoin-coin{width:38px;height:38px;flex-basis:38px}#panel-home .market-card strong{margin-top:10px}}
 @media(max-width:360px){#panel-home.home-price-grid>.market-card{padding:9px;border-radius:15px}#panel-home .commodity-title,#panel-home .market-quote>a{gap:5px;height:24px}#panel-home .commodity-icon,#panel-home .bitcoin-coin{width:24px;height:24px;flex-basis:24px}#panel-home .market-card strong{font-size:17px;margin-top:5px}#panel-home .commodity-title b{display:block;font-size:10px}}
+
+/* Keep the full price and change row comfortably inside compact mobile tiles. */
+@media(max-width:600px){
+ #panel-home.home-price-grid>.market-card{padding:7px 12px 10px}
+ #panel-home .commodity-title,#panel-home .market-quote>a{height:22px}
+ #panel-home .commodity-icon,#panel-home .bitcoin-coin{width:22px;height:22px;flex-basis:22px;font-size:20px}
+ #panel-home .bitcoin-coin svg{width:17px;height:20px}
+ #panel-home .market-card strong,#panel-home .iran-price strong{margin:3px 0 1px;line-height:1.15}
+ #panel-home .quote-change,#panel-home .market-change{line-height:1.1}
+ #panel-home .market-change>span:first-child svg{width:14px;height:14px}
+}

@@ -18,6 +18,7 @@ await page.route('**/api/**',async route=>{const url=new URL(route.request().url
  else if(p==='/api/manual-signals'){const input=route.request().postDataJSON();posted.push(input);if(failPost){failPost=false;await route.abort();return;}data={...input,id:input.requestId};}
  else if(p==='/api/manual-signals/results')data={total:1,active:0,target:1,stopLoss:0,riskFree:0,expired:0,rows:[{signal:{symbol:'BTCUSDT',direction:'Long',outcome:'Target',entryPrice:100,takeProfit:102,stopLoss:98.5,expirePrice:104,positionSizeUsdt:10,leverage:10,createdAtUtc:'2026-10-29T12:00:00Z'}}],hasMore:false};
  await route.fulfill({json:data});});
+await page.addInitScript(()=>{for(const key of Object.keys(localStorage))if(key.startsWith('phoenix.manual.draft.'))localStorage.removeItem(key);});
 await page.goto(`http://127.0.0.1:${server.address().port}/analysis/coins?embed=1`);
 await page.locator('#market-tab-manual').click();
 await page.locator('#manualAssets button').first().waitFor();
@@ -61,6 +62,7 @@ await page.locator('[data-group=drawing]').click();await page.locator('[data-man
 await tap(plot.x+50,plot.y+200);await tap(plot.x+120,plot.y+260);await tap(plot.x+90,plot.y+330);
 assert.equal(await page.locator('.manual-drawing [data-drawing]').count(),2,'Three taps complete channel');
 assert.equal(await page.locator('[data-manual-tool=cursor]').evaluate(e=>e.classList.contains('active')),true);
+const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('phoenix.manual.draft.BTCUSDT.15')));assert.equal(stored.drawings.length,2,'Both completed drawings are persisted immediately');
 await page.locator('.workspace-interval>button').last().click();assert.equal(await page.locator('#manualInterval').inputValue(),'30');
 await page.goBack();await page.locator('#manualWatchlist').waitFor({state:'visible'});
 assert.equal(await page.locator('html').evaluate(e=>e.classList.contains('chart-workspace-open')),false);

@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync(require('node:path').join(__dirname,'../Phoenix.Web/wwwroot/manual-signals.js'),'utf8');
+const storageSource=source.slice(source.indexOf(' const storage='),source.indexOf('\n let assets='))+'\n globalThis.actualStorage=storage;';
+const memory=()=>{const data=new Map();return {getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};};
+const disk=memory(),session=memory(),key='phoenix.manual.draft.BTCUSDT.15';
+const boot=s=>{const context={localStorage:disk,sessionStorage:s};vm.createContext(context);vm.runInContext(storageSource,context);return context.actualStorage;};
+const draft={levels:{entry:100,target:102,stop:98,expire:104},drawings:[{type:'trend',points:[{time:1793275200,price:100},{time:1793276100,price:102}]}]};
+session.setItem(key,JSON.stringify(draft));let store=boot(session);
+assert.equal(JSON.stringify(store.get(key)),JSON.stringify(draft),'Migrate existing session drawings');
+assert.equal(session.getItem(key),null,'Remove legacy only after persistent save');
+const other='phoenix.manual.draft.ETHUSDT.60';store.set(other,{drawings:[]});
+store.set('phoenix.manual.pending',{requestId:'pending'});
+store=boot(memory());assert.equal(JSON.stringify(store.get(key)),JSON.stringify(draft),'New session restores complete drawings and prices');
+assert.equal(JSON.stringify(store.get(other)),JSON.stringify({drawings:[]}),'Symbol/timeframe drafts remain isolated');
+assert.equal(store.get('phoenix.manual.pending'),null,'Pending submissions keep original session scope');
+const failure={localStorage:{setItem(){throw Error('full');}},sessionStorage:memory()};vm.createContext(failure);vm.runInContext(storageSource,failure);assert.equal(failure.actualStorage.set(key,draft),false,'Report failed persistent writes');
+console.log('PASS persistent drafts: session migration, new-session restore, symbol/timeframe isolation, pending scope, write failure');

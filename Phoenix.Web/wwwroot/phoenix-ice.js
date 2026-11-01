@@ -13,6 +13,7 @@
   });
   const tabs=[...document.querySelectorAll('[data-signal-tab]')];
   function showSignalTab(name,focus=false){
+    if(window.PhoenixNavigate){const route=name==='new'?['crypto','section=manual&mode=form']:name==='history'?['notifications','view=results']:['tracking','view='+(name==='positions'?'positions':'pending')];window.PhoenixNavigate(route[0],true,route[1]);return;}
     if(name==='new'&&document.body.classList.contains('viewer-only'))name='active';
     for(const tab of tabs){
       const selected=tab.dataset.signalTab===name;
@@ -30,10 +31,10 @@
       showSignalTab(tabs[next].dataset.signalTab,true);
     });
   });
-  function applyViewerMode(){if(document.body.classList.contains('viewer-only')&&document.getElementById('signal-tab-new').getAttribute('aria-selected')==='true')showSignalTab('active');}
+  function applyViewerMode(){if(document.body.classList.contains('organized-shell'))return;if(document.body.classList.contains('viewer-only')&&document.getElementById('signal-tab-new').getAttribute('aria-selected')==='true')showSignalTab('active');}
   new MutationObserver(applyViewerMode).observe(document.body,{attributes:true,attributeFilter:['class']});applyViewerMode();
   const notificationToggle=document.getElementById('notificationToggle'),notificationMenu=document.getElementById('notificationMenu');
-  notificationToggle.addEventListener('click',()=>{document.getElementById('settingsMenu').hidden=true;document.getElementById('settingsToggle').setAttribute('aria-expanded','false');notificationMenu.hidden=!notificationMenu.hidden;notificationToggle.setAttribute('aria-expanded',String(!notificationMenu.hidden));});
+  notificationToggle.addEventListener('click',()=>{if(!document.body.classList.contains('organized-shell'))document.getElementById('settingsMenu').hidden=true;document.getElementById('settingsToggle').setAttribute('aria-expanded','false');notificationMenu.hidden=!notificationMenu.hidden;notificationToggle.setAttribute('aria-expanded',String(!notificationMenu.hidden));});
   document.getElementById('settingsToggle').addEventListener('click',()=>{notificationMenu.hidden=true;notificationToggle.setAttribute('aria-expanded','false');});
   document.getElementById('notificationShowActive').addEventListener('click',()=>{document.getElementById('tab-home').click();showSignalTab('active');notificationMenu.hidden=true;notificationToggle.setAttribute('aria-expanded','false');});
   function updateNotifications(){const count=document.getElementById('count').textContent;document.getElementById('notificationSummary').textContent=`${count} سیگنال در انتظار یا فعال دارید.`;notificationToggle.querySelector('i').hidden=!count.replace(/[۰٠0\s]/g,'');}

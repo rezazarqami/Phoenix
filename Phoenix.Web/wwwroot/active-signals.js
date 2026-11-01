@@ -47,5 +47,5 @@
  window.PhoenixActiveSignalsUI={mount};
  const list=document.getElementById('orders');if(!list)return;
  const component=mount({list,controls:document.getElementById('activeSelectionControls'),all:document.getElementById('selectAllSignals'),cancel:document.getElementById('cancelSelectedSignals'),status:document.getElementById('activeActionStatus'),refresh:async()=>{await refreshSignals();await refreshHistory();}});
- window.PhoenixActiveSignals=component;window.addEventListener('phoenix-signals-updated',event=>component.render(event.detail));if(window.phoenixActiveSignals)component.render(window.phoenixActiveSignals);
+ window.PhoenixActiveSignals=component;window.addEventListener('phoenix-signals-updated',event=>component.render(document.body.classList.contains('organized-shell')?event.detail.filter(s=>!s.filledAtUtc):event.detail));if(window.phoenixActiveSignals)component.render(window.phoenixActiveSignals);
 })();

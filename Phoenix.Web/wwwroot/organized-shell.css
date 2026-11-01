@@ -1,0 +1,20 @@
+/* Navigation only. The original Phoenix backgrounds, header and neon theme own the visuals. */
+.organized-shell [hidden]{display:none!important}
+.organized-shell .home-tabs{grid-template-areas:none;grid-template-columns:repeat(6,minmax(0,1fr))}
+.organized-shell .home-tabs>.home-tab{grid-area:auto!important;grid-column:span 2!important}
+.organized-shell .home-tabs>.home-tab:nth-child(n+4){grid-column:span 3!important;min-height:70px;flex-direction:row}
+.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-arrow{margin-inline-start:auto}
+.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-copy{text-align:right}
+.workspace-heading{margin:18px 0}.workspace-heading h1{font-size:24px;color:#dceeff}.workspace-heading p{color:#b6cbea;line-height:1.8}.workspace-eyebrow{font:11px Arial;letter-spacing:2px;color:#64c9e8}
+.workspace-tabs,.workspace-segment{display:flex;gap:8px;margin:12px 0 18px;flex-wrap:wrap}
+.workspace-tabs button,.workspace-segment button,.workspace-breadcrumb button{border:1px solid #205786;border-radius:12px;background:#061b3add;color:#b6cbea;padding:11px 18px;font-family:inherit;cursor:pointer}
+.workspace-tabs button[aria-selected=true],.workspace-segment button[aria-selected=true]{background:linear-gradient(135deg,#078edc,#073e79);border-color:#32cafa;color:#fff;box-shadow:inset 0 0 10px #00aeff33,0 0 8px #008fff33}
+.workspace-group{padding:18px;margin:16px 0;border:1px solid #245486;border-radius:22px;background:linear-gradient(145deg,#041630e8,#020d23ed);box-shadow:inset 0 0 16px #1387e51a}
+.workspace-group h2{font-size:17px;color:#dceeff}.workspace-group>button,.organized-shell .more-settings button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 12px;margin:7px 0;border:1px solid #245486;border-radius:12px;background:#061b3acc;color:#d4e8ff;font-family:inherit;text-align:right;cursor:pointer}.workspace-group small{color:#8eb7d4}
+.organized-shell .more-settings{position:static;display:block;width:auto;min-width:0;padding:0;border:0;background:none;box-shadow:none}
+.workspace-breadcrumb{display:flex;align-items:center;gap:18px;margin:15px 0;color:#b6cbea}
+.organized-shell.viewer-only [data-admin-only],.organized-shell.viewer-only #tab-crypto,.organized-shell.viewer-only #signal-tab-new{display:none!important}
+.organized-shell.chart-focus-host #createHeading,.organized-shell.chart-focus-host #createTabs,.organized-shell.chart-focus-host #manualModes{display:none!important}
+@media(min-width:1000px){.organized-shell .home-tabs{grid-template-columns:repeat(5,minmax(0,1fr))}.organized-shell .home-tabs>.home-tab,.organized-shell .home-tabs>.home-tab:nth-child(n+4){grid-column:auto!important;min-height:140px;flex-direction:column}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-arrow{margin:0}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-copy{text-align:center}}
+@media(max-width:600px){.organized-shell .home-tabs>.home-tab:nth-child(n+4){min-height:52px;padding:8px}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-icon svg{width:26px;height:26px}.organized-shell .home-tabs .nav-copy b{font-size:12px}.organized-shell .home-tabs .nav-copy small{font-size:7px}.workspace-tabs button,.workspace-segment button{flex:1;padding:10px 7px;font-size:12px}.workspace-heading h1{font-size:21px}.workspace-group{padding:14px}}
+.organized-shell.chart-focus-host .home-tabs,.organized-shell.chart-focus-host .phoenix-sky,.organized-shell.chart-focus-host #workspaceBreadcrumb{display:none!important}

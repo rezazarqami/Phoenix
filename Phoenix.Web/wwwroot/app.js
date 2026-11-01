@@ -62,17 +62,19 @@ async function loadSession() {
   const response = await fetch('/api/auth/me', { cache: 'no-store' });
   const session = await response.json();
   if(response.ok)window.PhoenixSessionIdentity=session;
+  document.querySelectorAll('[data-admin-only]').forEach(el=>el.hidden=!session.isAdmin);
   if (!session.isAdmin) {
     document.querySelector('#securityButton').hidden = true;
     document.querySelector('#usersButton').hidden = true;
     document.querySelector('#telegramAccessButton').hidden = true;
   }
-  if (!session.viewerOnly) return;
+  if (!session.viewerOnly) {window.dispatchEvent(new CustomEvent('phoenix-session-ready',{detail:session}));return;}
   document.body.classList.add('viewer-only');
   const banner = document.createElement('div');
   banner.className = 'viewer-banner';
   banner.textContent = 'حساب فقط مشاهده‌گر — امکان ثبت، حذف یا تغییر اطلاعات غیرفعال است.';
   document.querySelector('main').prepend(banner);
+  window.dispatchEvent(new CustomEvent('phoenix-session-ready',{detail:session}));
 }
 
 panelKeyInput.value = localStorage.getItem('phoenixPanelKey') || '';
@@ -401,7 +403,7 @@ function renderHistory(){
 }
 document.querySelectorAll('[data-history-source]').forEach(button=>button.addEventListener('click',()=>{historySource=button.dataset.historySource;document.querySelectorAll('[data-history-source]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));historyItems=historyCache[historySource];renderHistory();refreshHistory();}));
 const historyPending=new Set();
-async function refreshHistory(){const source=historySource;if(historyPending.has(source))return;historyPending.add(source);try{const response=await fetch('/api/history?days=30&limit=1000&source='+source,{cache:'no-store'});if(!response.ok)return;const items=await response.json();if(JSON.stringify(items)===JSON.stringify(historyCache[source]))return;historyCache[source]=items;if(source===historySource){historyItems=historyCache[source];renderHistory();}}catch{/* Keep the last history while reconnecting. */}finally{historyPending.delete(source);}}
+async function refreshHistory(){if(document.body.classList.contains("organized-shell"))return;const source=historySource;if(historyPending.has(source))return;historyPending.add(source);try{const response=await fetch('/api/history?days=30&limit=1000&source='+source,{cache:'no-store'});if(!response.ok)return;const items=await response.json();if(JSON.stringify(items)===JSON.stringify(historyCache[source]))return;historyCache[source]=items;if(source===historySource){historyItems=historyCache[source];renderHistory();}}catch{/* Keep the last history while reconnecting. */}finally{historyPending.delete(source);}}
 
 function statusLabel(status) {
   if (status === 'Closing') return 'درخواست بستن؛ منتظر تأیید صرافی';
@@ -449,9 +451,9 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
 setInterval(()=>{expireConnection();if(!document.hidden)refreshStatus();},1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){expireConnection();refreshStatus();}});
-setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshSignals();},5000);
+setInterval(()=>{if(!document.hidden&&(!document.getElementById('panel-home')?.hidden||!document.getElementById('panel-tracking')?.hidden))refreshSignals();},5000);
 setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshHistory();},30000);
-window.addEventListener('phoenix-tab-changed',e=>{if(e.detail==='home'){refreshStatus();refreshSignals();refreshHistory();}});
+window.addEventListener('phoenix-tab-changed',e=>{if(e.detail==='home'||e.detail==='tracking'){refreshStatus();refreshSignals();refreshHistory();}});
 
 // Resume the live data feeds without replacing the document or user input.
 window.addEventListener('phoenix-native-resume',()=>{refreshStatus();refreshSignals();refreshHistory();});

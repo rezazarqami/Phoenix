@@ -1,46 +1,68 @@
-<!DOCTYPE html>
-
-<html dir="rtl" lang="fa">
-<head><script src="/shell-route.js?v=20261029"></script>
-<meta charset="utf-8"/>
-<meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
+<!DOCTYPE html><html dir="rtl" lang="fa"><head><script src="/shell-route.js?v=20261101-organized"></script>
+<meta charset="utf-8">
+<meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport">
 <script>if (/PhoenixAndroid\//.test(navigator.userAgent)) document.documentElement.classList.add('android-shell');</script>
-<meta content="#020d23" name="theme-color"/>
-<meta content="yes" name="mobile-web-app-capable"/>
-<meta content="yes" name="apple-mobile-web-app-capable"/>
-<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
-<link href="/manifest.webmanifest" rel="manifest"/>
-<link href="/icons/phoenix-192.png" rel="icon" sizes="192x192" type="image/png"/>
-<link href="/icons/phoenix-192.png" rel="apple-touch-icon"/>
-<link href="/styles.css?v=5" rel="stylesheet"/>
-<link href="/security.css?v=2" rel="stylesheet"/>
-<link href="/crypto-statistics.css?v=20261030-minimal" rel="stylesheet"/>
+<meta content="#020d23" name="theme-color">
+<meta content="yes" name="mobile-web-app-capable">
+<meta content="yes" name="apple-mobile-web-app-capable">
+<meta content="black-translucent" name="apple-mobile-web-app-status-bar-style">
+<link href="/manifest.webmanifest" rel="manifest">
+<link href="/icons/phoenix-192.png" rel="icon" sizes="192x192" type="image/png">
+<link href="/icons/phoenix-192.png" rel="apple-touch-icon">
+<link href="/styles.css?v=5" rel="stylesheet">
+<link href="/security.css?v=2" rel="stylesheet">
+<link href="/crypto-statistics.css?v=20261030-minimal" rel="stylesheet">
 <title>Phoenix Trading Panel</title>
-<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"/><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-status"><link rel="stylesheet" href="/chart-workspace.css?v=20261101"></head>
-<body>
+<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-status"><link rel="stylesheet" href="/chart-workspace.css?v=20261101"><link rel="stylesheet" href="/organized-shell.css?v=20261101-theme-preserved"></head>
+<body class="organized-shell">
 <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <main>
 <div class="phoenix-sky"><iframe class="phoenix-hero-animation" src="/analysis-assets/phoenix-animated-sky.html?v=2" title="پس‌زمینهٔ متحرک فونیکس" aria-hidden="true" tabindex="-1" sandbox="allow-scripts" scrolling="no"></iframe><header class="topbar">
-<div class="brand"><img alt="لوگوی فونیکس" class="home-brand-logo" src="/analysis-assets/phoenix-ice-logo.png"/><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p><small class="brand-persian">تحلیل · استراتژی · اجرای هوشمند</small></div></div>
+<div class="brand"><img alt="لوگوی فونیکس" class="home-brand-logo" src="/analysis-assets/phoenix-ice-logo.png"><div><h1>PHOENIX</h1><p>BYBIT FUTURES CONTROL</p><small class="brand-persian">تحلیل · استراتژی · اجرای هوشمند</small></div></div>
 <div class="header-actions">
 <button aria-controls="notificationMenu" aria-expanded="false" aria-label="اعلان‌های سیگنال" class="notification-toggle" id="notificationToggle" type="button"><span data-icon="bell"></span><i hidden=""></i></button><div class="notification-menu" hidden="" id="notificationMenu"><b>اعلان‌های سیگنال</b><a class="notification-history-link" href="/notifications">تاریخچهٔ رویدادها و نتایج</a><p id="notificationSummary">در حال دریافت وضعیت سیگنال‌ها…</p><button id="notificationShowActive" type="button">نمایش سیگنال‌های فعال</button><div class="safe" id="modeNote"><i>✓</i><span>در حال بررسی وضعیت موتور سفارش</span></div></div>
 <button class="badge warn" id="connection" type="button" aria-haspopup="dialog" aria-controls="connectionDetails"><i></i>در حال بررسی</button>
 <dialog id="connectionDetails" class="security-dialog" aria-labelledby="connectionDetailsTitle"><div class="dialog-head"><h2 id="connectionDetailsTitle">وضعیت واقعی اتصال</h2><button id="closeConnectionDetails" type="button">بستن</button></div><div id="connectionDetailsBody" class="dialog-body"></div></dialog>
-<button aria-controls="settingsMenu" aria-expanded="false" aria-label="باز کردن منوی تنظیمات" class="security-button home-settings-toggle" id="settingsToggle" type="button"><span data-icon="menu"></span></button>
-<div class="settings-menu" hidden="" id="settingsMenu"><button class="security-button" id="deviceAlertsButton" type="button">اعلان‌های گوشی</button><button class="security-button" id="returnHomeButton" type="button">صفحهٔ اصلی فونیکس</button>
+<button aria-controls="panel-more" aria-label="ابزارها و تنظیمات" class="security-button home-settings-toggle" id="settingsToggle" type="button"><span data-icon="menu"></span></button>
+
+</div>
+</header></div>
+<nav aria-label="بخش‌های فونیکس" class="home-tabs" role="tablist"><button id="tab-home" type="button" class="home-tab" data-panel="home" role="tab" aria-controls="panel-home" aria-selected="true"><span class="nav-icon" data-icon="chart"></span><span class="nav-copy"><b>خانه</b><small>HOME</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button id="tab-crypto" type="button" class="home-tab" data-panel="crypto" role="tab" aria-controls="panel-crypto" aria-selected="false"><span class="nav-icon" data-icon="plus"></span><span class="nav-copy"><b>ایجاد سیگنال</b><small>CREATE SIGNAL</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button id="tab-tracking" type="button" class="home-tab" data-panel="tracking" role="tab" aria-controls="panel-tracking" aria-selected="false"><span class="nav-icon" data-icon="wave"></span><span class="nav-copy"><b>پیگیری معاملات</b><small>TRACKING</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button id="tab-notifications" type="button" class="home-tab" data-panel="notifications" role="tab" aria-controls="panel-notifications" aria-selected="false"><span class="nav-icon" data-icon="clock"></span><span class="nav-copy"><b>رویدادها و نتایج</b><small>EVENTS &amp; RESULTS</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button id="tab-more" type="button" class="home-tab" data-panel="more" role="tab" aria-controls="panel-more" aria-selected="false"><span class="nav-icon" data-icon="menu"></span><span class="nav-copy"><b>بیشتر</b><small>MORE</small></span><span class="nav-arrow" data-icon="chevron"></span></button></nav><div id="legacyNavigation" hidden=""><button aria-controls="panel-elliott" aria-selected="false" class="" data-panel="elliott" id="tab-elliott" role="tab" type="button"><span class="nav-icon" data-icon="wave"></span><span class="nav-copy"><b>Elliott Wave<br>Lab</b></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-signal" aria-selected="false" class="" data-panel="signal" id="tab-signal" role="tab" type="button"><span class="nav-icon" data-icon="network"></span><span class="nav-copy"><b>Signal Lab</b></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-statistics" aria-selected="false" class="" data-panel="statistics" id="tab-statistics" role="tab" type="button"><span class="nav-icon" data-icon="bars"></span><span class="nav-copy"><b>آمار و گزارش‌ها</b><small>STATISTICS</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-strategy" aria-selected="false" class="" data-panel="strategy" id="tab-strategy" role="tab" type="button"><span class="nav-icon" data-icon="cube"></span><span class="nav-copy"><b>Strategy 2 <em>Ⅱ</em></b><small>REAL STRATEGY</small></span><span class="nav-arrow" data-icon="chevron"></span></button><section aria-labelledby="signal-tab-history" class="card history-card" hidden="" id="signal-pane-history" role="tabpanel">
+<div class="section-title"><div><span class="step">03</span><div><h2>تاریخچه نتایج</h2><p>سیگنال‌های پایان‌یافته در ۳۰ روز گذشته</p></div></div><span class="counter" id="historyCount">۰</span></div>
+<div class="history-sources" role="group" aria-label="منشأ نتایج"><button type="button" data-history-source="normal" aria-pressed="true">نتایج سیگنال‌های عادی</button><button type="button" data-history-source="manual" aria-pressed="false">نتایج سیگنال‌های دستی</button></div><div class="history-list" id="history"><div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div></div>
+</section><button id="returnHomeButton" type="button">خانه</button></div>
+<div id="workspaceBreadcrumb" class="workspace-breadcrumb" hidden=""><button type="button" id="workspaceBack">بازگشت</button><span id="workspaceLocation"></span></div><div aria-labelledby="tab-home" class="home-section" id="panel-home" role="tabpanel"><div class="ticker market-card"><div class="market-quote"><a href="#crypto?section=search" id="openBtcMarket"><span aria-label="Bitcoin" class="bitcoin-coin"><svg fill="none" stroke="white" stroke-width="2.4" viewBox="0 0 24 24"><path d="M8 5h6a4 4 0 0 1 0 8H8m0-8v15m0-7h7a3.5 3.5 0 0 1 0 7H6M10 2v3m4-3v3M10 20v3m4-3v3"></path></svg></span><b>BTC / USDT</b><span data-icon="chevron"></span></a><strong id="price">—</strong><div class="market-change" id="marketChange" title="تغییر قیمت نسبت به ابتدای بازهٔ نمودار"><span data-icon="rise"></span><b id="marketChangePercent">—</b><span id="marketChangeAmount">—</span></div><span id="updated">در حال اتصال به Bybit</span></div><div class="market-graph"><span>قیمت لحظه‌ای</span><svg aria-label="نمودار قیمت بیت‌کوین" id="marketSparkline" role="img" viewBox="0 0 320 98"><defs><linearGradient id="marketFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#12b887" stop-opacity=".32"></stop><stop offset="1" stop-color="#12b887" stop-opacity="0"></stop></linearGradient></defs><path fill="url(#marketFill)" id="marketArea"></path><path fill="none" id="marketLine" stroke="#12b887" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.7"></path></svg><div aria-label="تایم‌فریم نمودار" class="market-intervals" role="group"><button aria-pressed="false" data-market-interval="1" type="button">1M</button><button aria-pressed="true" class="active" data-market-interval="60" type="button">1H</button><button aria-pressed="false" data-market-interval="D" type="button">1D</button><button aria-pressed="false" data-market-interval="W" type="button">1W</button></div><small id="marketChartStatus" role="status"></small></div></div></div>
+<nav id="resultsToolbar" class="workspace-tabs" hidden="" aria-label="بخش نتایج"><button type="button" data-result-view="events">رویدادها و نتایج</button><button type="button" data-result-view="statistics">آمار</button></nav><section class="home-section embedded-section" hidden="" id="panel-notifications" aria-label="رویدادها و نتایج"><div id="journalFrameHost"></div><section class="crypto-statistics" hidden="" id="panel-statistics" role="tabpanel">
+<div class="statistics-heading">
+<div><span class="eyebrow">TRADE STATISTICS</span><h2>آمار رمز ارزها</h2><p>تمام تاریخچه · مرتب‌شده بر اساس بیشترین تعداد معاملات</p></div>
+<label>استراتژی<select id="statisticsStrategy"><option value="main">استراتژی اصلی · واقعی</option><option value="strategy2">استراتژی ۲ · دمو</option></select></label>
+<button type="button" data-destination="crypto?section=statistics" class="workspace-link">گزارش تفصیلی</button></div>
+<div aria-live="polite" class="statistics-summary"><span>رمز ارزها <b id="statisticsCoins">—</b></span><span>کل معاملات <b id="statisticsTotal">—</b></span><span class="stat-target">تارگت <b id="statisticsTargets">—</b></span><span class="stat-stop">استاپ <b id="statisticsStops">—</b></span><span class="stat-riskfree">ریسک‌فری <b id="statisticsRiskFree">—</b></span></div>
+<p class="statistics-status" id="statisticsStatus" role="status">با باز کردن این سربرگ، آمار دریافت می‌شود.</p>
+<div class="statistics-table-wrap">
+<table class="statistics-table"><caption class="sr-only">نتایج معاملات هر رمز ارز</caption><thead><tr><th scope="col">#</th><th scope="col">رمز ارز</th><th scope="col">کل</th><th scope="col">باز</th><th class="stat-target" scope="col">تارگت</th><th class="stat-stop" scope="col">استاپ</th><th class="stat-riskfree" scope="col">ریسک‌فری</th><th scope="col">سایر بسته</th></tr></thead><tbody id="statisticsRows"><tr><td colspan="8">در انتظار دریافت آمار…</td></tr></tbody></table>
+</div>
+<p class="statistics-note">کل = باز + تارگت + استاپ + ریسک‌فری + سایر بسته‌شده‌ها. سیگنال‌های منتظر ورود و منقضی یا لغوشده پیش از ورود شمرده نمی‌شوند. به‌روزرسانی خودکار هر ۵ ثانیه.</p>
+</section></section><section id="panel-more" class="home-section" hidden="" role="tabpanel" aria-labelledby="tab-more"><div class="workspace-heading"><p class="workspace-eyebrow">PHOENIX / MORE</p><h1>ابزارها و تنظیمات</h1><p>دسترسی‌های تخصصی، جدا از مسیر روزانهٔ معاملات.</p></div><div class="workspace-more-grid"><section class="workspace-group"><h2>ابزارهای تحلیل</h2><button type="button" data-destination="crypto?section=search">مرور و جستجوی بازار <span>‹</span></button><button type="button" data-destination="elliott">تحلیل موج الیوت <span>‹</span></button><button type="button" data-destination="signal">تحلیل محدودهٔ نمودار <span>‹</span></button></section><section class="workspace-group"><h2>استراتژی‌ها</h2><button type="button" data-destination="strategy">مدیریت استراتژی دو <small>حساب دمو · بای‌بیت</small><span>‹</span></button></section><section class="workspace-group" data-admin-only=""><h2>داده‌ها و آرشیو</h2><button type="button" data-destination="crypto?section=approved">پیگیری بدون ارسال سفارش <span>‹</span></button><button type="button" data-destination="crypto?section=history">خروجی داده‌های معاملات <span>‹</span></button><button type="button" data-destination="crypto?section=archive">آرشیو تصمیم‌های میز تأیید <span>‹</span></button></section><section class="workspace-group" id="moreSettings"><h2>تنظیمات</h2><div class="settings-menu more-settings" id="settingsMenu"><button class="security-button" id="deviceAlertsButton" type="button">اعلان‌های گوشی</button>
 <button class="security-button" id="telegramAccessButton" type="button"><span class="action-icon">✈</span><span>دسترسی تلگرام</span></button>
 <button class="security-button" id="usersButton" type="button"><span class="action-icon">♙</span><span>کاربران</span></button>
 <button class="security-button" id="securityButton" type="button"><span class="action-icon">⚙</span><span>تنظیمات امنیتی</span></button>
 <button class="security-button logout-action" id="logoutButton" type="button"><span class="action-icon">↪</span><span>خروج</span></button>
 <button class="security-button install-phoenix-button" id="installPhoenixButton" type="button"><span class="action-icon">＋</span><span>افزودن به صفحه اصلی</span></button>
-</div>
-</div>
-</header></div>
-<nav aria-label="بخش‌های فونیکس" class="home-tabs" role="tablist">
-<button aria-controls="panel-home" aria-selected="true" class="home-tab active" data-panel="home" id="tab-home" role="tab" type="button"><span class="nav-icon" data-icon="chart"></span><span class="nav-copy"><b>مرکز مدیریت سیگنال</b><small>SIGNAL CENTER</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-crypto" aria-selected="false" class="home-tab" data-panel="crypto" id="tab-crypto" role="tab" type="button"><span class="nav-icon" data-icon="globe"></span><span class="nav-copy"><b>Crypto<br/>Markets</b></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-elliott" aria-selected="false" class="home-tab" data-panel="elliott" id="tab-elliott" role="tab" type="button"><span class="nav-icon" data-icon="wave"></span><span class="nav-copy"><b>Elliott Wave<br/>Lab</b></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-signal" aria-selected="false" class="home-tab" data-panel="signal" id="tab-signal" role="tab" type="button"><span class="nav-icon" data-icon="network"></span><span class="nav-copy"><b>Signal Lab</b></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-statistics" aria-selected="false" class="home-tab" data-panel="statistics" id="tab-statistics" role="tab" type="button"><span class="nav-icon" data-icon="bars"></span><span class="nav-copy"><b>آمار و گزارش‌ها</b><small>STATISTICS</small></span><span class="nav-arrow" data-icon="chevron"></span></button><button aria-controls="panel-strategy" aria-selected="false" class="home-tab" data-panel="strategy" id="tab-strategy" role="tab" type="button"><span class="nav-icon" data-icon="cube"></span><span class="nav-copy"><b>Strategy 2 <em>Ⅱ</em></b><small>REAL STRATEGY</small></span><span class="nav-arrow" data-icon="chevron"></span></button></nav><div class="ticker market-card"><div class="market-quote"><a href="#crypto" id="openBtcMarket"><span aria-label="Bitcoin" class="bitcoin-coin"><svg fill="none" stroke="white" stroke-width="2.4" viewbox="0 0 24 24"><path d="M8 5h6a4 4 0 0 1 0 8H8m0-8v15m0-7h7a3.5 3.5 0 0 1 0 7H6M10 2v3m4-3v3M10 20v3m4-3v3"></path></svg></span><b>BTC / USDT</b><span data-icon="chevron"></span></a><strong id="price">—</strong><div class="market-change" id="marketChange" title="تغییر قیمت نسبت به ابتدای بازهٔ نمودار"><span data-icon="rise"></span><b id="marketChangePercent">—</b><span id="marketChangeAmount">—</span></div><span id="updated">در حال اتصال به Bybit</span></div><div class="market-graph"><span>قیمت لحظه‌ای</span><svg aria-label="نمودار قیمت بیت‌کوین" id="marketSparkline" role="img" viewbox="0 0 320 98"><defs><lineargradient id="marketFill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#12b887" stop-opacity=".32"></stop><stop offset="1" stop-color="#12b887" stop-opacity="0"></stop></lineargradient></defs><path fill="url(#marketFill)" id="marketArea"></path><path fill="none" id="marketLine" stroke="#12b887" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.7"></path></svg><div aria-label="تایم‌فریم نمودار" class="market-intervals" role="group"><button aria-pressed="false" data-market-interval="1" type="button">1M</button><button aria-pressed="true" class="active" data-market-interval="60" type="button">1H</button><button aria-pressed="false" data-market-interval="D" type="button">1D</button><button aria-pressed="false" data-market-interval="W" type="button">1W</button></div><small id="marketChartStatus" role="status"></small></div></div>
-<div aria-labelledby="tab-home" class="home-section" id="panel-home" role="tabpanel"><section aria-labelledby="signalCenterTitle" class="signal-center"><div class="signal-center-heading"><span data-icon="chart"></span><div><h2 id="signalCenterTitle">مرکز مدیریت سیگنال</h2><p>مدیریت، ثبت و بررسی سیگنال‌های معاملاتی</p></div></div><div aria-label="مدیریت سیگنال" class="signal-tabs" role="tablist"><button aria-controls="signal-pane-new" aria-selected="true" class="active" data-signal-tab="new" id="signal-tab-new" role="tab" type="button"><span data-icon="plus"></span>سیگنال‌های جدید</button><button aria-controls="signal-pane-active" aria-selected="false" data-signal-tab="active" id="signal-tab-active" role="tab" tabindex="-1" type="button"><span data-icon="wave"></span>سیگنال‌های فعال</button><button aria-controls="signal-pane-positions" aria-selected="false" data-signal-tab="positions" id="signal-tab-positions" role="tab" tabindex="-1" type="button"><span data-icon="bars"></span>معاملات باز</button><button aria-controls="signal-pane-history" aria-selected="false" data-signal-tab="history" id="signal-tab-history" role="tab" tabindex="-1" type="button"><span data-icon="clock"></span>نتایج گذشته</button></div><section aria-labelledby="signal-tab-new" class="card signal-card" id="signal-pane-new" role="tabpanel">
+</div></section></div></section>
+<section id="panel-tracking" class="home-section signal-center" hidden="" role="tabpanel" aria-labelledby="tab-tracking"><div class="signal-center-heading"><span data-icon="chart"></span><div><h2 id="signalCenterTitle">مرکز مدیریت سیگنال</h2><p>مدیریت، ثبت و بررسی سیگنال‌های معاملاتی</p></div></div><div aria-label="مدیریت سیگنال" class="signal-tabs" role="tablist"><button aria-controls="signal-pane-new" aria-selected="true" class="active" data-signal-tab="new" id="signal-tab-new" role="tab" type="button"><span data-icon="plus"></span>سیگنال‌های جدید</button><button aria-controls="signal-pane-active" aria-selected="false" data-signal-tab="active" id="signal-tab-active" role="tab" tabindex="-1" type="button"><span data-icon="wave"></span>سیگنال‌های فعال</button><button aria-controls="signal-pane-positions" aria-selected="false" data-signal-tab="positions" id="signal-tab-positions" role="tab" tabindex="-1" type="button"><span data-icon="bars"></span>معاملات باز</button><button aria-controls="signal-pane-history" aria-selected="false" data-signal-tab="history" id="signal-tab-history" role="tab" tabindex="-1" type="button"><span data-icon="clock"></span>نتایج گذشته</button></div><section aria-labelledby="signal-tab-active" class="card orders-card" hidden="" id="signal-pane-active" role="tabpanel">
+<div class="active-desk-heading"><span class="active-desk-icon" aria-hidden="true">▥</span><div><h2>در انتظار ورود</h2><p>سیگنال‌هایی که هنوز ورودشان در صرافی تأیید نشده است.</p></div><span class="counter" id="count">۰</span></div>
+<div id="activeSelectionControls" class="active-selection-controls" hidden=""><button id="selectAllSignals" type="button" aria-pressed="false">☑ انتخاب همه</button><button id="cancelSelectedSignals" type="button" disabled="">لغو انتخاب‌شده‌ها</button></div><p id="activeActionStatus" class="active-action-status" role="status"></p>
+<div class="orders" id="orders"><div class="empty"><span>◇</span><strong>هنوز سیگنالی ثبت نشده</strong><p>اولین سیگنال شما اینجا نمایش داده می‌شود.</p></div></div>
+</section><section aria-labelledby="signal-tab-positions" class="card live-positions" hidden="" id="signal-pane-positions" role="tabpanel">
+<div class="positions-heading"><div><h2>معاملات باز</h2><p>حساب واقعی بای‌بیت · سود و زیان تحقق‌نیافته</p></div><div id="bulkControls" class="position-actions" hidden=""><button class="security-button" id="closePositionsButton" type="button">بستن همه معاملات</button><button class="security-button" id="resumeEntriesButton" type="button" hidden="">ادامهٔ ورودهای جدید</button></div><button id="refreshPositions" type="button" hidden="">به‌روزرسانی</button></div>
+<p id="bulkStatus" role="status"></p>
+<p id="positionsStatus" role="status">برای دریافت اطلاعات، این سربرگ را باز کن.</p><div id="positionsList" aria-live="polite"></div>
+<p class="positions-note">سود و زیان دلاری از بای‌بیت؛ درصد بازده نسبت به مارجین اولیهٔ گزارش‌شدهٔ صرافی است. کارمزد و تسویهٔ نهایی ممکن است متفاوت باشد.</p>
+</section></section><section class="home-section embedded-section" hidden="" id="panel-crypto" role="tabpanel" aria-label="ایجاد سیگنال"><div class="workspace-heading" id="createHeading"><p class="workspace-eyebrow">PHOENIX / CREATE</p><h1>ایجاد سیگنال</h1><p>روش ایجاد را انتخاب کن و پیشنهاد را پیش از ثبت بررسی کن.</p></div><nav class="workspace-tabs" id="createTabs" aria-label="روش ایجاد سیگنال"><button type="button" data-create-section="create">خودکار</button><button type="button" data-create-section="review">میز تأیید</button><button type="button" data-create-section="manual">دستی</button></nav><nav class="workspace-segment" id="manualModes" aria-label="روش ورود دستی" hidden=""><button type="button" data-manual-mode="chart">تحلیل روی نمودار</button><button type="button" data-manual-mode="form">فرم ورود اطلاعات</button></nav><div id="manualFormHost" class="signal-center" hidden=""><section aria-labelledby="signal-tab-new" class="card signal-card" id="signal-pane-new" role="tabpanel">
+
 <form id="signalForm" novalidate="">
-<label id="keyField">کلید ورود پنل<input autocomplete="current-password" name="panelKey" placeholder="کلید خصوصی پنل" type="password"/></label>
+<label id="keyField">کلید ورود پنل<input autocomplete="current-password" name="panelKey" placeholder="کلید خصوصی پنل" type="password"></label>
 <div class="ai-signal-box">
 <label for="aiSignalText"><span class="ai-label-icon">AI</span>ورود سریع با AI</label>
 <textarea id="aiSignalText" maxlength="2000" placeholder="مثال: BTCUSDT لانگ، سقف ۶۵۰۰۰، کف ۶۲۰۰۰، ورودی ۲۵ تتر" rows="3"></textarea>
@@ -49,8 +71,8 @@
 </div>
 <div class="signal-form-pair"><label class="symbol-label">نماد Bybit Futures
             <div class="symbol-picker" id="symbolPicker">
-<div class="symbol-input-wrap"><span class="search-icon">⌕</span><input aria-autocomplete="list" aria-controls="symbolMenu" aria-expanded="false" autocomplete="off" id="symbolSearch" placeholder="جست‌وجو؛ مثال BTC" spellcheck="false" type="text" value="BTCUSDT"/><span class="chevron">⌄</span></div>
-<input name="symbol" type="hidden" value="BTCUSDT"/>
+<div class="symbol-input-wrap"><span class="search-icon">⌕</span><input aria-autocomplete="list" aria-controls="symbolMenu" aria-expanded="false" autocomplete="off" id="symbolSearch" placeholder="جست‌وجو؛ مثال BTC" spellcheck="false" type="text" value="BTCUSDT"><span class="chevron">⌄</span></div>
+<input name="symbol" type="hidden" value="BTCUSDT">
 <div class="symbol-menu" hidden="" id="symbolMenu" role="listbox">
 <div class="menu-head"><span>قراردادهای فعال Bybit</span><small id="symbolCount">در حال دریافت…</small></div>
 <div class="symbol-options" id="symbolOptions"></div>
@@ -59,48 +81,20 @@
 </div>
 <small class="field-hint" id="symbolHint">فقط نمادهای فعال بازار خطی Bybit قابل انتخاب‌اند.</small>
 <small class="field-hint leverage-hint" id="maximumLeverage">حداکثر Leverage مجاز Bybit: —</small>
-</label><label>جهت معامله<div class="segmented"><input checked="" id="long" name="direction" type="radio" value="Long"/><label for="long"><span data-icon="long"></span> Long</label><input id="short" name="direction" type="radio" value="Short"/><label for="short"><span data-icon="fall"></span> Short</label></div></label></div>
-<div class="row"><label>سقف قیمت<div class="input-unit"><input inputmode="decimal" name="ceiling" placeholder="0.00" required=""/><span>USDT</span></div></label><label>کف قیمت<div class="input-unit"><input inputmode="decimal" name="floor" placeholder="0.00" required=""/><span>USDT</span></div></label></div>
-<label>مقدار ورودی (USDT)<div class="input-unit"><input inputmode="decimal" name="positionSizeUsdt" placeholder="مثلاً 25" required=""/><span>USDT</span></div></label>
+</label><label>جهت معامله<div class="segmented"><input checked="" id="long" name="direction" type="radio" value="Long"><label for="long"><span data-icon="long"></span> Long</label><input id="short" name="direction" type="radio" value="Short"><label for="short"><span data-icon="fall"></span> Short</label></div></label></div>
+<div class="row"><label>سقف قیمت<div class="input-unit"><input inputmode="decimal" name="ceiling" placeholder="0.00" required=""><span>USDT</span></div></label><label>کف قیمت<div class="input-unit"><input inputmode="decimal" name="floor" placeholder="0.00" required=""><span>USDT</span></div></label></div>
+<label>مقدار ورودی (USDT)<div class="input-unit"><input inputmode="decimal" name="positionSizeUsdt" placeholder="مثلاً 25" required=""><span>USDT</span></div></label>
 <button class="primary" type="submit"><span>ثبت در صف سفارش‌ها</span><b><span data-icon="arrow"></span></b></button>
 <p id="message" role="status"></p>
-</form>
-</section><section aria-labelledby="signal-tab-active" class="card orders-card" hidden="" id="signal-pane-active" role="tabpanel">
-<div class="active-desk-heading"><span class="active-desk-icon" aria-hidden="true">▥</span><div><h2>سیگنال‌های فعال</h2><p>سیگنال‌های در انتظار یا معامله‌های باز</p></div><span class="counter" id="count">۰</span></div>
-<div id="activeSelectionControls" class="active-selection-controls" hidden><button id="selectAllSignals" type="button" aria-pressed="false">☑ انتخاب همه</button><button id="cancelSelectedSignals" type="button" disabled>لغو انتخاب‌شده‌ها</button></div><p id="activeActionStatus" class="active-action-status" role="status"></p>
-<div class="orders" id="orders"><div class="empty"><span>◇</span><strong>هنوز سیگنالی ثبت نشده</strong><p>اولین سیگنال شما اینجا نمایش داده می‌شود.</p></div></div>
-</section><section aria-labelledby="signal-tab-positions" class="card live-positions" hidden id="signal-pane-positions" role="tabpanel">
-<div class="positions-heading"><div><h2>معاملات باز</h2><p>حساب واقعی بای‌بیت · سود و زیان تحقق‌نیافته</p></div><div id="bulkControls" class="position-actions" hidden><button class="security-button" id="closePositionsButton" type="button">بستن همه معاملات</button><button class="security-button" id="resumeEntriesButton" type="button" hidden>ادامهٔ ورودهای جدید</button></div><button id="refreshPositions" type="button" hidden>به‌روزرسانی</button></div>
-<p id="bulkStatus" role="status"></p>
-<p id="positionsStatus" role="status">برای دریافت اطلاعات، این سربرگ را باز کن.</p><div id="positionsList" aria-live="polite"></div>
-<p class="positions-note">سود و زیان دلاری از بای‌بیت؛ درصد بازده نسبت به مارجین اولیهٔ گزارش‌شدهٔ صرافی است. کارمزد و تسویهٔ نهایی ممکن است متفاوت باشد.</p>
-</section><section aria-labelledby="signal-tab-history" class="card history-card" hidden="" id="signal-pane-history" role="tabpanel">
-<div class="section-title"><div><span class="step">03</span><div><h2>تاریخچه نتایج</h2><p>سیگنال‌های پایان‌یافته در ۳۰ روز گذشته</p></div></div><span class="counter" id="historyCount">۰</span></div>
-<div class="history-sources" role="group" aria-label="منشأ نتایج"><button type="button" data-history-source="normal" aria-pressed="true">نتایج سیگنال‌های عادی</button><button type="button" data-history-source="manual" aria-pressed="false">نتایج سیگنال‌های دستی</button></div><div class="history-list" id="history"><div class="empty compact"><span>◇</span><strong>هنوز سیگنال پایان‌یافته‌ای وجود ندارد</strong></div></div>
-</section></section>
-<footer><span>PHOENIX • BYBIT REAL</span><span>استراتژی اصلی حساب واقعی</span></footer>
-</div>
-<section class="home-section embedded-section" hidden id="panel-notifications" aria-label="رویدادها و نتایج"></section>
-<section aria-labelledby="tab-crypto" class="home-section embedded-section" hidden="" id="panel-crypto" role="tabpanel"></section>
-<section aria-labelledby="tab-signal" class="home-section embedded-section" hidden="" id="panel-signal" role="tabpanel"></section>
-<section aria-labelledby="tab-elliott" class="home-section embedded-section" hidden="" id="panel-elliott" role="tabpanel"></section>
-<section aria-labelledby="tab-strategy" class="home-section embedded-section" hidden="" id="panel-strategy" role="tabpanel"></section>
-<section aria-labelledby="tab-statistics" class="home-section crypto-statistics" hidden="" id="panel-statistics" role="tabpanel">
-<div class="statistics-heading">
-<div><span class="eyebrow">TRADE STATISTICS</span><h2>آمار رمز ارزها</h2><p>تمام تاریخچه · مرتب‌شده بر اساس بیشترین تعداد معاملات</p></div>
-<label>استراتژی<select id="statisticsStrategy"><option value="main">استراتژی اصلی · واقعی</option><option value="strategy2">استراتژی ۲ · دمو</option></select></label>
-</div>
-<div aria-live="polite" class="statistics-summary"><span>رمز ارزها <b id="statisticsCoins">—</b></span><span>کل معاملات <b id="statisticsTotal">—</b></span><span class="stat-target">تارگت <b id="statisticsTargets">—</b></span><span class="stat-stop">استاپ <b id="statisticsStops">—</b></span><span class="stat-riskfree">ریسک‌فری <b id="statisticsRiskFree">—</b></span></div>
-<p class="statistics-status" id="statisticsStatus" role="status">با باز کردن این سربرگ، آمار دریافت می‌شود.</p>
-<div class="statistics-table-wrap">
-<table class="statistics-table"><caption class="sr-only">نتایج معاملات هر رمز ارز</caption><thead><tr><th scope="col">#</th><th scope="col">رمز ارز</th><th scope="col">کل</th><th scope="col">باز</th><th class="stat-target" scope="col">تارگت</th><th class="stat-stop" scope="col">استاپ</th><th class="stat-riskfree" scope="col">ریسک‌فری</th><th scope="col">سایر بسته</th></tr></thead><tbody id="statisticsRows"><tr><td colspan="8">در انتظار دریافت آمار…</td></tr></tbody></table>
-</div>
-<p class="statistics-note">کل = باز + تارگت + استاپ + ریسک‌فری + سایر بسته‌شده‌ها. سیگنال‌های منتظر ورود و منقضی یا لغوشده پیش از ورود شمرده نمی‌شوند. به‌روزرسانی خودکار هر ۵ ثانیه.</p>
-</section>
+</form></section></div><div id="cryptoFrameHost"></div></section>
+<section class="home-section embedded-section" hidden="" id="panel-signal" role="tabpanel"></section>
+<section class="home-section embedded-section" hidden="" id="panel-elliott" role="tabpanel"></section>
+<section class="home-section embedded-section" hidden="" id="panel-strategy" role="tabpanel"></section>
+
 </main>
 <dialog aria-labelledby="installPhoenixTitle" class="install-phoenix-dialog" id="installPhoenixDialog">
 <div class="install-phoenix-content">
-<img alt="نشان Phoenix" height="76" src="/icons/phoenix-192.png" width="76"/>
+<img alt="نشان Phoenix" height="76" src="/icons/phoenix-192.png" width="76">
 <h2 id="installPhoenixTitle">نصب Phoenix روی صفحه اصلی</h2>
 <p id="installPhoenixHelp"></p>
 <button class="security-button" id="closeInstallPhoenix" type="button">متوجه شدم</button>
@@ -111,9 +105,9 @@
 <div class="dialog-head"><div><span class="step">03</span><div><h2>تنظیمات امنیتی</h2><p>تغییر نام کاربری و رمز ورود پنل</p></div></div><button aria-label="بستن" id="closeSecurity" type="button">×</button></div>
 <div class="dialog-body">
 <div class="security-note"><i>!</i><span>بعد از ذخیره، اطلاعات ورود قبلی فوراً غیرفعال می‌شود و باید با اطلاعات جدید وارد شوید.</span></div>
-<label>نام کاربری جدید<input autocomplete="username" dir="ltr" maxlength="32" minlength="3" name="username" placeholder="new-username" required=""/></label>
-<label>رمز عبور جدید<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="password" placeholder="حداقل ۶ کاراکتر" required="" type="password"/></label>
-<label>تکرار رمز عبور<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="confirmPassword" placeholder="رمز را دوباره وارد کنید" required="" type="password"/></label>
+<label>نام کاربری جدید<input autocomplete="username" dir="ltr" maxlength="32" minlength="3" name="username" placeholder="new-username" required=""></label>
+<label>رمز عبور جدید<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="password" placeholder="حداقل ۶ کاراکتر" required="" type="password"></label>
+<label>تکرار رمز عبور<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="confirmPassword" placeholder="رمز را دوباره وارد کنید" required="" type="password"></label>
 <small class="password-rule">رمز عبور باید حداقل ۶ کاراکتر باشد.</small>
 <button class="primary" type="submit">ذخیره اطلاعات ورود جدید</button>
 <p id="securityMessage" role="status"></p>
@@ -125,9 +119,9 @@
 <div class="dialog-head"><div><span class="step">05</span><div><h2>دسترسی تلگرام</h2><p>افراد مجاز برای فرمان‌ها و دکمه‌های ربات Phoenix</p></div></div><button aria-label="بستن" id="closeTelegramAccess" type="button">×</button></div>
 <div class="dialog-body">
 <div class="security-note"><i>i</i><span>کاربر ابتدا در گفت‌وگوی خصوصی ربات دستور <b dir="ltr">/myid</b> را می‌زند و شناسه عددی نمایش‌داده‌شده را برای شما می‌فرستد. کانال‌های اعلان دو ربات دیگر باید در تلگرام خصوصی نگه داشته شوند.</span></div>
-<label>نام نمایشی<input maxlength="80" name="displayName" placeholder="مثلاً علی رضایی" required=""/></label>
-<label>شناسه عددی تلگرام<input dir="ltr" inputmode="numeric" name="userId" pattern="[0-9]+" placeholder="مثلاً 123456789" required=""/></label>
-<label>نام کاربری تلگرام (اختیاری)<input autocomplete="off" dir="ltr" name="username" placeholder="username@"/></label>
+<label>نام نمایشی<input maxlength="80" name="displayName" placeholder="مثلاً علی رضایی" required=""></label>
+<label>شناسه عددی تلگرام<input dir="ltr" inputmode="numeric" name="userId" pattern="[0-9]+" placeholder="مثلاً 123456789" required=""></label>
+<label>نام کاربری تلگرام (اختیاری)<input autocomplete="off" dir="ltr" name="username" placeholder="username@"></label>
 <button class="primary" type="submit">افزودن به کاربران مجاز</button>
 <p id="telegramAccessMessage" role="status"></p>
 <div class="user-list-head"><b>کاربران مجاز ربات</b><button id="refreshTelegramAccess" type="button">به‌روزرسانی</button></div>
@@ -139,10 +133,10 @@
 <form id="userForm" method="dialog" novalidate="">
 <div class="dialog-head"><div><span class="step">04</span><div><h2>مدیریت کاربران</h2><p>ساخت دسترسی جداگانه برای نمایش پنل</p></div></div><button aria-label="بستن" id="closeUsers" type="button">×</button></div>
 <div class="dialog-body">
-<label>نام کاربری<input autocomplete="off" dir="ltr" maxlength="32" minlength="3" name="username" placeholder="viewer-name" required=""/></label>
-<label>رمز عبور<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="password" placeholder="حداقل ۶ کاراکتر" required="" type="password"/></label>
-<label>تکرار رمز عبور<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="confirmPassword" required="" type="password"/></label>
-<label class="viewer-check"><input checked="" name="viewerOnly" type="checkbox"/><span><b>فقط مشاهده‌گر</b><small>امکان ثبت، تأیید، حذف یا تغییر هیچ اطلاعاتی را ندارد.</small></span></label>
+<label>نام کاربری<input autocomplete="off" dir="ltr" maxlength="32" minlength="3" name="username" placeholder="viewer-name" required=""></label>
+<label>رمز عبور<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="password" placeholder="حداقل ۶ کاراکتر" required="" type="password"></label>
+<label>تکرار رمز عبور<input autocomplete="new-password" dir="ltr" maxlength="128" minlength="6" name="confirmPassword" required="" type="password"></label>
+<label class="viewer-check"><input checked="" name="viewerOnly" type="checkbox"><span><b>فقط مشاهده‌گر</b><small>امکان ثبت، تأیید، حذف یا تغییر هیچ اطلاعاتی را ندارد.</small></span></label>
 <button class="primary" type="submit">ایجاد کاربر جدید</button>
 <p id="userMessage" role="status"></p>
 <div class="user-list-head"><b>کاربران ثبت‌شده</b><button id="refreshUsers" type="button">به‌روزرسانی</button></div>
@@ -150,15 +144,18 @@
 </div>
 </form>
 </dialog>
-<link href="/history.css?v=1" rel="stylesheet"/>
+<link href="/history.css?v=1" rel="stylesheet">
 <script src="/confirmation.js?v=1"></script>
-<script src="/vendor/lightweight-charts.standalone.production.js"></script><script src="/signal-live-chart.js?v=20261029-axis"></script><script src="/active-signals.js?v=20261101-one-stop"></script>
-<script src="/app.js?v=20261030-connection-status"></script>
+<script src="/vendor/lightweight-charts.standalone.production.js"></script><script src="/signal-live-chart.js?v=20261029-axis"></script><script src="/active-signals.js?v=20261101-organized"></script>
+<script src="/app.js?v=20261101-organized"></script>
 <script src="/install-phoenix.js?v=2"></script>
 <script src="/bulk-controls.js?v=20261030-execution"></script>
 <script src="/crypto-statistics.js?v=20261030-riskfree"></script>
 <script src="/live-positions.js?v=20261030-execution"></script>
 <script src="/hero-motion.js?v=1"></script>
-<script src="/home-tabs.js?workspace=20261101&v=20261030-cache"></script>
-<script src="/phoenix-ice.js?v=1"></script><script defer src="/device-alerts.js?v=1"></script><dialog id="deviceAlertsDialog" class="security-dialog" aria-labelledby="deviceAlertsTitle"><div class="dialog-head"><h2 id="deviceAlertsTitle">اعلان زندهٔ گوشی</h2><button type="button" id="closeDeviceAlerts" aria-label="بستن">×</button></div><div class="dialog-body"><p>اتصال مستقیم به سرور فونیکس؛ مستقل از تلگرام. فقط نزدیک ورود، ورود تأییدشدهٔ صرافی، پله‌های ریسک‌فری، تارگت، استاپ و انقضای سیگنال نزدیک‌شده اعلان می‌شوند.</p><p id="deviceAlertsState" role="status">در حال بررسی…</p><p id="deviceAlertsConnection"></p><label>صدای پیام <select id="deviceAlertSound"><option value="crystal">کریستال</option><option value="pulse">ضربان</option><option value="beacon">فانوس</option><option value="soft">ملایم</option></select></label><div class="device-alert-actions"><button type="button" id="soundDeviceAlerts">تنظیم صدا در اندروید</button><button type="button" id="connectionDeviceAlerts">مخفی‌کردن اعلان اتصال</button><button type="button" id="enableDeviceAlerts">فعال‌سازی اعلان زنده</button><button type="button" id="testDeviceAlerts">تست اعلان گوشی</button><button type="button" id="batteryDeviceAlerts">تنظیم باتری گوشی</button><button type="button" id="disableDeviceAlerts">توقف اعلان زنده</button></div><p id="deviceAlertsMessage" role="alert"></p><p class="device-alert-note">هنگام فعال‌بودن، یک اعلان ثابت وضعیت اتصال را نشان می‌دهد. برای جلوگیری از تأخیر در پس‌زمینه، باتری فونیکس را روی «بدون محدودیت» بگذار. پس از توقف اجباری برنامه توسط اندروید، فونیکس را دوباره باز کن. خروج از حساب، اعلان زنده را متوقف می‌کند. ارسال تلگرام فعلاً برقرار می‌ماند.</p></div></dialog></body>
-</html>
+<script src="/home-tabs.js?v=20261101-theme-preserved"></script>
+<script src="/phoenix-ice.js?v=20261101-theme-preserved"></script><script defer="" src="/device-alerts.js?v=1"></script><dialog id="deviceAlertsDialog" class="security-dialog" aria-labelledby="deviceAlertsTitle"><div class="dialog-head"><h2 id="deviceAlertsTitle">اعلان زندهٔ گوشی</h2><button type="button" id="closeDeviceAlerts" aria-label="بستن">×</button></div><div class="dialog-body"><p>اتصال مستقیم به سرور فونیکس؛ مستقل از تلگرام. فقط نزدیک ورود، ورود تأییدشدهٔ صرافی، پله‌های ریسک‌فری، تارگت، استاپ و انقضای سیگنال نزدیک‌شده اعلان می‌شوند.</p><p id="deviceAlertsState" role="status">در حال بررسی…</p><p id="deviceAlertsConnection"></p><label>صدای پیام <select id="deviceAlertSound"><option value="crystal">کریستال</option><option value="pulse">ضربان</option><option value="beacon">فانوس</option><option value="soft">ملایم</option></select></label><div class="device-alert-actions"><button type="button" id="soundDeviceAlerts">تنظیم صدا در اندروید</button><button type="button" id="connectionDeviceAlerts">مخفی‌کردن اعلان اتصال</button><button type="button" id="enableDeviceAlerts">فعال‌سازی اعلان زنده</button><button type="button" id="testDeviceAlerts">تست اعلان گوشی</button><button type="button" id="batteryDeviceAlerts">تنظیم باتری گوشی</button><button type="button" id="disableDeviceAlerts">توقف اعلان زنده</button></div><p id="deviceAlertsMessage" role="alert"></p><p class="device-alert-note">هنگام فعال‌بودن، یک اعلان ثابت وضعیت اتصال را نشان می‌دهد. برای جلوگیری از تأخیر در پس‌زمینه، باتری فونیکس را روی «بدون محدودیت» بگذار. پس از توقف اجباری برنامه توسط اندروید، فونیکس را دوباره باز کن. خروج از حساب، اعلان زنده را متوقف می‌کند. ارسال تلگرام فعلاً برقرار می‌ماند.</p></div></dialog>
+
+
+
+</body></html>

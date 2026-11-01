@@ -35,5 +35,6 @@
   }
   tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>activate(tab.dataset.marketTab));tab.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;activate(tabs[next].dataset.marketTab,true);});});
   document.querySelectorAll('[role=tabpanel]>summary').forEach(summary=>summary.addEventListener('click',e=>e.preventDefault()));
-  activate('create');
+  window.PhoenixMarketNavigate=activate;
+  activate(new URLSearchParams(location.search).get('section')||'create');
 })();

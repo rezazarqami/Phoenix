@@ -91,7 +91,9 @@ public sealed class Strategy2EntryWebSocketWorker(
             WebSocketReceiveResult result;
             do
             {
-                result = await socket.ReceiveAsync(buffer, token);
+                using var receiveTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                receiveTimeout.CancelAfter(TimeSpan.FromSeconds(45));
+                result = await socket.ReceiveAsync(buffer, receiveTimeout.Token);
                 if (result.MessageType == WebSocketMessageType.Close) return;
                 message.Write(buffer, 0, result.Count);
             } while (!result.EndOfMessage);

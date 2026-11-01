@@ -9,7 +9,9 @@ public sealed class Strategy2Worker(
     ILogger<Strategy2Worker> logger) : BackgroundService
 {
     // Persist claims before network work; the live trade reader must never wait for Bybit/Telegram.
-    private readonly Channel<(ServerSignal Order, bool Submit)> submissions = Channel.CreateUnbounded<(ServerSignal Order, bool Submit)>(
+    private readonly Channel<ServerSignal> submissions = Channel.CreateUnbounded<ServerSignal>(
+        new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<ServerSignal> expirations = Channel.CreateUnbounded<ServerSignal>(
         new UnboundedChannelOptions { SingleReader = true });
 
     public async Task ObservePriceAsync(Guid id, decimal price, bool allowExpiry, CancellationToken token)
@@ -60,21 +62,28 @@ public sealed class Strategy2Worker(
             }
         }
         finally { runtime.Store.ExecutionGate.Release(); }
-        if (claimed is not null) submissions.Writer.TryWrite((claimed, true));
-        if (expired is not null) submissions.Writer.TryWrite((expired, false));
+        if (claimed is not null) submissions.Writer.TryWrite(claimed);
+        if (expired is not null) expirations.Writer.TryWrite(expired);
     }
 
     private async Task SubmitQueueAsync(CancellationToken token)
     {
-        await foreach (var job in submissions.Reader.ReadAllAsync(token))
+        await foreach (var order in submissions.Reader.ReadAllAsync(token))
         {
-            try
-            {
-                if (job.Submit) await SubmitAsync(job.Order, token);
-                else await telegram.ExpiredAsync(job.Order, token);
-            }
+            try { await SubmitAsync(order, token); }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception exception) { logger.LogError(exception, "Strategy 2 dispatch failed for {Signal}", job.Order.Id); }
+            catch (Exception exception) { logger.LogError(exception, "Strategy 2 dispatch failed for {Signal}", order.Id); }
+        }
+    }
+
+    private async Task NotifyExpiryQueueAsync(CancellationToken token)
+    {
+        // A slow Telegram expiry message must never delay an actual entry order.
+        await foreach (var order in expirations.Reader.ReadAllAsync(token))
+        {
+            try { await telegram.ExpiredAsync(order, token); }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception exception) { logger.LogWarning(exception, "Strategy 2 expiry notification failed for {Signal}", order.Id); }
         }
     }
 
@@ -82,6 +91,7 @@ public sealed class Strategy2Worker(
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
         var sender = SubmitQueueAsync(linked.Token);
+        var notifier = NotifyExpiryQueueAsync(linked.Token);
         try
         {
             while (!token.IsCancellationRequested)
@@ -99,7 +109,7 @@ public sealed class Strategy2Worker(
         finally
         {
             linked.Cancel();
-            try { await sender; } catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
+            try { await Task.WhenAll(sender, notifier); } catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
         }
     }
 

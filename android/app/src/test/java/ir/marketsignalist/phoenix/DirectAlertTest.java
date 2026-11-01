@@ -32,6 +32,16 @@ public class DirectAlertTest {
         assertTrue(text.toString().contains("موجودی کافی نیست"));assertTrue(text.toString().contains("دستی"));
         assertTrue(PhoenixAlertService.consume(context,page));assertEquals(2,context.getSystemService(NotificationManager.class).getActiveNotifications().length);assertEquals(12,PhoenixAlertService.prefs(context).getLong("cursor",0));
     }
+    @Test public void timeframeLockAndBlockedEntryCarryTheirExactReasonsOnce()throws Exception{
+        String locked="تایم‌فریم ۱ دقیقه به‌دلیل دو استاپ پیاپی در BTCUSDT و ETHUSDT قفل شد.";
+        String blocked="SOLUSDT به نقطهٔ ورود رسید، اما به‌دلیل قفل بودن تایم‌فریم ۱ دقیقه معامله باز نشد.";
+        JSONObject payload=page(new JSONArray().put(event("risk:TimeframeLocked","TimeframeLocked","").put("symbol","").put("reason",locked)).put(event("sol:EntryBlocked","EntryBlocked","").put("symbol","SOLUSDT").put("reason",blocked)));
+        assertTrue(PhoenixAlertService.consume(context,payload));
+        android.service.notification.StatusBarNotification[] notices=context.getSystemService(NotificationManager.class).getActiveNotifications();
+        assertEquals(2,notices.length);StringBuilder texts=new StringBuilder();for(android.service.notification.StatusBarNotification n:notices)texts.append(n.getNotification().extras.getCharSequence(Notification.EXTRA_TEXT));
+        assertTrue(texts.toString().contains(locked));assertTrue(texts.toString().contains(blocked));
+        assertTrue(PhoenixAlertService.consume(context,payload));assertEquals(2,context.getSystemService(NotificationManager.class).getActiveNotifications().length);
+    }
     @Test public void wrongAccountAndBackwardCursorNeverPost()throws Exception{
         JSONObject page=page(new JSONArray().put(event("private:Target","Target",""))).put("account","someone-else");
         try{PhoenixAlertService.consume(context,page);fail();}catch(java.io.IOException expected){}

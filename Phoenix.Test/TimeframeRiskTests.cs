@@ -19,7 +19,7 @@ internal static class TimeframeRiskTests
             Check(await store.TryClaimSubmissionAsync(third.Id,100),"Configured three-slot cap must allow a third reservation");
             var active=(await store.GetAllAsync()).Where(s=>s.Timeframe=="1"&&s.Status=="Submitting").ToArray();
             foreach(var s in active.Take(2)){s.FilledAtUtc=DateTime.UtcNow;s.Status="Completed";s.Outcome="StopLoss";s.CompletedAtUtc=DateTime.UtcNow;s.StopLossReachedAtUtc=s.CompletedAtUtc;await store.UpdateAsync(s);await store.UpdateAsync(s);}
-            Check(!(await store.TimeframeRulesAsync()).Single(x=>x.Rule.Timeframe=="1").Rule.Blocked,"Two-stop brake applies to caps of two or fewer");
+            Check((await store.TimeframeRulesAsync()).Single(x=>x.Rule.Timeframe=="1").Rule.Blocked,"Two-stop brake also applies when a larger normal cap was configured");
             await store.ChangeTimeframeRuleAsync("1",2);store=Open();var blocked=(await store.TimeframeRulesAsync()).Single(x=>x.Rule.Timeframe=="1");
             Check(blocked.Rule.Blocked&&blocked.Rule.ConsecutiveStops==2,"Brake, cap and idempotent stop streak must survive restart");
             var touched=(await store.GetAllAsync()).First(s=>s.Timeframe=="1"&&s.Status=="Pending");Check(!await store.TryClaimSubmissionAsync(touched.Id,99),"Blocked timeframe cannot submit");

@@ -26,7 +26,7 @@ const base=path.join(__dirname,'../Phoenix.Web/wwwroot');const {chromium}=requir
    await page.locator('.event-card').first().evaluate(e=>window.scrollTo(0,e.getBoundingClientRect().top+scrollY));
    const visible=await page.locator('.event-card').evaluateAll(es=>es.filter(e=>{const r=e.getBoundingClientRect();return r.top>=-1&&r.bottom<=innerHeight;}).length);
    assert.ok(visible>=10,`At least ten collapsed results must fit in ${height}px; got ${visible}`);
-   assert.ok(await page.locator('.event-card').first().evaluate(e=>e.getBoundingClientRect().height<=58),'Result rows must remain compact');
+   const rowHeight=await page.locator('.event-card').first().evaluate(e=>e.getBoundingClientRect().height);assert.ok(rowHeight<=58,`Result rows must remain compact; got ${rowHeight}px`);
    if(process.env.JOURNAL_SCREENSHOTS)await page.screenshot({path:process.env.JOURNAL_SCREENSHOTS+`/compact-${width}.png`});
    await page.locator('.event-card .event-detail>summary').first().click();await page.locator('.event-card .signal-live-canvas canvas').first().waitFor();
    assert.equal(await page.locator('.event-levels:visible').count(),1);assert.equal(chartRequests,0,'Live chart must not load the old image');assert.ok((await page.locator('.signal-live-status').first().textContent()).includes('541'),'Current price must be shown');assert.ok(await page.locator('.event-detail[open] .event-levels').textContent().then(t=>t.includes('539.3')),'Original entry level must remain accessible');assert.ok(await page.locator('.event-detail[open] .wallet-source').isVisible(),'Balance provenance belongs in expanded details');

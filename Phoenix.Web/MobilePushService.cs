@@ -72,10 +72,9 @@ public sealed partial class MobilePushService
     }
     public Task<MobilePushResult> SendAsync(string owner, string kind, string destination, CancellationToken ct) =>
         SendCoreAsync(owner, kind, Guid.NewGuid().ToString(), "Test", null, ct);
-    private async Task<MobilePushResult> SendCoreAsync(string owner, string kind, string eventId, string eventKind, Guid? deviceId, CancellationToken ct)
+    private async Task<MobilePushResult> SendCoreAsync(string owner, string kind, string eventId, string eventKind, Guid? deviceId, CancellationToken ct,string? reason=null)
     {
-        // Deliberately generic notification content: private records are fetched
-        // only after the user opens and unlocks the app.
+        // Timeframe risk notices carry the specific explanation requested by the account owner.
         if (kind is not ("signal" or "test")) throw new ArgumentException("نوع اعلان معتبر نیست.");
         var destination = "/phoenix";
         if (!Configured) return new(0, 0, false);
@@ -97,7 +96,7 @@ public sealed partial class MobilePushService
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"https://fcm.googleapis.com/v1/projects/{account.Project}/messages:send");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth);
-            request.Content = JsonContent.Create(new { message = new { token = item.Token, data = new { kind, destination, eventId, eventKind }, android = new { priority = "high", ttl = "300s" } } });
+            request.Content = JsonContent.Create(new { message = new { token = item.Token, data = new { kind, destination, eventId, eventKind=eventKind is "TimeframeLocked" or "EntryBlocked"?"EntryError":eventKind, reason=reason??"" }, android = new { priority = "high", ttl = "300s" } } });
             try
             {
                 using var response = await http.SendAsync(request, ct);

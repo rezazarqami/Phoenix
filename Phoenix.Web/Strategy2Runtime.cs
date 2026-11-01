@@ -37,7 +37,7 @@ public sealed class Strategy2Runtime
     private MobileSignalFeed? journal;
     public MobileSignalFeed Journal(DedicatedTelegramOptions dedicated)
     {
-        lock (journalGate) return journal ??= new MobileSignalFeed(Store, dedicated, Options.QueuePath + ".device-alerts.db", includeInitialExpiry: true, includeUnowned: true);
+        lock (journalGate) return journal ??= new MobileSignalFeed(Store, dedicated, Options.QueuePath + ".device-alerts.db", includeInitialExpiry: true, includeUnowned: true, includeTimeframeLocks: false);
     }
     public Strategy2Options Options { get; }
     public ServerOrderStore Store { get; }

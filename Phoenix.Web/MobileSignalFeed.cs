@@ -7,7 +7,7 @@ public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateT
 public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<DeviceSignalAlert> Events,DateTime ServerTimeUtc);
 
 // First-party authenticated feed. No Telegram, Firebase, third-party account or device secret is needed.
-public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated,string? storagePath=null,bool includeInitialExpiry=false,bool includeUnowned=false)
+public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated,string? storagePath=null,bool includeInitialExpiry=false,bool includeUnowned=false,bool includeTimeframeLocks=true)
 {
     private readonly SemaphoreSlim gate=new(1,1);
     private DateTime refreshed=DateTime.MinValue;
@@ -30,8 +30,17 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
         : s.ExpireReason=="InitialBoundary" ? "سیگنال پیش از ورود از مرز اولیه عبور کرد."
         : s.ExpireReason=="TargetAfterActivation" ? "پس از نزدیک شدن به ورود، پیش از ثبت ورود به تارگت برگشت."
         : s.ExpireReason=="PositionAlreadyOpen" ? "هنگام رسیدن به ورود، معاملهٔ دیگری در استراتژی دو فعال بود."
-        : s.ExpireReason=="TimeframeBlocked" ? "سیگنال هنگام توقف این تایم‌فریم به ورود رسید و منقضی شد." : null;
-    public static DeviceSignalPage ForClient(DeviceSignalPage page,int version) => version>=2 ? page : page with {Events=page.Events.Where(e=>e.Kind is not ("EntryError" or "ManualClosed")).ToArray()};
+        : s.ExpireReason=="TimeframeBlocked" ? TimeframeAlertText.Blocked(s) : null;
+    public static DeviceSignalPage ForClient(DeviceSignalPage page,int version)
+    {
+        if(version>=3)return page;
+        // Existing v2 apps already display EntryError.reason verbatim. Keep their cursor usable
+        // and the complete new message until the native app update is installed.
+        var events=page.Events.Where(e=>version>=2||e.Kind is not ("EntryError" or "ManualClosed"))
+            .Select(e=>e.Kind is "TimeframeLocked" or "EntryBlocked" ? e with{Kind=version>=2?"EntryError":"Expired"}:e).ToArray();
+        return page with{Events=events};
+    }
+
     public async Task CaptureAsync(string owner,CancellationToken token)
     {
         await gate.WaitAsync(token);
@@ -53,6 +62,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
                 await cmd.ExecuteNonQueryAsync(token);
                 await SaveHistoryAsync(db,tx,owner,s,e,token);
             }
+            await SaveLockNoticesAsync(db,tx,owner,now.AddDays(-1),true,token);
             using var clean=db.CreateCommand();clean.Transaction=tx;clean.CommandText="DELETE FROM device_signal_events WHERE at_utc<$before";
             clean.Parameters.AddWithValue("$before",now.AddDays(-7).ToString("O"));await clean.ExecuteNonQueryAsync(token);
             using var filtered=db.CreateCommand();filtered.Transaction=tx;

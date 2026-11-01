@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Phoenix.Web;
 
-public sealed record MobileSignalEvent(string Id, string Kind, DateTime At);
+public sealed record MobileSignalEvent(string Id, string Kind, DateTime At, string? Reason=null, string? Symbol=null, string? Timeframe=null);
 public sealed record MobileFirebaseConfig(string AppId, string ApiKey, string ProjectId, string SenderId)
 {
     public static MobileFirebaseConfig? FromEnvironment()
@@ -36,6 +36,12 @@ public sealed partial class MobilePushService
             """;
         cmd.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         await cmd.ExecuteNonQueryAsync(ct);
+        bool hasReason=false;
+        using(var columns=db.CreateCommand()){
+            columns.CommandText="PRAGMA table_info(mobile_delivery)";using var reader=await columns.ExecuteReaderAsync(ct);
+            while(await reader.ReadAsync(ct))hasReason|=reader.GetString(1)=="reason";
+        }
+        if(!hasReason){using var alter=db.CreateCommand();alter.CommandText="ALTER TABLE mobile_delivery ADD COLUMN reason TEXT";await alter.ExecuteNonQueryAsync(ct);}
     }
 
     public async Task QueueAsync(string owner, IEnumerable<MobileSignalEvent> events, DateTimeOffset now, CancellationToken ct)
@@ -52,12 +58,13 @@ public sealed partial class MobilePushService
                 if (at < now.AddMinutes(-15).ToUnixTimeMilliseconds() || at > now.ToUnixTimeMilliseconds()) continue;
                 using var cmd = db.CreateCommand(); cmd.Transaction = transaction;
                 cmd.CommandText = """
-                    INSERT OR IGNORE INTO mobile_delivery(owner,device_id,event_id,event_at,kind)
-                    SELECT owner,device_id,$e,$at,$kind FROM mobile_devices
-                    WHERE owner=$o AND enabled_since<=$at AND $at>=(SELECT value FROM mobile_state WHERE key='since');
+                    INSERT INTO mobile_delivery(owner,device_id,event_id,event_at,kind,reason)
+                    SELECT owner,device_id,$e,$at,$kind,$reason FROM mobile_devices
+                    WHERE owner=$o AND enabled_since<=$at AND $at>=(SELECT value FROM mobile_state WHERE key='since')
+                    ON CONFLICT(owner,device_id,event_id) DO UPDATE SET reason=COALESCE(mobile_delivery.reason,excluded.reason);
                     """;
                 cmd.Parameters.AddWithValue("$o", owner); cmd.Parameters.AddWithValue("$e", e.Id);
-                cmd.Parameters.AddWithValue("$at", at); cmd.Parameters.AddWithValue("$kind", e.Kind);
+                cmd.Parameters.AddWithValue("$at", at); cmd.Parameters.AddWithValue("$kind", e.Kind);cmd.Parameters.AddWithValue("$reason",(object?)e.Reason??DBNull.Value);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             using var clean = db.CreateCommand(); clean.Transaction = transaction;
@@ -71,21 +78,21 @@ public sealed partial class MobilePushService
     public async Task DeliverPendingAsync(DateTimeOffset now, CancellationToken ct)
     {
         if (!Configured) return;
-        var jobs = new List<(string Owner, Guid Device, string Id, string Kind, int Attempts)>();
+        var jobs = new List<(string Owner, Guid Device, string Id, string Kind, int Attempts,string? Reason)>();
         await gate.WaitAsync(ct);
         try
         {
             await using var db = await OpenAsync(ct); using var cmd = db.CreateCommand();
             cmd.CommandText = """
                 DELETE FROM mobile_delivery WHERE kind IN ('Created','Cancelled');
-                SELECT n.owner,n.device_id,n.event_id,n.kind,n.attempts FROM mobile_delivery n
+                SELECT n.owner,n.device_id,n.event_id,n.kind,n.attempts,n.reason FROM mobile_delivery n
                 JOIN mobile_devices d ON d.owner=n.owner AND d.device_id=n.device_id AND d.enabled_since<=n.event_at
                 WHERE n.sent=0 AND n.next_attempt<=$now AND n.event_at>=$since ORDER BY n.event_at LIMIT 50
                 """;
             cmd.Parameters.AddWithValue("$now", now.ToUnixTimeMilliseconds());
             cmd.Parameters.AddWithValue("$since", now.AddMinutes(-15).ToUnixTimeMilliseconds());
             using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct)) jobs.Add((reader.GetString(0), Guid.Parse(reader.GetString(1)), reader.GetString(2), reader.GetString(3), reader.GetInt32(4)));
+            while (await reader.ReadAsync(ct)) jobs.Add((reader.GetString(0), Guid.Parse(reader.GetString(1)), reader.GetString(2), reader.GetString(3), reader.GetInt32(4),reader.IsDBNull(5)?null:reader.GetString(5)));
         }
         finally { gate.Release(); }
         foreach (var job in jobs)
@@ -94,7 +101,7 @@ public sealed partial class MobilePushService
             var success = false;
             try
             {
-                var result = await SendCoreAsync(job.Owner, "signal", job.Id, job.Kind, job.Device, ct);
+                var result = await SendCoreAsync(job.Owner, "signal", job.Id, job.Kind, job.Device, ct,job.Reason);
                 success = result.Configured && result.Sent > 0 && result.Failed == 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -117,12 +124,13 @@ public sealed partial class MobilePushService
 public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService push, MobileSignalFeed feed, DedicatedTelegramOptions dedicated,
     ILogger<MobileSignalWorker> logger) : BackgroundService
 {
-    public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "EntryError", "ManualClosed" };
+    public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "EntryError", "ManualClosed", "EntryBlocked", "TimeframeLocked" };
     public static IEnumerable<MobileSignalEvent> Events(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated, bool includeInitialExpiry = false, bool includeUnowned = false)
     {
         var own = string.Equals(signal.RequestedByUsername, owner, StringComparison.OrdinalIgnoreCase);
         if (!own && !(includeUnowned && string.IsNullOrWhiteSpace(signal.RequestedByUsername)) && (signal.PublicSignalNumber is null || dedicated.Owns(signal.RequestedByUsername))) yield break;
-        if ((signal.ExpireAdjustedAtUtc ?? signal.EntryTriggeredAtUtc) is { } near)
+        var blocked=signal.ExpireReason=="TimeframeBlocked";
+        if (!blocked && (signal.ExpireAdjustedAtUtc ?? signal.EntryTriggeredAtUtc) is { } near)
             yield return new($"{signal.Id}:NearEntry","NearEntry",near);
         if(signal.EarlyProtectionAtUtc is { } first)
             yield return new($"{signal.Id}:FirstProtection","FirstProtection",first);
@@ -132,7 +140,10 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
             yield return new($"{signal.Id}:EntryError","EntryError",signal.EntryTriggeredAtUtc??signal.CreatedAtUtc);
         if (signal.CompletedAtUtc is { } end && signal.Outcome is { } outcome && Kinds.Contains(outcome) &&
             (outcome != "Expired" || includeInitialExpiry || signal.ExpireAdjustedAtUtc is not null || signal.EntryTriggeredAtUtc is not null))
-            yield return new($"{signal.Id}:{outcome}", outcome, end);
+        {
+            var kind=blocked?"EntryBlocked":outcome;
+            yield return new($"{signal.Id}:{kind}",kind,end,blocked?TimeframeAlertText.Blocked(signal):null,signal.Symbol,signal.Timeframe);
+        }
     }
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -144,7 +155,9 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
                 {
                     await feed.CaptureAsync(owner,ct);
                     var signals = await store.GetAllAsync(ct);
-                    await push.QueueAsync(owner, signals.SelectMany(s => Events(s, owner, dedicated)).OrderBy(e => e.At), DateTimeOffset.UtcNow, ct);
+                    var now=DateTimeOffset.UtcNow;
+                    var locks=await store.TimeframeLockNoticesAsync(now.UtcDateTime.AddMinutes(-15),ct);
+                    await push.QueueAsync(owner, signals.SelectMany(s => Events(s, owner, dedicated)).Concat(locks.Select(TimeframeAlertText.Locked)).OrderBy(e => e.At), now, ct);
                     await push.DeliverPendingAsync(DateTimeOffset.UtcNow, ct);
                 }
             }

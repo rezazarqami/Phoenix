@@ -32,7 +32,9 @@ public static class MobilePushTests
             using var doc=JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());var message=doc.RootElement.GetProperty("message");
             var token=message.GetProperty("token").GetString()!;var data=message.GetProperty("data");var id=data.GetProperty("eventId").GetString()!;
             Check(data.GetProperty("destination").GetString()=="/phoenix","Signal destination escaped the allowlist.");
-            Check(data.GetProperty("eventKind").GetString()=="NearEntry","Missing event kind.");
+            var eventKind=data.GetProperty("eventKind").GetString();
+            Check(eventKind is "NearEntry" or "EntryError","Missing event kind.");
+            if(eventKind=="EntryError")Check(data.GetProperty("reason").GetString()=="تایم‌فریم ۱ دقیقه به‌خاطر BTCUSDT و ETHUSDT قفل شد.","Risk reason must survive the durable push outbox");
             Check(!message.TryGetProperty("notification",out _),"Private fields must not become background notification content.");
             calls.Add((token,id));
             return token.StartsWith("token-a")&&calls.Count(x=>x.Token==token)==1
@@ -65,6 +67,11 @@ public static class MobilePushTests
             service.QueueAsync("owner",new[]{next},now.AddSeconds(11),default).GetAwaiter().GetResult();
             service.RemoveAsync("owner",a,default).GetAwaiter().GetResult();
             service.DeliverPendingAsync(now.AddSeconds(12),default).GetAwaiter().GetResult();Check(calls.Count==4&&calls[^1].Token.StartsWith("token-b"),"A disabled device received a queued event.");
+            var locked=new MobileSignalEvent("risk:"+Guid.NewGuid().ToString("N")+":TimeframeLocked","TimeframeLocked",at.AddSeconds(20),"تایم‌فریم ۱ دقیقه به‌خاطر BTCUSDT و ETHUSDT قفل شد.");
+            service.QueueAsync("owner",new[]{locked},now.AddSeconds(21),default).GetAwaiter().GetResult();
+            service=new MobilePushService(factory);service.DeliverPendingAsync(now.AddSeconds(22),default).GetAwaiter().GetResult();
+            Check(calls.Count==5&&calls[^1].Event==locked.Id,"Risk alert must deliver once after a service restart");
+            service.QueueAsync("owner",new[]{locked},now.AddSeconds(23),default).GetAwaiter().GetResult();service.DeliverPendingAsync(now.AddSeconds(23),default).GetAwaiter().GetResult();Check(calls.Count==5,"Risk alert must not repeat on scan");
         }
         finally
         {

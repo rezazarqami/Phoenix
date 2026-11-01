@@ -52,7 +52,7 @@ public final class PhoenixAlertService extends Service {
                     if(cookie==null){state("برای ادامه وارد فونیکس شو");break;}
                     long cursor=prefs(this).getLong("cursor",0);
                     connection=connections.open(new URL(HOME+"/api/mobile/feed?after="+cursor+"&wait=20"));
-                    connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(10000);connection.setReadTimeout(30000);connection.setRequestProperty("Cookie",cookie);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("X-Phoenix-Event-Version","2");
+                    connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(10000);connection.setReadTimeout(30000);connection.setRequestProperty("Cookie",cookie);connection.setRequestProperty("Accept","application/json");connection.setRequestProperty("X-Phoenix-Event-Version","3");
                     int code=connection.getResponseCode();
                     if(code==401||code==403||code==302){state("نشست پایان یافته؛ وارد فونیکس شو");prefs(this).edit().putBoolean("enabled",false).apply();break;}
                     if(code!=200)throw new java.io.IOException("Server unavailable");

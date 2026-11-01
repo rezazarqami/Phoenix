@@ -18,6 +18,8 @@ Run("Connection status expires stale checks and separates symbol failures", Conn
 Run("Connection probes revalidate read-only account access independently of public access", ConnectionStatusTests.PeriodicReadOnlyChecks);
 Run("SR proposal succeeds without unrelated BTC market requests", SupportResistanceNetworkTests.Run);
 Run("Single close isolates hedge side, confirms closure and records manual results", SinglePositionCloseTests.Close);
+Run("Timeframe one-stop probation blocks replacements, admits one sequential trade and resets on target across all intervals", TimeframeProbationTests.SurvivorAndSequential);
+Run("Timeframe alerts persist exact stop causes, blocked entries, compatibility and re-lock identity", TimeframeAlertTests.DurableNotices);
 Run("Timeframe reservations enforce caps, durable two-stop brake, release and failure reporting", TimeframeRiskTests.Limits);
 Run("Strategy 2 entry claims survive later expiry and isolate paused recovery plus journal", Strategy2EntryTests.EntryAndExpiry);
 Run("Journal sources filter before paging and preserve legacy wallets across restart", JournalSourceTests.Isolation);

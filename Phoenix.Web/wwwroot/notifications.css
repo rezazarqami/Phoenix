@@ -30,3 +30,9 @@ html body,html.embedded-view body{background:#061a37!important;color:#edf5ff;col
 .event-direction{font:700 9px Arial;direction:ltr;margin-inline-start:auto;padding-inline:5px;color:#24ba9c}.event-direction[data-side=Short]{color:#eb7b96}.event-card[data-kind=EntryError] .event-kind{color:#eb7b96}
 
 .journal-sources{grid-template-columns:repeat(3,minmax(0,1fr))}.journal-sources button{min-width:0;font-size:clamp(9px,2.7vw,11px);padding:8px 3px;line-height:1.7}
+
+.event-card[data-kind=TimeframeLocked] .event-kind,.event-card[data-kind=EntryBlocked] .event-kind{color:#f2bf73}
+
+.event-card{padding-block:1px}
+.event-card>.event-time{display:block;color:#9bb8d4;font:9px/10px Vazir,Tahoma,sans-serif;min-height:10px;margin:0;text-align:right;direction:rtl;font-variant-numeric:tabular-nums}
+.event-card .event-wallet{min-height:13px;margin-top:1px;padding-top:1px}

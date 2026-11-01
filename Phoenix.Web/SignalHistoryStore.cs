@@ -78,6 +78,16 @@ public sealed class SignalHistoryStore
         finally { _gate.Release(); }
     }
 
+    internal async Task<IReadOnlyList<ServerSignal>> RiskStopSignalsAsync(string timeframe,CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);try{
+            await using var db=await OpenAsync(ct);using var cmd=db.CreateCommand();
+            cmd.CommandText="SELECT payload FROM signals WHERE COALESCE(timeframe,'unknown')=$tf AND json_extract(payload,'$.outcome')='StopLoss' ORDER BY json_extract(payload,'$.completedAtUtc') DESC LIMIT 2";
+            Add(cmd,"$tf",timeframe);var rows=new List<ServerSignal>();using var reader=await cmd.ExecuteReaderAsync(ct);
+            while(await reader.ReadAsync(ct))if(JsonSerializer.Deserialize<ServerSignal>(reader.GetString(0),JsonOptions) is {} signal)rows.Add(signal);
+            return rows;
+        }finally{_gate.Release();}
+    }
     internal async Task<IReadOnlyList<ServerSignal>> NotificationSignalsAsync(DateTime since,CancellationToken token)
     {
         await _gate.WaitAsync(token);

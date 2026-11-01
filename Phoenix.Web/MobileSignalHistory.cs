@@ -7,23 +7,40 @@ public sealed partial class MobileSignalFeed
     private static async Task SaveHistoryAsync(SqliteConnection db,SqliteTransaction tx,string owner,ServerSignal s,MobileSignalEvent e,CancellationToken ct)
     {
         var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,s.EntryPrice,s.TakeProfit,s.StopLoss,s.Timeframe,e.Kind is "Target" or "RiskFree" or "StopLoss" or "ManualClosed" ? s.ResultWalletBalanceUsdt : null,s.ResultWalletAtUtc,s.ResultWalletBalanceUsdt.HasValue?"LocalSnapshot":null,s.Origin,EventReason(s));
+        await SaveAlertHistoryAsync(db,tx,owner,payload,ct);
+    }
+    private static async Task SaveAlertHistoryAsync(SqliteConnection db,SqliteTransaction tx,string owner,DeviceSignalAlert payload,CancellationToken ct)
+    {
         using var cmd=db.CreateCommand();cmd.Transaction=tx;
         cmd.CommandText="INSERT INTO device_signal_history(owner,event_id,payload,at_utc) VALUES($o,$id,$p,$at) ON CONFLICT(owner,event_id) DO UPDATE SET payload=excluded.payload WHERE json_extract(device_signal_history.payload,'$.WalletBalanceUsdt') IS NULL AND json_extract(excluded.payload,'$.WalletBalanceUsdt') IS NOT NULL";
-        cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
-        cmd.Parameters.AddWithValue("$p",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));
+        cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",payload.Id);
+        cmd.Parameters.AddWithValue("$p",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",payload.At.ToString("O"));
         await cmd.ExecuteNonQueryAsync(ct);
         using var origin=db.CreateCommand();origin.Transaction=tx;
         origin.CommandText="UPDATE device_signal_history SET payload=json_set(payload,'$.Origin',$origin) WHERE owner=$o AND event_id=$id AND json_extract(payload,'$.Origin') IS NOT $origin";
-        origin.Parameters.AddWithValue("$o",owner.ToLowerInvariant());origin.Parameters.AddWithValue("$id",e.Id);origin.Parameters.AddWithValue("$origin",(object?)s.Origin??DBNull.Value);await origin.ExecuteNonQueryAsync(ct);
+        origin.Parameters.AddWithValue("$o",owner.ToLowerInvariant());origin.Parameters.AddWithValue("$id",payload.Id);origin.Parameters.AddWithValue("$origin",(object?)payload.Origin??DBNull.Value);await origin.ExecuteNonQueryAsync(ct);
+    }
+    private async Task SaveLockNoticesAsync(SqliteConnection db,SqliteTransaction tx,string owner,DateTime since,bool toFeed,CancellationToken ct)
+    {
+        if(!includeTimeframeLocks)return;
+        foreach(var notice in await store.TimeframeLockNoticesAsync(since,ct)){
+            var e=TimeframeAlertText.Locked(notice);
+            var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,"تایم‌فریم "+TimeframeAlertText.Name(e.Timeframe),"",null,Timeframe:e.Timeframe,Reason:e.Reason);
+            if(toFeed){using var cmd=db.CreateCommand();cmd.Transaction=tx;
+                cmd.CommandText="INSERT OR IGNORE INTO device_signal_events(owner,event_id,payload,at_utc) VALUES($o,$id,$p,$at)";
+                cmd.Parameters.AddWithValue("$o",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);cmd.Parameters.AddWithValue("$p",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));await cmd.ExecuteNonQueryAsync(ct);
+            }
+            await SaveAlertHistoryAsync(db,tx,owner,payload,ct);
+        }
     }
     public async Task<DeviceHistoryPage> HistoryAsync(string owner,long? before,string? eventId,CancellationToken ct,string? view=null,string? source=null)
     {
         if(view is not (null or "all" or "results"))throw new ArgumentException("سربرگ معتبر نیست.");
         if(source is not (null or "normal" or "manual"))throw new ArgumentException("منشأ سیگنال معتبر نیست.");
         var sourceFilter=source=="manual" ? " AND json_extract(payload,'$.Origin')='ManualChart'" : source=="normal" ? " AND COALESCE(json_extract(payload,'$.Origin'),'')!='ManualChart'" : "";
-        var resultFilter=view=="results" ? " AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError')" : "";
+        var resultFilter=view=="results" ? " AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError','EntryBlocked')" : "";
         if (view=="results" && includeInitialExpiry)
-            resultFilter=" AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError','Expired')";
+            resultFilter=" AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError','EntryBlocked','Expired')";
         resultFilter+=sourceFilter;
         if(before is <=0 || eventId?.Length>120)throw new ArgumentException("نشانگر رویداد معتبر نیست.");
         await CaptureAsync(owner,ct);await gate.WaitAsync(ct);
@@ -36,6 +53,7 @@ public sealed partial class MobileSignalFeed
                     using var tx=db.BeginTransaction();
                     foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated,includeInitialExpiry,includeUnowned).Select(e=>(s,e))).OrderBy(p=>p.e.At))
                         if(pair.e.At.Kind==DateTimeKind.Utc && pair.e.At<=DateTime.UtcNow)await SaveHistoryAsync(db,tx,owner,pair.s,pair.e,ct);
+                    await SaveLockNoticesAsync(db,tx,owner,DateTime.MinValue,false,ct);
                     using var migrate=db.CreateCommand();migrate.Transaction=tx;
                     migrate.CommandText="INSERT OR IGNORE INTO device_signal_history(owner,event_id,payload,at_utc) SELECT owner,event_id,payload,at_utc FROM device_signal_events WHERE owner=$o; INSERT OR IGNORE INTO device_history_initialized VALUES($o)";
                     migrate.Parameters.AddWithValue("$o",owner.ToLowerInvariant());await migrate.ExecuteNonQueryAsync(ct);tx.Commit();

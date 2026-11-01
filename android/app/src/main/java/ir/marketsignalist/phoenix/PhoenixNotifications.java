@@ -49,6 +49,8 @@ final class PhoenixNotifications {
             case "Target":return "یک سیگنال به تارگت رسید.";
             case "StopLoss":return "یک سیگنال به استاپ رسید.";
             case "RiskFree":return "یک معامله با ریسک‌فری بسته شد.";
+            case "TimeframeLocked":return "یک تایم‌فریم به‌دلیل دو استاپ پیاپی قفل شد.";
+            case "EntryBlocked":return "قیمت به ورود رسید، اما به‌دلیل قفل بودن تایم‌فریم معامله باز نشد.";
             case "EntryError":return "ورود معامله با خطا مواجه شد؛ علت را در نتایج ببین.";
             case "Expired":return "یک سیگنال اکسپایر شد.";
             case "Cancelled":return "یک سیگنال لغو شد.";

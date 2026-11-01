@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{JSDOM}=require('./ui/node_modules/jsdom');
+const root=path.join(__dirname,'../Phoenix.Web/wwwroot'),flush=()=>new Promise(r=>setImmediate(r));
+(async()=>{
+const dom=new JSDOM(fs.readFileSync(path.join(root,'notifications.html'),'utf8'),{url:'https://phoenix.test/notifications',runScripts:'outside-only'}),w=dom.window,d=w.document;w.setInterval=()=>0;
+const occurred='2026-11-01T09:26:12.000Z';
+w.fetch=async url=>{if(url.includes('/auth/me'))return {ok:true,json:async()=>({username:'owner',isAdmin:true})};if(url.includes('wallet-recovery'))return {ok:true,json:async()=>({state:'waiting'})};const q=new URL(url,'https://phoenix.test').searchParams,source=q.get('source')||'normal',result=q.get('view')==='results';return {ok:true,json:async()=>({events:[{id:'00000000-0000-4000-8000-000000000001:'+(result?'Target':'NearEntry'),kind:result?'Target':'NearEntry',symbol:source.toUpperCase(),sequence:1,at:occurred,walletAtUtc:'2026-11-02T01:02:03Z',walletBalanceUsdt:10}],hasMore:false,focusFound:true})};};
+w.eval(fs.readFileSync(path.join(root,'notifications.js'),'utf8'));await flush();await flush();
+for(const source of ['normal','manual','strategy2']){d.querySelector('[data-journal-source='+source+']').click();await flush();for(const view of ['all','results']){d.querySelector('[data-journal-tab='+view+']').click();await flush();const stamp=d.querySelector('.event-card>.event-time');assert.ok(stamp,source+'/'+view+' timestamp is visible without opening details');assert.equal(stamp.dateTime,occurred);assert.ok(stamp.textContent.includes('۱۴۰۵/۰۸/۱۰'));assert.ok(stamp.textContent.includes('۱۲:۵۶:۱۲'),'Occurrence time is shown in Tehran with seconds, regardless of device timezone');assert.match(stamp.getAttribute('aria-label'),/تهران/);assert.equal(stamp.closest('details'),null);}}
+dom.window.close();console.log('PASS all three journal sources in both views: visible occurrence date/time, Tehran timezone, seconds and independent wallet timestamp');
+})().catch(e=>{console.error(e);process.exitCode=1;});

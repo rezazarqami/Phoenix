@@ -58,7 +58,7 @@
     document.querySelectorAll('.home-section').forEach(panel=>panel.hidden=panel.id!=='panel-'+name);
     ensureFrame(name,query);
     document.querySelector('#panel-'+name+' iframe')?.contentWindow?.postMessage({type:'phoenix-frame-visible'},location.origin);
-    document.body.classList.remove('review-focus-host');
+    document.body.classList.remove('review-focus-host','chart-focus-host');
     document.body.classList.toggle('crypto-market-open',name==='crypto');
     document.querySelector('.market-card').hidden=name!=='home';
     const hash='#'+name+(query?'?'+query:'');if(updateHash&&location.hash!==hash)history.replaceState(null,'',hash);
@@ -75,6 +75,11 @@
       tabs[next].focus();
       activate(tabs[next].dataset.panel);
     });
+  });
+  window.addEventListener('message',event=>{
+    if(event.origin!==location.origin||event.data?.type!=='phoenix-chart-focus')return;
+    const frame=document.querySelector('#panel-crypto iframe');if(frame?.contentWindow!==event.source)return;
+    document.body.classList.toggle('chart-focus-host',event.data.active===true);
   });
   window.addEventListener('message',event=>{
     if(event.origin!==location.origin||event.data?.type!=='phoenix-navigate')return;

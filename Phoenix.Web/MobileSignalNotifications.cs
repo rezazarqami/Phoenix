@@ -118,10 +118,10 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
     ILogger<MobileSignalWorker> logger) : BackgroundService
 {
     public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "EntryError", "ManualClosed" };
-    public static IEnumerable<MobileSignalEvent> Events(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated)
+    public static IEnumerable<MobileSignalEvent> Events(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated, bool includeInitialExpiry = false, bool includeUnowned = false)
     {
         var own = string.Equals(signal.RequestedByUsername, owner, StringComparison.OrdinalIgnoreCase);
-        if (!own && (signal.PublicSignalNumber is null || dedicated.Owns(signal.RequestedByUsername))) yield break;
+        if (!own && !(includeUnowned && string.IsNullOrWhiteSpace(signal.RequestedByUsername)) && (signal.PublicSignalNumber is null || dedicated.Owns(signal.RequestedByUsername))) yield break;
         if ((signal.ExpireAdjustedAtUtc ?? signal.EntryTriggeredAtUtc) is { } near)
             yield return new($"{signal.Id}:NearEntry","NearEntry",near);
         if(signal.EarlyProtectionAtUtc is { } first)
@@ -131,7 +131,7 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
         if(signal.FilledAtUtc is null && signal.Status is "Error" or "Rejected" or "Deactivated" or "RecoveryRequired" && signal.CompletedAtUtc is null)
             yield return new($"{signal.Id}:EntryError","EntryError",signal.EntryTriggeredAtUtc??signal.CreatedAtUtc);
         if (signal.CompletedAtUtc is { } end && signal.Outcome is { } outcome && Kinds.Contains(outcome) &&
-            (outcome != "Expired" || signal.ExpireAdjustedAtUtc is not null || signal.EntryTriggeredAtUtc is not null))
+            (outcome != "Expired" || includeInitialExpiry || signal.ExpireAdjustedAtUtc is not null || signal.EntryTriggeredAtUtc is not null))
             yield return new($"{signal.Id}:{outcome}", outcome, end);
     }
     protected override async Task ExecuteAsync(CancellationToken ct)

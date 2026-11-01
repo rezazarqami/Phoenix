@@ -1,4 +1,5 @@
 using Phoenix.Engine.Exchanges.Bybit;
+using System.Threading.Channels;
 
 namespace Phoenix.Web;
 
@@ -7,27 +8,98 @@ public sealed class Strategy2Worker(
     Strategy2TelegramNotifier telegram,
     ILogger<Strategy2Worker> logger) : BackgroundService
 {
-    public Task SubmitClaimedAsync(ServerSignal order, CancellationToken token) => SubmitAsync(order, token);
+    // Persist claims before network work; the live trade reader must never wait for Bybit/Telegram.
+    private readonly Channel<(ServerSignal Order, bool Submit)> submissions = Channel.CreateUnbounded<(ServerSignal Order, bool Submit)>(
+        new UnboundedChannelOptions { SingleReader = true });
 
-    public async Task ExpireBecauseBusyAsync(ServerSignal order, CancellationToken token)
+    public async Task ObservePriceAsync(Guid id, decimal price, bool allowExpiry, CancellationToken token)
     {
-        Complete(order, "Expired", "PositionAlreadyOpen");
-        await runtime.Store.UpdateAsync(order, token);
-        await telegram.ExpiredAsync(order, token);
+        ServerSignal? claimed = null;
+        ServerSignal? expired = null;
+        await runtime.Store.ExecutionGate.WaitAsync(token);
+        try
+        {
+            var order = (await runtime.Store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
+            if (order is null || order.Status != "Pending" || order.CompletedAtUtc is not null) return;
+            // Recovery is an explicit trading pause, never evidence of a missed/expired entry.
+            if (runtime.Store.EntriesPaused) return;
+            order.LastPrice = price;
+            // An observed entry always wins over expiry evaluation for the same price.
+            if (DemoOrderWorker.EntryReached(order, price))
+            {
+                var result = await runtime.Store.TryClaimExclusiveSubmissionAsync(id, price, token);
+                if (result == ExclusiveClaimResult.Claimed)
+                    claimed = (await runtime.Store.GetAllAsync(token)).Single(x => x.Id == id);
+                else if (result == ExclusiveClaimResult.PositionBusy)
+                {
+                    Complete(order, "Expired", "PositionAlreadyOpen");
+                    await runtime.Store.UpdateAsync(order, token);
+                    expired = order;
+                }
+            }
+            else if (allowExpiry)
+            {
+                if (order.ExpirePrice == 0) order.ExpirePrice = order.Direction == "Long" ? order.Ceiling : order.Floor;
+                if (order.ExpireActivationPrice == 0)
+                    order.ExpireActivationPrice = order.EntryPrice + 0.25m * (order.TakeProfit - order.EntryPrice);
+                if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
+                    Complete(order, "Expired", "InitialBoundary");
+                else
+                {
+                    if (order.ExpireStage == "Initial" && DemoOrderWorker.ExpireActivationReached(order, price))
+                    {
+                        order.ExpireStage = "Target";
+                        order.ExpirePrice = order.TakeProfit;
+                        order.ExpireAdjustedAtUtc = DateTime.UtcNow;
+                    }
+                    if (order.ExpireStage == "Target" && DemoOrderWorker.TargetExpiryReached(order, price))
+                        Complete(order, "Expired", "TargetAfterActivation");
+                }
+                await runtime.Store.UpdateAsync(order, token);
+                if (order.Status == "Expired") expired = order;
+            }
+        }
+        finally { runtime.Store.ExecutionGate.Release(); }
+        if (claimed is not null) submissions.Writer.TryWrite((claimed, true));
+        if (expired is not null) submissions.Writer.TryWrite((expired, false));
+    }
+
+    private async Task SubmitQueueAsync(CancellationToken token)
+    {
+        await foreach (var job in submissions.Reader.ReadAllAsync(token))
+        {
+            try
+            {
+                if (job.Submit) await SubmitAsync(job.Order, token);
+                else await telegram.ExpiredAsync(job.Order, token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception exception) { logger.LogError(exception, "Strategy 2 dispatch failed for {Signal}", job.Order.Id); }
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken token)
     {
-        while (!token.IsCancellationRequested)
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var sender = SubmitQueueAsync(linked.Token);
+        try
         {
-            try
+            while (!token.IsCancellationRequested)
             {
-                if (runtime.Options.Enabled)
-                    await ProcessCycleAsync(token);
+                try
+                {
+                    if (runtime.Options.Enabled)
+                        await ProcessCycleAsync(token);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+                catch (Exception exception) { logger.LogWarning(exception, "Strategy 2 worker cycle failed"); }
+                await Task.Delay(TimeSpan.FromSeconds(1), token);
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-            catch (Exception exception) { logger.LogWarning(exception, "Strategy 2 worker cycle failed"); }
-            await Task.Delay(TimeSpan.FromSeconds(1), token);
+        }
+        finally
+        {
+            linked.Cancel();
+            try { await sender; } catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
         }
     }
 
@@ -36,62 +108,20 @@ public sealed class Strategy2Worker(
         var orders = await runtime.Store.GetAllAsync(token);
         foreach (var group in orders.Where(IsActive).GroupBy(x => x.Symbol))
         {
-            var price = (await runtime.Client.GetLastPriceAsync(group.Key, token)).LastPrice;
-            foreach (var order in group)
+            try
             {
-                order.LastPrice = price;
-                if (order.Status == "Pending") await TrackPendingAsync(order, price, token);
-                else if (order.Status == "Submitted") await SynchronizeAsync(order, price, token);
-                else if (order.Status == "Filled") await TrackLevelsAsync(order, price, token);
+                var price = (await runtime.Client.GetLastPriceAsync(group.Key, token)).LastPrice;
+                foreach (var order in group)
+                {
+                    order.LastPrice = price;
+                    if (order.Status == "Pending") await ObservePriceAsync(order.Id, price, true, token);
+                    else if (order.Status == "Submitted") await SynchronizeAsync(order, price, token);
+                    else if (order.Status == "Filled") await TrackLevelsAsync(order, price, token);
+                }
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (Exception exception) { logger.LogWarning(exception, "Strategy 2 symbol {Symbol} failed; continuing", group.Key); }
         }
-    }
-
-    private async Task TrackPendingAsync(ServerSignal order, decimal price, CancellationToken token)
-    {
-        if (order.ExpirePrice == 0) order.ExpirePrice = order.Direction == "Long" ? order.Ceiling : order.Floor;
-        if (order.ExpireActivationPrice == 0)
-            order.ExpireActivationPrice = order.EntryPrice + 0.25m * (order.TakeProfit - order.EntryPrice);
-
-        if (order.ExpireStage == "Initial" && InitialExpiryReached(order, price))
-        {
-            Complete(order, "Expired", "InitialBoundary");
-            await runtime.Store.UpdateAsync(order, token);
-            await telegram.ExpiredAsync(order, token);
-            return;
-        }
-        if (order.ExpireStage == "Initial" && DemoOrderWorker.ExpireActivationReached(order, price))
-        {
-            order.ExpireStage = "Target";
-            order.ExpirePrice = order.TakeProfit;
-            order.ExpireAdjustedAtUtc = DateTime.UtcNow;
-        }
-        if (order.ExpireStage == "Target" && DemoOrderWorker.TargetExpiryReached(order, price))
-        {
-            Complete(order, "Expired", "TargetAfterActivation");
-            await runtime.Store.UpdateAsync(order, token);
-            await telegram.ExpiredAsync(order, token);
-            return;
-        }
-
-        if (DemoOrderWorker.EntryReached(order, price))
-        {
-            var claim = await runtime.Store.TryClaimExclusiveSubmissionAsync(order.Id, price, token);
-            if (claim == ExclusiveClaimResult.Claimed)
-            {
-                var claimed = (await runtime.Store.GetAllAsync(token)).Single(x => x.Id == order.Id);
-                await SubmitAsync(claimed, token);
-                return;
-            }
-            if (claim == ExclusiveClaimResult.PositionBusy)
-            {
-                Complete(order, "Expired", "PositionAlreadyOpen");
-                await runtime.Store.UpdateAsync(order, token);
-                await telegram.ExpiredAsync(order, token);
-                return;
-            }
-        }
-        await runtime.Store.UpdateAsync(order, token);
     }
 
     private async Task SubmitAsync(ServerSignal order, CancellationToken token)

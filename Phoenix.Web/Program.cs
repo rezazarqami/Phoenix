@@ -460,7 +460,10 @@ app.MapGet("/api/strategy2/status", async (Strategy2Runtime strategy2, Cancellat
     {
         var status = await strategy2.Client.CheckConnectionAsync(token);
         decimal? balance = status.Authenticated ? await strategy2.Client.GetAvailableBalanceAsync(token) : null;
-        return Results.Ok(new { enabled = true, authenticated = status.Authenticated, availableBalance = balance });
+        var signals = await strategy2.Store.GetAllAsync(token);
+        var recoveryRequired = signals.Count(x => x.Status == "RecoveryRequired");
+        return Results.Ok(new { enabled = true, authenticated = status.Authenticated, availableBalance = balance,
+            entriesPaused = recoveryRequired > 0, recoveryRequired });
     }
     catch (Exception exception)
     {
@@ -573,9 +576,10 @@ app.MapGet("/api/analysis/results", async (DateTimeOffset? from, DateTimeOffset?
         details
     });
 });
-app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, ServerOrderStore store, CancellationToken token) =>
+app.MapGet("/api/analysis/results/{id:guid}/image", async (Guid id, string? strategy, ServerOrderStore store, Strategy2Runtime strategy2, CancellationToken token) =>
 {
-    var image = await store.GetHistoryImageAsync(id, token);
+    if (strategy is not (null or "main" or "strategy2")) return Results.BadRequest();
+    var image = await (strategy == "strategy2" ? strategy2.Store : store).GetHistoryImageAsync(id, token);
     return image is null ? Results.NotFound() : Results.File(image, "image/png");
 });
 
@@ -826,9 +830,11 @@ app.MapPost("/api/signals/cancel-selected",async (CancelSelectedRequest input,Ht
     if(input.Ids is null||input.Ids.Length is <1 or >100)return Results.BadRequest(new{error="بین ۱ تا ۱۰۰ سیگنال انتخاب کن."});
     var items=await cancellation.CancelSelectedAsync(input.Ids,token);return Results.Ok(new{items,cancelled=items.Count(x=>x.Cancelled)});
 });
-app.MapGet("/api/signals/{id:guid}/live-chart",async (Guid id,ServerOrderStore store,BybitDemoClient bybit,HttpResponse response,CancellationToken token)=>
+app.MapGet("/api/signals/{id:guid}/live-chart",async (Guid id,string? strategy,ServerOrderStore store,Strategy2Runtime strategy2,BybitDemoClient bybit,HttpResponse response,CancellationToken token)=>
 {
     response.Headers.CacheControl="no-store";
+    if(strategy is not (null or "main" or "strategy2"))return Results.BadRequest();
+    if(strategy=="strategy2"){store=strategy2.Store;bybit=strategy2.Client;}
     var signal=await store.FindSignalAsync(id,token);if(signal is null)return Results.NotFound();
     var interval=signal.Timeframe??"60";
     using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(8));

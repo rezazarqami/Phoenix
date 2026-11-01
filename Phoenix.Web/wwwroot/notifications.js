@@ -7,8 +7,8 @@
  const exits={FirstStepLimit:'پلهٔ اول ریسک‌فری (استاپ‌لیمیت)',SecondStepLimit:'پلهٔ دوم ریسک‌فری (استاپ‌لیمیت)',SafetyStopMarket:'محافظ ریسک‌فری (استاپ‌مارکت)'};
  const resultKinds=new Set(['Target','RiskFree','StopLoss','ManualClosed','EntryError']),tabs=[...document.querySelectorAll('[data-journal-tab]')];
  const fresh=()=>({entries:new Map(),before:null,hasMore:false,busy:false,initialized:false});
- const sources={normal:{all:fresh(),results:fresh()},manual:{all:fresh(),results:fresh()}};
- let source=params.get('source')==='manual'?'manual':'normal',states=sources[source],view=initialView;
+ const sources={normal:{all:fresh(),results:fresh()},manual:{all:fresh(),results:fresh()},strategy2:{all:fresh(),results:fresh()}};
+ let source=['normal','manual','strategy2'].includes(params.get('source'))?params.get('source'):'normal',states=sources[source],view=initialView;
  let sourceResolved=!!params.get('source');
  const openedDetails=new Set();
  const text=(tag,value)=>Object.assign(document.createElement(tag),{textContent:value});
@@ -31,7 +31,7 @@
  function restore(){
   try{
    const data=JSON.parse(localStorage.getItem(cacheKey));if(data?.version!==1)return;
-   for(const name of ['normal','manual'])for(const tab of ['all','results']){
+   for(const name of ['normal','manual','strategy2'])for(const tab of ['all','results']){
     const saved=data.sources?.[name]?.[tab];if(!saved||!Array.isArray(saved.entries))continue;
     const state=sources[name][tab];
     state.entries=new Map(saved.entries.slice(0,cacheLimit).filter(e=>typeof e.id==='string'&&Number.isFinite(e.sequence)).map(e=>[e.id,e]));
@@ -66,11 +66,11 @@
  function render(){
   const state=states[view],fragment=document.createDocumentFragment();let count=0;
   for(const e of [...state.entries.values()].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||b.sequence-a.sequence)){
-   if(view==='results'&&!resultKinds.has(e.kind))continue;count++;
+   if(view==='results'&&!resultKinds.has(e.kind)&&!(source==='strategy2'&&e.kind==='Expired'))continue;count++;
    const card=document.createElement('article');card.className='event-card'+(e.id===focus?' focused':'');card.dataset.kind=e.kind;card.dataset.eventId=e.id;
    const code=e.kind==='Target'?'TP':e.kind==='StopLoss'?'SL':e.kind==='FirstProtection'?'RF1':e.kind==='RiskFree'?(e.exitKind==='FirstStepLimit'?'RF1':e.exitKind==='SecondStepLimit'?'RF2':'RF'):e.kind==='RiskFreeReached'?'RF2':null;
    const head=document.createElement('div');head.className='event-top';
-   const badge=Object.assign(text('span',code||titles[e.kind]||e.kind),{className:'event-kind'});badge.title=titles[e.kind]||e.kind;badge.setAttribute('aria-label',(titles[e.kind]||e.kind)+(e.kind==='RiskFree'&&exits[e.exitKind]?' · '+exits[e.exitKind]:''));
+   const badge=Object.assign(text('span',code||(source==='strategy2'&&e.kind==='Expired'?'انقضای سیگنال':titles[e.kind])||e.kind),{className:'event-kind'});badge.title=titles[e.kind]||e.kind;badge.setAttribute('aria-label',(titles[e.kind]||e.kind)+(e.kind==='RiskFree'&&exits[e.exitKind]?' · '+exits[e.exitKind]:''));
    const direction=text('span',e.direction==='Long'?'Long ↗':e.direction==='Short'?'Short ↘':'');direction.className='event-direction';direction.dataset.side=e.direction;head.append(Object.assign(text('b',e.symbol||'Phoenix'),{className:'event-symbol'}),direction,badge);card.append(head);
    card.append(Object.assign(text('p',eventMessage(e)),{className:'event-message'}));
    const detail=document.createElement('details');detail.className='event-detail';
@@ -80,9 +80,9 @@
    function showChart(){if(chartRequested)return;chartRequested=true;
     if(!/^[a-f0-9-]{36}$/i.test(id)){body.prepend(text('p','نمودار این سابقه در دسترس نیست.'));return;}
     const host=text('div','');host.className='signal-live-host';body.prepend(host);
-    if(window.PhoenixLiveChart)liveChart=window.PhoenixLiveChart.mount(host,id);else host.append(text('p','دریافت نمودار زنده در دسترس نیست.'));
+    if(window.PhoenixLiveChart)liveChart=window.PhoenixLiveChart.mount(host,id,source);else host.append(text('p','دریافت نمودار زنده در دسترس نیست.'));
     const archive=document.createElement('details');archive.className='signal-archive-chart';archive.append(text('summary','تصویر زمان ثبت سیگنال'));
-    archive.addEventListener('toggle',()=>{if(archive.open&&!archive.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image';image.alt='تصویر زمان ثبت '+e.symbol;image.onerror=()=>image.replaceWith(text('p','تصویر زمان ثبت در دسترس نیست.'));archive.append(image);}});body.append(archive);
+    archive.addEventListener('toggle',()=>{if(archive.open&&!archive.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image'+(source==='strategy2'?'?strategy=strategy2':'');image.alt='تصویر زمان ثبت '+e.symbol;image.onerror=()=>image.replaceWith(text('p','تصویر زمان ثبت در دسترس نیست.'));archive.append(image);}});body.append(archive);
    }
    const levels=document.createElement('div');levels.className='event-levels';
    for(const [label,value] of [['ورود',e.entryPrice],['تارگت',e.takeProfit],['استاپ ثبت‌شده',e.stopLoss]])if(Number(value)>0){const cell=document.createElement('div');cell.append(text('small',label),text('b',Number(value).toLocaleString('en-US',{maximumFractionDigits:10})));levels.append(cell);}
@@ -125,13 +125,14 @@
  }
  function select(next,focusTab=false){
   view=next;for(const tab of tabs){const selected=tab.dataset.journalTab===view;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;if(selected&&focusTab)tab.focus();}
-  panel.setAttribute('aria-labelledby','journal-tab-'+view);document.getElementById('viewDescription').textContent=view==='results'?'نتایج نهایی: تارگت، خروج ریسک‌فری و استاپ‌لاس':'تمام اعلان‌ها؛ از نزدیک ورود تا پایان معامله';
+  panel.setAttribute('aria-labelledby','journal-tab-'+view);document.getElementById('viewDescription').textContent=view==='results'?(source==='strategy2'?'نتایج استراتژی دو: تارگت، ریسک‌فری، استاپ، اکسپایر و خطای ورود':'نتایج نهایی: تارگت، خروج ریسک‌فری و استاپ‌لاس'):'تمام اعلان‌ها؛ از نزدیک ورود تا پایان معامله';
   const url=new URL(location.href);url.searchParams.set('view',view);url.searchParams.set('source',source);history.replaceState(null,'',url);
   status.textContent=states[view].initialized?'سوابق ذخیره‌شده؛ در حال بررسی موارد تازه…':'در حال دریافت…';render();load();
  }
- function selectSource(next){source=next;states=sources[source];for(const tab of document.querySelectorAll('[data-journal-source]'))tab.setAttribute('aria-pressed',String(tab.dataset.journalSource===source));select(view);}
+ function selectSource(next){source=next;document.querySelectorAll('.wallet-import').forEach(e=>e.hidden=source==='strategy2');states=sources[source];for(const tab of document.querySelectorAll('[data-journal-source]'))tab.setAttribute('aria-pressed',String(tab.dataset.journalSource===source));select(view);}
  document.querySelectorAll('[data-journal-source]').forEach(tab=>tab.addEventListener('click',()=>{sourceResolved=true;selectSource(tab.dataset.journalSource);}));
  for(const tab of document.querySelectorAll('[data-journal-source]'))tab.setAttribute('aria-pressed',String(tab.dataset.journalSource===source));
+ document.querySelectorAll('.wallet-import').forEach(e=>e.hidden=source==='strategy2');
  tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>select(tab.dataset.journalTab));tab.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(i+1)%tabs.length;select(tabs[next].dataset.journalTab,true);});});
  older.addEventListener('click',()=>load('older'));document.getElementById('refreshEvents').addEventListener('click',()=>load());
  const importButton=document.getElementById('importWallets'),importStatus=document.getElementById('walletImportStatus');
@@ -145,6 +146,7 @@
  });
  const recoveryButton=document.getElementById('recoverBybitWallets'),recoveryStatus=document.getElementById('bybitRecoveryStatus');let recovering=false,lastRecovery=null;
  async function recovery(manual=false){
+  if(source==='strategy2')return;
   if(recovering)return;recovering=true;if(manual){recoveryButton.disabled=true;recoveryStatus.textContent='در حال بازیابی از سوابق بای‌بیت…';}
   try{const response=await fetch('/api/mobile/history/'+(manual?'recover-wallets':'wallet-recovery'),manual?{method:'POST'}:{cache:'no-store'});if(!response.ok)throw Error();const result=await response.json();
    recoveryStatus.textContent=result.state==='running'?'در حال بازیابی خودکار موجودی‌ها از بای‌بیت…':(result.message||'')+(result.atUtc?' '+Number(result.recovered||0).toLocaleString('fa-IR')+' موجودی بازیابی شد؛ '+Number(result.unresolved||0).toLocaleString('fa-IR')+' مورد بدون تطبیق قطعی.':'');

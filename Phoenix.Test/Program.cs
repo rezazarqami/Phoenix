@@ -19,6 +19,7 @@ Run("Connection probes revalidate read-only account access independently of publ
 Run("SR proposal succeeds without unrelated BTC market requests", SupportResistanceNetworkTests.Run);
 Run("Single close isolates hedge side, confirms closure and records manual results", SinglePositionCloseTests.Close);
 Run("Timeframe reservations enforce caps, durable two-stop brake, release and failure reporting", TimeframeRiskTests.Limits);
+Run("Strategy 2 entry claims survive later expiry and isolate paused recovery plus journal", Strategy2EntryTests.EntryAndExpiry);
 Run("Journal sources filter before paging and preserve legacy wallets across restart", JournalSourceTests.Isolation);
 Run("Manual chart plans retain explicit levels, leverage and both directional protection policies", ManualSignalTests.Plans);
 Run("Manual chart source and initial expiry results survive restart independently", ManualSignalTests.Archive);

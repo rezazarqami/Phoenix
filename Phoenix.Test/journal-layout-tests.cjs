@@ -16,6 +16,7 @@ const base=path.join(__dirname,'../Phoenix.Web/wwwroot');const {chromium}=requir
    chartRequests=0;await page.setViewportSize({width,height});await page.goto('http://127.0.0.1:'+server.address().port+'/notifications?embed=1');await page.locator('.event-card').first().waitFor();await page.evaluate(()=>document.fonts.ready);
    assert.ok(await page.locator('.journal-hero').evaluate(e=>getComputedStyle(e).backgroundImage.includes('phoenix-matrix.png')),'Reuse current Phoenix matrix asset');assert.ok(await page.locator('.journal-brand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Reuse real Phoenix logo');
    await page.locator('#journal-tab-results').click();await page.waitForFunction(()=>document.querySelectorAll('.event-wallet').length===20);
+   const sourceBoxes=await page.locator('[data-journal-source]').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().toJSON()));assert.equal(sourceBoxes.length,3);assert.equal(new Set(sourceBoxes.map(b=>b.y)).size,1,'Three sources share one row');
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Journal must not overflow horizontally');
    const boxes=await page.locator('[role=tab]').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().toJSON()));assert.ok(boxes.every(b=>b.x>=0&&b.right<=width+1),'Tabs must fit mobile');
    assert.ok(await page.locator('.event-card').evaluateAll(es=>es.every(e=>e.lastElementChild.classList.contains('event-wallet'))),'Balances must be at bottom of every result');

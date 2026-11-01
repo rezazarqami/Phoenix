@@ -157,10 +157,12 @@ public static class MobileEndpoints
         });
         static string Owner(HttpRequest request) { PhoenixSessionAuth.TryGetIdentity(request, out var user); return user.Username; }
         group.MapGet("/status", (MobilePushService service) => Results.Ok(new { pushConfigured = service.Configured, signalEvents = true, directFeed = true, clientConfig = MobileFirebaseConfig.FromEnvironment() }));
-        group.MapGet("/history", async (long? before,string? eventId,string? view,string? source,HttpRequest request,MobileSignalFeed feed,CancellationToken ct)=>
+        group.MapGet("/history", async (long? before,string? eventId,string? view,string? source,HttpRequest request,MobileSignalFeed feed,Strategy2Runtime strategy2,DedicatedTelegramOptions dedicated,CancellationToken ct)=>
         {
             var owner=Owner(request);
-            var page=await feed.HistoryAsync(owner,before,eventId,ct,view,source);
+            var page=source=="strategy2"
+                ? await strategy2.Journal(dedicated).HistoryAsync(owner,before,eventId,ct,view)
+                : await feed.HistoryAsync(owner,before,eventId,ct,view,source);
             var bytes=System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new {owner,page});
             var etag="W/\""+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))+"\"";
             request.HttpContext.Response.Headers.ETag=etag;

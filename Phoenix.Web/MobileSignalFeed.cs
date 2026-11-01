@@ -7,11 +7,11 @@ public sealed record DeviceSignalAlert(long Sequence,string Id,string Kind,DateT
 public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<DeviceSignalAlert> Events,DateTime ServerTimeUtc);
 
 // First-party authenticated feed. No Telegram, Firebase, third-party account or device secret is needed.
-public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated)
+public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated,string? storagePath=null,bool includeInitialExpiry=false,bool includeUnowned=false)
 {
     private readonly SemaphoreSlim gate=new(1,1);
     private DateTime refreshed=DateTime.MinValue;
-    private readonly string path=(Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")??Path.Combine(AppContext.BaseDirectory,"data","server-signals.json"))+".device-alerts.db";
+    private readonly string path=storagePath??(Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")??Path.Combine(AppContext.BaseDirectory,"data","server-signals.json"))+".device-alerts.db";
     private async Task<SqliteConnection> OpenAsync(CancellationToken token)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
@@ -27,6 +27,9 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
     }
     internal static string? EventReason(ServerSignal s) => s.Outcome=="EntryError" || s.Status is "Error" or "Rejected" or "Deactivated" or "RecoveryRequired"
         ? (s.Error?.Contains("110007")==true || s.Error?.Contains("110004")==true || s.Error?.Contains("balance",StringComparison.OrdinalIgnoreCase)==true ? "ورود انجام نشد: موجودی قابل استفاده کافی نیست." : "ورود با خطا مواجه شد: "+(s.Error??s.Status))
+        : s.ExpireReason=="InitialBoundary" ? "سیگنال پیش از ورود از مرز اولیه عبور کرد."
+        : s.ExpireReason=="TargetAfterActivation" ? "پس از نزدیک شدن به ورود، پیش از ثبت ورود به تارگت برگشت."
+        : s.ExpireReason=="PositionAlreadyOpen" ? "هنگام رسیدن به ورود، معاملهٔ دیگری در استراتژی دو فعال بود."
         : s.ExpireReason=="TimeframeBlocked" ? "سیگنال هنگام توقف این تایم‌فریم به ورود رسید و منقضی شد." : null;
     public static DeviceSignalPage ForClient(DeviceSignalPage page,int version) => version>=2 ? page : page with {Events=page.Events.Where(e=>e.Kind is not ("EntryError" or "ManualClosed")).ToArray()};
     public async Task CaptureAsync(string owner,CancellationToken token)
@@ -38,7 +41,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
             var now=DateTime.UtcNow;
             var signals=await store.NotificationSignalsAsync(now.AddDays(-1),token);
             await using var db=await OpenAsync(token);using var tx=db.BeginTransaction();
-            foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated).Select(e=>(Signal:s,Event:e))).OrderBy(p=>p.Event.At))
+            foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated,includeInitialExpiry,includeUnowned).Select(e=>(Signal:s,Event:e))).OrderBy(p=>p.Event.At))
             {
                 var e=pair.Event;var s=pair.Signal;
                 if(e.At.Kind!=DateTimeKind.Utc || e.At<now.AddDays(-1) || e.At>now)continue;

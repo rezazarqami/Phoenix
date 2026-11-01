@@ -1,7 +1,7 @@
 (() => {
  'use strict';const charts=new Set();
  const colors={CEILING:'#d8ae37',FLOOR:'#a37aca',ENTRY:'#359bea',TP:'#19aa83',SL:'#e06c84',RF:'#39b8b1','RF1 SL':'#6f9fcd','RF2 SL':'#67b49a'};
- window.PhoenixLiveChart={mount(host,id){
+ window.PhoenixLiveChart={mount(host,id,strategy){
   const caption=document.createElement('div'),canvas=document.createElement('div');caption.className='signal-live-status';canvas.className='signal-live-canvas';caption.textContent='دریافت نمودار زنده…';const reset=document.createElement('button');reset.type='button';reset.className='signal-live-reset';reset.textContent='تنظیم خودکار نمودار';reset.addEventListener('click',()=>{if(!chart)return;chart.priceScale('right').applyOptions({autoScale:true});chart.timeScale().fitContent();});host.replaceChildren(caption,reset,canvas);
   let chart,series,priceLine,lines=[],levelKey='',lastAt=null,disposed=false,busy=false,controller,resize;
   const state={host,stop(){if(disposed)return;disposed=true;controller?.abort();resize?.disconnect();chart?.remove();charts.delete(state);},load};charts.add(state);
@@ -9,7 +9,7 @@
   async function load(first=false){
    if(disposed||busy||(!first&&!visible()))return;busy=true;controller=new AbortController();
    try{
-    const response=await fetch('/api/signals/'+encodeURIComponent(id)+'/live-chart',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();const data=await response.json();if(disposed)return;if(!host.isConnected){state.stop();return;}
+    const response=await fetch('/api/signals/'+encodeURIComponent(id)+'/live-chart'+(strategy==='strategy2'?'?strategy=strategy2':''),{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();const data=await response.json();if(disposed)return;if(!host.isConnected){state.stop();return;}
     const candles=data.candles.map(c=>({time:Math.floor(Number(c.openTime)/1000),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)})).sort((a,b)=>a.time-b.time).filter((c,i,a)=>i===0||c.time!==a[i-1].time);
     if(!candles.length||!window.LightweightCharts)throw Error();
     if(!chart){chart=LightweightCharts.createChart(canvas,{width:Math.max(180,canvas.clientWidth),height:260,localization:{locale:'en-US'},layout:{background:{color:'#061a37'},textColor:'#b4c6e4',fontSize:10},grid:{vertLines:{color:'#123457'},horzLines:{color:'#123457'}},rightPriceScale:{mode:LightweightCharts.PriceScaleMode.Logarithmic,autoScale:true,scaleMargins:{top:0.12,bottom:0.12},borderColor:'#21598b',minimumWidth:76},timeScale:{timeVisible:true,borderColor:'#21598b'},handleScale:{axisPressedMouseMove:{price:true,time:true},axisDoubleClickReset:{price:true,time:true},mouseWheel:true,pinch:true},handleScroll:{vertTouchDrag:true,horzTouchDrag:true}});series=chart.addCandlestickSeries({upColor:'#35b89b',downColor:'#e5808c',borderVisible:false,wickUpColor:'#35b89b',wickDownColor:'#e5808c',priceFormat:{type:'price',precision:8,minMove:0.00000001}});resize=new ResizeObserver(()=>chart.resize(Math.max(180,canvas.clientWidth),260));resize.observe(canvas);}

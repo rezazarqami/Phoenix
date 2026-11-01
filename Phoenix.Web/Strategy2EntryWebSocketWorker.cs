@@ -27,9 +27,18 @@ public sealed class Strategy2EntryWebSocketWorker(
                 var subscribed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(token);
                 var subscriptions = MaintainAsync(socket, subscribed, linked.Token);
-                await ReceiveAsync(socket, linked.Token);
-                linked.Cancel();
-                try { await subscriptions; } catch (OperationCanceledException) { }
+                var receiving = ReceiveAsync(socket, linked.Token);
+                try
+                {
+                    // A failed subscription/ping must reconnect even if Receive is still waiting.
+                    await await Task.WhenAny(subscriptions, receiving);
+                }
+                finally
+                {
+                    linked.Cancel();
+                    try { await Task.WhenAll(subscriptions, receiving); }
+                    catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
+                }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             catch (Exception exception)
@@ -42,21 +51,32 @@ public sealed class Strategy2EntryWebSocketWorker(
 
     private async Task MaintainAsync(ClientWebSocket socket, HashSet<string> subscribed, CancellationToken token)
     {
+        var lastPing = DateTime.MinValue;
         while (!token.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
+            if (DateTime.UtcNow - lastPing > TimeSpan.FromSeconds(20))
+            {
+                await socket.SendAsync(Encoding.UTF8.GetBytes("{\"op\":\"ping\"}"), WebSocketMessageType.Text, true, token);
+                lastPing = DateTime.UtcNow;
+            }
             var active = (await runtime.Store.GetAllAsync(token)).Where(x => x.Status == "Pending").ToArray();
             var ids = active.Select(x => x.Id).ToHashSet();
             foreach (var stale in _pending.Keys.Where(x => !ids.Contains(x))) _pending.TryRemove(stale, out _);
             foreach (var x in active) _pending[x.Id] = new(x.Id, x.Symbol, x.Direction, x.EntryPrice);
-            var additions = active.Select(x => x.Symbol).Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(subscribed.Add).ToArray();
-            if (additions.Length > 0)
+            var symbols = active.Select(x => x.Symbol).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var removals = subscribed.Where(x => !symbols.Contains(x)).ToArray();
+            foreach (var batch in removals.Chunk(10))
             {
-                var payload = JsonSerializer.Serialize(new
-                {
-                    op = "subscribe", args = additions.Select(x => $"publicTrade.{x}").ToArray()
-                });
+                var payload = JsonSerializer.Serialize(new { op = "unsubscribe", args = batch.Select(x => $"publicTrade.{x}").ToArray() });
                 await socket.SendAsync(Encoding.UTF8.GetBytes(payload), WebSocketMessageType.Text, true, token);
+                foreach (var symbol in batch) subscribed.Remove(symbol);
+            }
+            var additions = symbols.Where(x => !subscribed.Contains(x)).ToArray();
+            foreach (var batch in additions.Chunk(10))
+            {
+                var payload = JsonSerializer.Serialize(new { op = "subscribe", args = batch.Select(x => $"publicTrade.{x}").ToArray() });
+                await socket.SendAsync(Encoding.UTF8.GetBytes(payload), WebSocketMessageType.Text, true, token);
+                foreach (var symbol in batch) subscribed.Add(symbol);
             }
             await Task.Delay(1000, token);
         }
@@ -95,12 +115,7 @@ public sealed class Strategy2EntryWebSocketWorker(
         {
             var reached = watch.Direction == "Long" ? price <= watch.Entry : price >= watch.Entry;
             if (!reached) continue;
-            var claim = await runtime.Store.TryClaimExclusiveSubmissionAsync(watch.Id, price, token);
-            if (claim == ExclusiveClaimResult.Unavailable) continue;
-            _pending.TryRemove(watch.Id, out _);
-            var order = (await runtime.Store.GetAllAsync(token)).Single(x => x.Id == watch.Id);
-            if (claim == ExclusiveClaimResult.Claimed) await engine.SubmitClaimedAsync(order, token);
-            else await engine.ExpireBecauseBusyAsync(order, token);
+            await engine.ObservePriceAsync(watch.Id, price, false, token);
         }
     }
 

@@ -33,6 +33,12 @@ public sealed class Strategy2Runtime
         Client = new BybitDemoClient(new BybitDemoOptions(options.ApiKey, options.ApiSecret));
     }
 
+    private readonly object journalGate = new();
+    private MobileSignalFeed? journal;
+    public MobileSignalFeed Journal(DedicatedTelegramOptions dedicated)
+    {
+        lock (journalGate) return journal ??= new MobileSignalFeed(Store, dedicated, Options.QueuePath + ".device-alerts.db", includeInitialExpiry: true, includeUnowned: true);
+    }
     public Strategy2Options Options { get; }
     public ServerOrderStore Store { get; }
     public BybitDemoClient Client { get; }

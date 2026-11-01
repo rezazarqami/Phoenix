@@ -22,6 +22,8 @@ public sealed partial class MobileSignalFeed
         if(source is not (null or "normal" or "manual"))throw new ArgumentException("منشأ سیگنال معتبر نیست.");
         var sourceFilter=source=="manual" ? " AND json_extract(payload,'$.Origin')='ManualChart'" : source=="normal" ? " AND COALESCE(json_extract(payload,'$.Origin'),'')!='ManualChart'" : "";
         var resultFilter=view=="results" ? " AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError')" : "";
+        if (view=="results" && includeInitialExpiry)
+            resultFilter=" AND json_extract(payload,'$.Kind') IN ('Target','RiskFree','StopLoss','ManualClosed','EntryError','Expired')";
         resultFilter+=sourceFilter;
         if(before is <=0 || eventId?.Length>120)throw new ArgumentException("نشانگر رویداد معتبر نیست.");
         await CaptureAsync(owner,ct);await gate.WaitAsync(ct);
@@ -32,7 +34,7 @@ public sealed partial class MobileSignalFeed
                 if(Convert.ToInt64(await check.ExecuteScalarAsync(ct))==0){
                     var signals=await store.NotificationSignalsAsync(DateTime.MinValue,ct);
                     using var tx=db.BeginTransaction();
-                    foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated).Select(e=>(s,e))).OrderBy(p=>p.e.At))
+                    foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated,includeInitialExpiry,includeUnowned).Select(e=>(s,e))).OrderBy(p=>p.e.At))
                         if(pair.e.At.Kind==DateTimeKind.Utc && pair.e.At<=DateTime.UtcNow)await SaveHistoryAsync(db,tx,owner,pair.s,pair.e,ct);
                     using var migrate=db.CreateCommand();migrate.Transaction=tx;
                     migrate.CommandText="INSERT OR IGNORE INTO device_signal_history(owner,event_id,payload,at_utc) SELECT owner,event_id,payload,at_utc FROM device_signal_events WHERE owner=$o; INSERT OR IGNORE INTO device_history_initialized VALUES($o)";

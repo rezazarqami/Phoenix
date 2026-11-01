@@ -31,3 +31,11 @@ body.chart-focus-host #panel-crypto iframe{position:absolute!important;inset:0!i
 @media(max-width:370px){.chart-workspace-open .manual-tools>button{flex-basis:29px;width:29px;padding:4px}.chart-workspace-open #manualSymbol{font-size:11px}}
 .chart-workspace-open .workspace-current>span{display:block!important;color:#eff7ff;margin:0;font:600 16px Arial}
 .chart-workspace-open .manual-tools .workspace-current{flex:0 0 26px;margin:0;padding:0}
+
+/* Four controls share the same compact bottom row. */
+.chart-workspace-open .manual-controls{grid-template-columns:repeat(3,minmax(0,1fr)) 48px;gap:5px;padding-inline:6px}
+.chart-workspace-open .manual-controls>.workspace-level-toggle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:3px;cursor:pointer;white-space:nowrap}
+.chart-workspace-open .workspace-level-toggle>span{font:10px Tahoma;color:#bdd0df}
+.chart-workspace-open .workspace-level-toggle>input{display:block;width:17px;height:17px;margin:0;padding:0;accent-color:#31c1ea;cursor:pointer}
+.manual-overlay[hidden]{display:none!important}
+.chart-workspace-open .manual-controls{align-items:stretch}

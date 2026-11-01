@@ -31,6 +31,15 @@ assert.ok(await page.locator('.manual-controls').evaluate(e=>e.getBoundingClient
 await page.mouse.wheel(0,600);assert.equal(await page.evaluate(()=>scrollY),0);
 await page.locator('[data-group=fib]').click();assert.equal(await page.locator('#manualToolList button:visible').count(),4);
 await page.locator('[data-manual-tool=fib]').click();assert.equal(await page.locator('.workspace-palette').evaluate(e=>e.open),false);
+const entryTitle=await page.locator('[data-level=entry]').getAttribute('title');
+const row=await page.locator('.manual-controls>label').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));assert.equal(new Set(row).size,1,'Checkbox and three fields share one row');
+await page.locator('#manualShowLevels').uncheck();
+assert.equal(await page.locator('.manual-overlay').isVisible(),false,'All signal handles hide');
+assert.equal(await page.locator('#manualReview').isDisabled(),true,'Hidden levels cannot be submitted accidentally');
+await page.locator('#manualShowLevels').check();
+assert.equal(await page.locator('.manual-overlay').isVisible(),true);
+assert.equal(await page.locator('[data-level=entry]').getAttribute('title'),entryTitle,'Toggling keeps existing prices');
+assert.equal(await page.locator('#manualReview').isEnabled(),true);
 const plot=await page.locator('#manualChart').boundingBox();
 const move=async(x,y,dx,dy)=>{if(mobile){const cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/8,y:y+dy*i/8}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}else{await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,y+dy,{steps:8});await page.mouse.up();}};
 const range=await page.evaluate(()=>testChart.timeScale().getVisibleLogicalRange());

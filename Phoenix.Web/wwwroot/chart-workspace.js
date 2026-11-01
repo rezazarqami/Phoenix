@@ -29,6 +29,9 @@
  tools.prepend(back,symbol,wheel,...groupButtons);
  controls.querySelector('.manual-symbol').hidden=true;
  for(const label of controls.querySelectorAll(':scope > label')){const text=label.firstChild;text.textContent=text.textContent.replace(' (USDT)','');}
+ const levelLabel=document.createElement('label');levelLabel.className='workspace-level-toggle';
+ const levelCheck=document.createElement('input');levelCheck.type='checkbox';levelCheck.id='manualShowLevels';levelCheck.checked=true;levelCheck.setAttribute('aria-label','نمایش خطوط سیگنال');
+ const levelText=document.createElement('span');levelText.textContent='خطوط';levelLabel.append(levelText,levelCheck);controls.append(levelLabel);
  card.prepend($('manualChart'));card.append(tools,controls);
  const review=$('manualReview');review.title=review.textContent;review.textContent='✓';review.setAttribute('aria-label',review.title);tools.append(review);
  const status=$('manualStatus');status.classList.add('workspace-status');card.append(status);

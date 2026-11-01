@@ -66,3 +66,8 @@
  #panel-home .quote-change,#panel-home .market-change{line-height:1.1}
  #panel-home .market-change>span:first-child svg{width:14px;height:14px}
 }
+
+/* Quieter numeric typography, with the same bundled font as the Phoenix UI. */
+#panel-home .market-card strong,#panel-home .iran-price strong{font-family:PhoenixVazir,Tahoma,sans-serif;font-size:clamp(14px,4vw,26px);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:0;line-height:1.2}
+#panel-home .quote-change,#panel-home .market-change,#panel-home .market-change b{font-family:PhoenixVazir,Tahoma,sans-serif;font-size:clamp(10px,2.8vw,18px);font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}
+@media(max-width:600px){#panel-home .market-change>span:first-child svg{width:12px;height:12px}}

@@ -1,5 +1,19 @@
 /* The journal shares the Phoenix shell's existing matrix and navy glass theme. */
-html.embedded-view,html.embedded-view body,html.embedded-view main{background:transparent!important}
+html{color-scheme:dark;background:#061a37}
+html body,html.embedded-view body,html main,html.embedded-view main{background:#061a37!important;color:#edf5ff}
 html:not(.embedded-view) body{background:linear-gradient(#020d2320,#020d2350),url('/analysis-assets/phoenix-matrix.png') center top/100% auto repeat-y!important}
-.journal-heading,.journal-shell,.journal-container{background:linear-gradient(125deg,#03152db8,#00091bbf 65%,#031630b3)!important;border-color:#188dff!important;box-shadow:inset 0 0 18px #087bff33,0 0 16px #007bff22}
-.event-card{background:#020e24a6!important;border-color:#1b5183!important}
+.journal-heading,.journal-shell,.journal-container{background:linear-gradient(125deg,#03152d,#00091b 65%,#031630)!important;border-color:#188dff!important;box-shadow:inset 0 0 18px #087bff33,0 0 16px #007bff22}
+.event-card{background:#061a37!important;border-color:#1b5183!important}
+
+/* Opaque surfaces keep embedded results dark even over a light iframe canvas. */
+.journal-tabs,.event-levels{background:#09274d!important;border-color:#21598b}
+.journal-sources button,.wallet-import{background:#061a37!important;border-color:#21598b;color:#c3d8ed}
+.journal-tabs button{color:#c6d8ef}
+.journal-tabs button[aria-selected=true],.journal-sources button[aria-pressed=true]{background:#073764!important;color:#80dfff;border-color:#2395c1}
+.tools button,#loadOlder,.wallet-import button{background:#09274d!important;color:#74deff;border-color:#21598b}
+.event-kind,.event-detail>summary,.event-wallet b{color:#74deff}
+.event-card .event-message,.tools p,#historyStatus,.event-meta,.event-detail time,.wallet-source,.wallet-import p{color:#b4c6e4}
+.event-card>.event-time{color:#9bb8d4}
+.event-card[data-kind=Target] .event-kind{color:#24e05a}
+.event-card[data-kind=StopLoss] .event-kind{color:#ff7894}
+.event-card[data-kind=RiskFree] .event-kind,.event-card[data-kind=FirstProtection] .event-kind,.event-card[data-kind=RiskFreeReached] .event-kind{color:#22d3ee}

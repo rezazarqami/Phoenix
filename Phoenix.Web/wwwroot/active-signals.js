@@ -41,7 +41,7 @@
   }catch(error){status.textContent=error.message;}finally{busy=false;selection();}
  }
  all.addEventListener('click',()=>{const available=signals.filter(eligible);const clear=available.every(s=>selected.has(s.id));for(const s of available)clear?selected.delete(s.id):selected.add(s.id);selection();});cancel.addEventListener('click',()=>cancelIds([...selected]));
- fetch('/api/auth/me',{cache:'no-store'}).then(r=>r.json()).then(session=>{admin=!!session.isAdmin;controls.hidden=!admin;selection();paintRisk();}).catch(()=>{admin=false;selection();});
+ (window.PhoenixSessionRequest?window.PhoenixSessionRequest():fetch('/api/auth/me',{cache:'no-store'})).then(r=>r.json()).then(session=>{admin=!!session.isAdmin;controls.hidden=!admin;selection();paintRisk();}).catch(()=>{admin=false;selection();});
  return {render,stop(){for(const row of rows.values())row.stop();}};
  }
  window.PhoenixActiveSignalsUI={mount};

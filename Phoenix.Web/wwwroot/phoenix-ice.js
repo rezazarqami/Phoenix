@@ -55,8 +55,12 @@
     arrow.querySelector('path').setAttribute('d',amount<0?'M12 3v18M5 14l7 7 7-7':amount>0?paths.rise:'M4 12h16');
   }
   window.addEventListener('phoenix-market-price',event=>{livePrice=Number(event.detail);change();});
-  async function loadChart(){
-    controller?.abort();controller=new AbortController();const signal=controller.signal;
+  let chartLoadedAt=0,chartPending=false;
+  async function loadChart(force=false){
+    if(document.hidden||document.getElementById('panel-home').hidden)return;
+    if(force){controller?.abort();chartPending=false;}
+    if(chartPending||(!force&&chartLoadedAt&&Date.now()-chartLoadedAt<60000))return;chartPending=true;
+    const request=new AbortController();controller=request;const signal=request.signal,timer=setTimeout(()=>request.abort(),12000);
     const status=document.getElementById('marketChartStatus');status.textContent='در حال دریافت…';
     try{
       const response=await fetch(`/api/market/overview?interval=${interval}`,{cache:'no-store',signal});
@@ -66,12 +70,13 @@
       const points=values.map((v,i)=>`${(4+i*312/(values.length-1)).toFixed(2)},${(90-(v-low)*80/range).toFixed(2)}`);
       const path='M'+points.join(' L');document.getElementById('marketLine').setAttribute('d',path);
       document.getElementById('marketArea').setAttribute('d',`${path} L316,98 L4,98 Z`);
-      baseline=values[0];livePrice=livePrice||values.at(-1);change();status.textContent='';
+      chartLoadedAt=Date.now();baseline=values[0];livePrice=livePrice||values.at(-1);change();status.textContent='';
       document.getElementById('marketSparkline').setAttribute('aria-label',`نمودار بیت‌کوین؛ ${values.length} کندل، تایم‌فریم ${interval}`);
-    }catch(error){if(signal.aborted)return;if(error.name!=='AbortError'){status.textContent='دادهٔ نمودار در دسترس نیست';baseline=null;document.getElementById('marketLine').removeAttribute('d');document.getElementById('marketArea').removeAttribute('d');document.getElementById('marketChangePercent').textContent='—';document.getElementById('marketChangeAmount').textContent='—';}}
+    }catch(error){if(controller!==request)return;{status.textContent='دادهٔ نمودار در دسترس نیست';baseline=null;document.getElementById('marketLine').removeAttribute('d');document.getElementById('marketArea').removeAttribute('d');document.getElementById('marketChangePercent').textContent='—';document.getElementById('marketChangeAmount').textContent='—';}}finally{clearTimeout(timer);if(controller===request)chartPending=false;}
   }
   document.querySelectorAll('[data-market-interval]').forEach(button=>button.addEventListener('click',()=>{
-    interval=button.dataset.marketInterval;document.querySelectorAll('[data-market-interval]').forEach(b=>{const active=b===button;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});loadChart();
+    interval=button.dataset.marketInterval;document.querySelectorAll('[data-market-interval]').forEach(b=>{const active=b===button;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});chartLoadedAt=0;loadChart(true);
   }));
+  window.addEventListener('phoenix-tab-changed',()=>loadChart());document.addEventListener('visibilitychange',()=>loadChart());
   loadChart();setInterval(()=>{if(!document.hidden)loadChart();},60000);
 })();

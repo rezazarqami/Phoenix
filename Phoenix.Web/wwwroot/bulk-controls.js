@@ -1,5 +1,5 @@
 (async () => {
-  const session = await fetch('/api/auth/me', {cache:'no-store'}).then(r => r.json());
+  const session = await (window.PhoenixSessionRequest?window.PhoenixSessionRequest():fetch('/api/auth/me',{cache:'no-store'})).then(r => r.json());
   if (!session.isAdmin) return;
   document.querySelector('#bulkControls').hidden = false;
   const status = document.querySelector('#bulkStatus');

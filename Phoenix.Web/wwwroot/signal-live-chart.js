@@ -1,5 +1,17 @@
 (() => {
  'use strict';const charts=new Set();
+ let library;
+ function chartLibrary(){
+  if(window.LightweightCharts)return Promise.resolve();
+  if(library)return library;
+  library=new Promise((resolve,reject)=>{
+   const script=document.createElement('script');script.src='/vendor/lightweight-charts.standalone.production.js?v=1';
+   const timer=setTimeout(fail,12000);
+   function fail(){clearTimeout(timer);script.remove();library=null;reject(Error('chart library unavailable'));}
+   script.onerror=fail;script.onload=()=>{clearTimeout(timer);if(window.LightweightCharts)resolve();else fail();};
+   document.head.append(script);
+  });return library;
+ }
  const colors={CEILING:'#d8ae37',FLOOR:'#a37aca',ENTRY:'#359bea',TP:'#19aa83',SL:'#e06c84',RF:'#39b8b1','RF1 SL':'#6f9fcd','RF2 SL':'#67b49a'};
  window.PhoenixLiveChart={mount(host,id,strategy){
   const caption=document.createElement('div'),canvas=document.createElement('div');caption.className='signal-live-status';canvas.className='signal-live-canvas';caption.textContent='دریافت نمودار زنده…';const reset=document.createElement('button');reset.type='button';reset.className='signal-live-reset';reset.textContent='تنظیم خودکار نمودار';reset.addEventListener('click',()=>{if(!chart)return;chart.priceScale('right').applyOptions({autoScale:true});chart.timeScale().fitContent();});host.replaceChildren(caption,reset,canvas);
@@ -7,8 +19,9 @@
   const state={host,stop(){if(disposed)return;disposed=true;controller?.abort();resize?.disconnect();chart?.remove();charts.delete(state);},load};charts.add(state);
   function visible(){if(document.hidden||host.closest('[hidden]'))return false;for(let el=host.parentElement;el;el=el.parentElement)if(el.tagName==='DETAILS'&&!el.open)return false;const r=host.getBoundingClientRect();return r.bottom>=0&&r.top<=innerHeight;}
   async function load(first=false){
-   if(disposed||busy||(!first&&!visible()))return;busy=true;controller=new AbortController();
+   if(disposed||busy||(!first&&!visible()))return;busy=true;controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);
    try{
+    await chartLibrary();if(disposed)return;
     const response=await fetch('/api/signals/'+encodeURIComponent(id)+'/live-chart'+(strategy==='strategy2'?'?strategy=strategy2':''),{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();const data=await response.json();if(disposed)return;if(!host.isConnected){state.stop();return;}
     const candles=data.candles.map(c=>({time:Math.floor(Number(c.openTime)/1000),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)})).sort((a,b)=>a.time-b.time).filter((c,i,a)=>i===0||c.time!==a[i-1].time);
     if(!candles.length||!window.LightweightCharts)throw Error();
@@ -21,8 +34,8 @@
     // Leave the price scale untouched during polling so axis-drag zoom persists.
     if(!lastAt)chart.timeScale().fitContent();else if(previous)chart.timeScale().setVisibleLogicalRange(previous);
     lastAt=data.updatedAtUtc;caption.textContent=data.symbol+' · '+Number(data.lastPrice).toLocaleString('en-US',{maximumFractionDigits:8})+' · کندل '+data.interval+' · '+new Date(lastAt).toLocaleTimeString('fa-IR')+' · لگاریتمی · برای زوم عمودی، اعداد قیمت را بالا و پایین بکشید · به‌روزرسانی ۵ ثانیه‌ای';caption.dataset.stale='false';
-   }catch(error){if(disposed||error.name==='AbortError')return;caption.dataset.stale='true';caption.textContent=lastAt?'ارتباط قطع شد؛ نمودار مربوط به '+new Date(lastAt).toLocaleTimeString('fa-IR')+' است.':'دریافت نمودار زنده انجام نشد؛ دوباره بخش نمودار را باز کن.';}
-   finally{busy=false;}
+   }catch(error){if(disposed)return;caption.dataset.stale='true';caption.textContent=lastAt?'ارتباط قطع شد؛ نمودار مربوط به '+new Date(lastAt).toLocaleTimeString('fa-IR')+' است.':'دریافت نمودار زنده انجام نشد؛ دوباره بخش نمودار را باز کن.';}
+   finally{clearTimeout(timeout);busy=false;}
   }
   load(true);return state;
  }};

@@ -34,6 +34,14 @@ jobs:
           node Phoenix.Test/review-images-tests.cjs
           node Phoenix.Test/review-delivery-browser-tests.cjs
           node Phoenix.Test/in-app-review-ui-tests.cjs
+      - name: Verify login and whole-application startup
+        run: |
+          node Phoenix.Test/startup-request-tests.cjs
+          node Phoenix.Test/startup-browser-tests.cjs
+          node Phoenix.Test/home-polling-ui-tests.cjs
+          node Phoenix.Test/connection-status-ui-tests.cjs
+          node Phoenix.Test/live-positions-ui-tests.cjs
+          node Phoenix.Test/live-chart-scale-tests.cjs
       - name: Preserve interface failure details
         if: failure()
         uses: actions/upload-artifact@v4

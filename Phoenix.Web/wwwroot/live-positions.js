@@ -1,7 +1,7 @@
 (() => {
  'use strict';
  const panel=document.getElementById('signal-pane-positions'),list=document.getElementById('positionsList'),status=document.getElementById('positionsStatus'),refresh=document.getElementById('refreshPositions');
- let busy=false,lastSuccess=null,admin=false;const closing=new Set();fetch('/api/auth/me').then(r=>r.json()).then(s=>{admin=!!s.isAdmin;}).catch(()=>{});
+ let busy=false,lastSuccess=null,admin=false;const closing=new Set();(window.PhoenixSessionRequest?window.PhoenixSessionRequest():fetch('/api/auth/me',{cache:'no-store'})).then(r=>r.json()).then(s=>{admin=!!s.isAdmin;}).catch(()=>{});
  const node=(tag,value,cls)=>Object.assign(document.createElement(tag),{textContent:value,className:cls||''});
  const number=value=>value==null?'—':Number(value).toLocaleString('en-US',{maximumFractionDigits:8});
  const signed=(value,digits=2)=>value==null?'—':(Number(value)>0?'+':'')+Number(value).toLocaleString('en-US',{maximumFractionDigits:digits,minimumFractionDigits:2});
@@ -22,14 +22,14 @@
  }
  async function closeOne(p){const key=p.symbol+':'+p.positionIndex;if(closing.has(key))return;closing.add(key);try{const params=new URLSearchParams({symbol:p.symbol,side:p.side,positionIndex:p.positionIndex});const r=await fetch('/api/positions/close-preview?'+params,{method:'POST'});const preview=await r.json();if(!r.ok)throw Error(preview.error||'دریافت تأیید ناموفق بود.');if(!preview.positions.length)throw Error('این پوزیشن دیگر باز نیست.');const actual=preview.positions[0];if(!await phoenixConfirm('فقط '+actual.symbol+' · '+(actual.side==='Buy'?'Long':'Short')+' با حجم '+number(actual.size)+' در حساب '+preview.account+' با سفارش بازار بسته شود؟'))return;const response=await fetch('/api/positions/close-all/'+preview.id,{method:'POST'});const data=await response.json();if(!response.ok)throw Error(data.error||'ارسال بستن ناموفق بود.');status.textContent=data.items.map(x=>x.submitted?'درخواست بستن ارسال شد؛ منتظر تأیید صرافی.':x.error).join(' · ');}catch(e){status.textContent=e.message;}finally{closing.delete(key);window.dispatchEvent(new Event('phoenix-positions-refresh'));}}
  async function load(){
-  if(busy||panel.hidden||document.hidden)return;busy=true;refresh.disabled=true;
+  if(busy||panel.hidden||document.hidden)return;busy=true;refresh.disabled=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   try{
-   const response=await fetch('/api/positions/live',{cache:'no-store'});
+   const response=await fetch('/api/positions/live',{cache:'no-store',signal:controller.signal});
    if(!response.ok)throw Error(response.status===403?'برای مشاهدهٔ حساب واقعی با حساب مالک وارد شو.':'ارتباط با بای‌بیت برقرار نشد.');
    const data=await response.json();render(data.items);lastSuccess=data.updatedAtUtc;
    status.textContent='آخرین دریافت: '+new Date(lastSuccess).toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'});
-  }catch(error){status.textContent=error.message+(lastSuccess?' اطلاعات نمایش‌داده‌شده مربوط به '+new Date(lastSuccess).toLocaleTimeString('fa-IR')+' است.':' دوباره تلاش کن.');}
-  finally{busy=false;refresh.disabled=false;}
+  }catch(error){status.textContent=(error.name==='AbortError'?'دریافت پوزیشن‌ها طول کشید؛ دوباره تلاش می‌کنیم.':error.message)+(lastSuccess?' اطلاعات نمایش‌داده‌شده مربوط به '+new Date(lastSuccess).toLocaleTimeString('fa-IR')+' است.':' دوباره تلاش کن.');}
+  finally{clearTimeout(timer);busy=false;refresh.disabled=false;}
  }
  window.addEventListener('phoenix-positions-refresh',load);refresh.addEventListener('click',load);window.addEventListener('phoenix-signal-tab-changed',event=>{if(event.detail==='positions')load();});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)load();});setInterval(load,5000);

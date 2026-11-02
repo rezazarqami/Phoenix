@@ -59,7 +59,7 @@ document.querySelector('#aiParseButton').addEventListener('click', async () => {
 });
 
 async function loadSession() {
-  const response = await fetch('/api/auth/me', { cache: 'no-store' });
+  const response = await (window.PhoenixSessionRequest?window.PhoenixSessionRequest():fetch('/api/auth/me',{cache:'no-store'}));
   const session = await response.json();
   if(response.ok)window.PhoenixSessionIdentity=session;
   document.querySelectorAll('[data-admin-only]').forEach(el=>el.hidden=!session.isAdmin);
@@ -144,20 +144,23 @@ async function refreshStatus() {
   } finally {clearTimeout(deadline);statusPending=false;if(connectionDialog?.open)renderConnectionDetails();}
 }
 
+let instrumentsLoading=false,instrumentsLoaded=false;
 async function loadInstruments() {
+  if(instrumentsLoading||instrumentsLoaded)return;instrumentsLoading=true;
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
   try {
-    const response = await fetch('/api/instruments', { cache: 'no-store' });
+    const response = await fetch('/api/instruments', { cache: 'no-store',signal:controller.signal });
     if (!response.ok) throw new Error();
     const data = await response.json();
-    instruments = data.symbols || [];
+    instruments = data.symbols || [];instrumentsLoaded=true;
     symbolCount.textContent = fa.format(instruments.length) + ' نماد';
     const initial = instruments.includes('BTCUSDT') ? 'BTCUSDT' : instruments[0];
     if (initial) selectSymbol(initial, false);
     renderSymbols('');
   } catch {
     symbolCount.textContent = 'خطا در دریافت';
-    document.querySelector('#symbolHint').textContent = 'دریافت نمادها از Bybit ناموفق بود؛ چند لحظه دیگر صفحه را تازه کنید.';
-  }
+    document.querySelector('#symbolHint').textContent = 'دریافت نمادها از Bybit ناموفق بود؛ برای تلاش دوباره فرم را باز کنید.';
+  } finally {clearTimeout(timeout);instrumentsLoading=false;}
 }
 
 function renderSymbols(query) {
@@ -353,17 +356,21 @@ document.querySelector('#telegramAccessList').addEventListener('click', async ev
   loadTelegramAccess();
 });
 
-let signalsPending=false;
+let signalsPending=false,signalsAgain=false,signalsDetailedRequest=false;
 async function refreshSignals() {
-  if(signalsPending)return;signalsPending=true;
+  const detailed=!document.body.classList.contains('organized-shell')||!document.getElementById('signal-pane-active').hidden;
+  if(signalsPending){if(detailed&&!signalsDetailedRequest)signalsAgain=true;return;}signalsPending=true;signalsDetailedRequest=detailed;
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
   try {
-    const response = await fetch('/api/signals', { cache: 'no-store' });
+    const response = await fetch(detailed?'/api/signals':'/api/signals/active-count', { cache: 'no-store',signal:controller.signal });
+    if(!response.ok)return;
+    if(!detailed){const data=await response.json();if(Number.isInteger(data.count))document.querySelector('#count').textContent=fa.format(data.count);return;}
     const signals = await response.json();
     const active = signals.filter(s => !isFinished(s));
     document.querySelector('#count').textContent = fa.format(active.length);
     window.phoenixActiveSignals = active;
     window.dispatchEvent(new CustomEvent('phoenix-signals-updated', { detail: active }));
-  } catch { /* status indicator already reports connectivity */ } finally { signalsPending=false; }
+  } catch { /* status indicator already reports connectivity */ } finally { clearTimeout(timeout);signalsPending=false;if(signalsAgain){signalsAgain=false;refreshSignals();} }
 }
 
 function isFinished(signal) {
@@ -448,12 +455,13 @@ form.addEventListener('submit', async event => {
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
-loadSession(); loadInstruments(); refreshStatus(); refreshSignals(); refreshHistory();
+function loadVisibleForm(){if(!document.body.classList.contains('organized-shell')||!form.closest('[hidden]'))loadInstruments();}
+loadSession().catch(()=>{});loadVisibleForm();refreshStatus();refreshSignals();refreshHistory();
 setInterval(()=>{expireConnection();if(!document.hidden)refreshStatus();},1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){expireConnection();refreshStatus();}});
 setInterval(()=>{if(!document.hidden&&(!document.getElementById('panel-home')?.hidden||!document.getElementById('panel-tracking')?.hidden))refreshSignals();},5000);
 setInterval(()=>{if(!document.hidden&&!document.getElementById('panel-home')?.hidden)refreshHistory();},30000);
-window.addEventListener('phoenix-tab-changed',e=>{if(e.detail==='home'||e.detail==='tracking'){refreshStatus();refreshSignals();refreshHistory();}});
+window.addEventListener('phoenix-tab-changed',e=>{loadVisibleForm();if(e.detail==='home'||e.detail==='tracking'){refreshStatus();refreshSignals();refreshHistory();}});
 
 // Resume the live data feeds without replacing the document or user input.
 window.addEventListener('phoenix-native-resume',()=>{refreshStatus();refreshSignals();refreshHistory();});

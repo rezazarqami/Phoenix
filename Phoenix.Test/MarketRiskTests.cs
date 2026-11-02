@@ -27,6 +27,7 @@ internal static class MarketRiskTests
         Check(MarketRiskMath.Overall([M(null,"missing")]).Score==null,"No observations means unknown");
         var ics="BEGIN:VCALENDAR\r\nX-WR-TIMEZONE:America/New_York\r\nBEGIN:VEVENT\r\nUID:jan\r\nSUMMARY:Consumer Price "+"\r\n Index\\, release\r\nDTSTART;TZID=America/New_York:20260115T083000\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:july\r\nSUMMARY:Employment Situation\r\nDTSTART;TZID=America/New_York:20260715T083000\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:unknown\r\nSUMMARY:Consumer Price Index\r\nDTSTART;VALUE=DATE:20260715\r\nEND:VEVENT\r\nEND:VCALENDAR";
         var events=MarketRiskCalendar.ParseIcs(ics,"BLS","https://www.bls.gov");
+        Check(MarketRiskCalendar.ParseIcs(ics.Replace("America/New_York", "US-Eastern"),"BLS","https://www.bls.gov").Length==2,"Support the actual BLS US-Eastern timezone alias");
         Check(events.Length==2&&events[0].Title.Contains("Index, release"),"Unfold ICS lines and never invent all-day release times");
         Check(events[0].At.Hour==13&&events[1].At.Hour==12,"Eastern daylight savings must convert correctly");
         var fed=MarketRiskCalendar.ParseFed("{\"events\":[{\"title\":\"FOMC Minutes\",\"description\":\"&lt;p&gt;Meeting&lt;/p&gt;\",\"month\":\"2026-11\",\"days\":\"18\",\"time\":\"2:00 p.m.\"},{}]}");

@@ -44,7 +44,7 @@ public static class MarketRiskCalendar
 {
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     public static DateTimeOffset Eastern(DateTime local) => new(TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), TimeZoneInfo.FindSystemTimeZoneById("America/New_York")));
-    public static bool Relevant(string title) => Regex.IsMatch(title, "Consumer Price|Employment Situation|Producer Price|Gross Domestic|Personal Income|PCE|FOMC|Monetary Policy|Economic Outlook|Chairman|Chair Powell|Chair Warsh", RegexOptions.IgnoreCase);
+    public static bool Relevant(string title) => Regex.IsMatch(title, "Consumer Price|Employment Situation|Producer Price|Gross Domestic|\\bGDP\\b|Personal Income and Outlays|PCE|FOMC|Monetary Policy|Economic Outlook|Chairman|Chair Powell|Chair Warsh", RegexOptions.IgnoreCase);
     public static RiskEvent[] ParseIcs(string content, string source, string url)
     {
         var result = new List<RiskEvent>();
@@ -59,7 +59,7 @@ public static class MarketRiskCalendar
             if (start.Value is null || start.Head.Contains("VALUE=DATE;") || start.Head.EndsWith("VALUE=DATE")) continue; // No invented times.
             DateTimeOffset at;
             if (start.Value.EndsWith('Z') && DateTimeOffset.TryParseExact(start.Value, "yyyyMMdd'T'HHmmss'Z'", Inv, DateTimeStyles.AssumeUniversal, out var utc)) at = utc;
-            else if ((start.Head.Contains("America/New_York") || content.Contains("X-WR-TIMEZONE:America/New_York")) && DateTime.TryParseExact(start.Value,"yyyyMMdd'T'HHmmss",Inv,DateTimeStyles.None,out var local)) at = Eastern(local);
+            else if ((start.Head.Contains("America/New_York") || start.Head.Contains("US-Eastern") || content.Contains("X-WR-TIMEZONE:America/New_York") || content.Contains("X-WR-TIMEZONE:US-Eastern")) && DateTime.TryParseExact(start.Value,"yyyyMMdd'T'HHmmss",Inv,DateTimeStyles.None,out var local)) at = Eastern(local);
             else continue;
             result.Add(new(source + ":" + (Get("UID") is { Length: > 0 } uid ? uid : title + at.ToString("O")), title, source, at, url, "high"));
         }

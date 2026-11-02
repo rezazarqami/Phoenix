@@ -6,6 +6,7 @@ Scope: login, home, hidden manual/tracking sections, shared identity reads, live
 
 | Work | Evidence it was unnecessary at startup | Result |
 | --- | --- | --- |
+| Anonymous root navigation | `/` redirected to protected `/phoenix`, which then redirected to `/login` | Redirect directly to login when no signed session is present; authenticated entry still resolves to home |
 | Four `/api/auth/me` reads | Active signals, app, bulk controls and positions read the same identity in the same document | One shared in-flight read, independent response bodies, five-second reuse, bounded timeout, failed reads are not cached; server still authorizes every protected action |
 | `/api/instruments` and selected-symbol limits | Only the hidden manual form consumes these results | Load on first opening that form; preserve the catalog across tab changes, retry failed loads on reopening |
 | `/api/signals` on home | The only consumer needed there is a count; the endpoint can migrate similarity and wait for exchange instrument rules | Home uses local `/api/signals/active-count`; visible tracking retains the original detailed endpoint and all its migration behavior |

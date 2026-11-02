@@ -8,7 +8,9 @@ base=f'http://127.0.0.1:{port}'
 with tempfile.TemporaryDirectory() as tmp:
  password=secrets.token_urlsafe(24)
  env={**os.environ,'ASPNETCORE_URLS':base,'ASPNETCORE_CONTENTROOT':str(root/'Phoenix.Web'),'PHOENIX_AUTH_USERNAME':'owner','PHOENIX_AUTH_PASSWORD':password,'PHOENIX_QUEUE_PATH':tmp+'/signals.json','PHOENIX_USERS_FILE':tmp+'/users.json','PHOENIX_ENV_FILE':tmp+'/phoenix.env','PHOENIX_FIREBASE_SERVICE_ACCOUNT':''}
- client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+ class NoRedirect(urllib.request.HTTPRedirectHandler):
+  def redirect_request(self,*args,**kwargs):return None
+ client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),NoRedirect())
  def request(path,data=None,headers=None):
   req=urllib.request.Request(base+path,data=None if data is None else json.dumps(data).encode(),headers={'Content-Type':'application/json',**(headers or {})})
   try:
@@ -23,12 +25,15 @@ with tempfile.TemporaryDirectory() as tmp:
     except Exception:pass
     time.sleep(.1)
    else:raise AssertionError('Server startup failed')
+   for entry in ['/', '/index.html']:
+    status,headers,_=request(entry);assert status==302 and headers['Location']=='/login'
    assert request('/api/analysis/connection')[0]==401
    chart='/api/analysis/proposals/chart-fixture/image'
    assert request(chart)[0]==401
    fixture=Path(tmp)/'in-app-proposals.json'
    fixture.write_text(json.dumps([{'key':'chart-fixture','owner':'owner','image':'AQID'}]))
    assert request('/api/auth/login' ,{'username':'owner','password':password})[0]==200
+   status,headers,_=request('/');assert status==302 and headers['Location']=='/phoenix'
    status,headers,body=request('/api/signals/active-count');assert status==200 and json.loads(body)=={'count':0}
    status,headers,body=request(chart);assert status==200 and body==bytes([1,2,3])
    chart_tag=headers['ETag'];assert 'private' in headers['Cache-Control'] and 'must-revalidate' in headers['Cache-Control']

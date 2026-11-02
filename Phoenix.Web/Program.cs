@@ -145,7 +145,8 @@ app.Use(async (context, next) =>
     var path = context.Request.Path.Value;
     if (path is "/" or "/index.html")
     {
-        context.Response.Redirect("/phoenix");
+        // Avoid a second network redirect through the protected home page before login.
+        context.Response.Redirect(PhoenixSessionAuth.TryGetIdentity(context.Request,out _) ? "/phoenix" : "/login");
         return;
     }
     if ((context.Request.Path.StartsWithSegments("/api/personal") &&

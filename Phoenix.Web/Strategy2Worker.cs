@@ -6,7 +6,7 @@ namespace Phoenix.Web;
 public sealed class Strategy2Worker(
     Strategy2Runtime runtime,
     Strategy2TelegramNotifier telegram,
-    ILogger<Strategy2Worker> logger) : BackgroundService
+    ILogger<Strategy2Worker> logger, ServerOrderStore? mainStore = null) : BackgroundService
 {
     // Persist claims before network work; the live trade reader must never wait for Bybit/Telegram.
     private readonly Channel<ServerSignal> submissions = Channel.CreateUnbounded<ServerSignal>(
@@ -123,7 +123,7 @@ public sealed class Strategy2Worker(
             if (DateTime.UtcNow >= nextRecoveryCheck)
             {
                 nextRecoveryCheck = DateTime.UtcNow.AddSeconds(30);
-                var result = await new Strategy2Recovery(runtime.Store, runtime.Client).ReconcileAsync(token);
+                var result = await new Strategy2Recovery(runtime.Store, runtime.Client, mainStore).ReconcileAsync(token);
                 if (!result.EntriesPaused)
                     logger.LogInformation("Strategy 2 recovery resolved: {Recovered} archived records, {Pending} stale pending entries cancelled without replay", result.RecoveredRecords, result.CancelledPending);
             }

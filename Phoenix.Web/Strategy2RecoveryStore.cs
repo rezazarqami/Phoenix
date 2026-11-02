@@ -3,7 +3,7 @@ namespace Phoenix.Web;
 public sealed partial class ServerOrderStore
 {
     // Caller holds ExecutionGate and has just confirmed that the Demo account is flat.
-    internal async Task<Strategy2RecoveryResult> ResolveFlatStrategy2RecoveryAsync(CancellationToken token)
+    internal async Task<Strategy2RecoveryResult> ResolveFlatStrategy2RecoveryAsync(CancellationToken token, IReadOnlyDictionary<Guid,decimal>? retained = null)
     {
         await _gate.WaitAsync(token);
         try
@@ -18,6 +18,13 @@ public sealed partial class ServerOrderStore
             foreach (var original in recovered.Concat(pending))
             {
                 var s = Clone(original);
+                if(retained is not null && retained.TryGetValue(s.Id,out var waitingPrice))
+                {
+                    s.Status="Pending";s.RecoveryOriginalStatus=null;s.RecoveryResolvedAtUtc=now;
+                    s.LastPrice=waitingPrice;s.Error=null;
+                    await _history.UpsertAsync(s,"Strategy2PendingRetained",token);
+                    resolved.Add(s);continue;
+                }
                 var neverSent = s.RecoveryOriginalStatus == "Pending" && s.SubmittedAtUtc is null &&
                     s.EntryTriggeredAtUtc is null && s.BybitOrderId is null && s.FilledAtUtc is null;
                 s.Status = original.Status == "Pending" || neverSent ? "Cancelled" : "Completed";
@@ -35,7 +42,7 @@ public sealed partial class ServerOrderStore
             var next = signals.Select(s => ids.GetValueOrDefault(s.Id, s)).ToList();
             await SaveUnsafeAsync(next, token);
             _signals = next;
-            return new(recovered.Length, pending.Length, false);
+            return new(recovered.Length, pending.Count(s=>!((retained?.ContainsKey(s.Id))??false)), false);
         }
         finally { _gate.Release(); }
     }

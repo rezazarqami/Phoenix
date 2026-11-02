@@ -13,6 +13,7 @@ internal static class Strategy2RecoveryTests
         Directory.CreateDirectory(root);
         try
         {
+            await RetainWaiting(root);
             foreach (var mode in new[] { "flat", "position", "order-page-two", "position-race", "network-error", "cursor-loop" })
             {
                 var file = Path.Combine(root, mode + ".json");
@@ -68,6 +69,41 @@ internal static class Strategy2RecoveryTests
             }
         }
         finally { SignalHistoryStore.ClearConnectionPools();Directory.Delete(root,true); }
+    }
+    private static async Task RetainWaiting(string root)
+    {
+        foreach(var mode in new[]{"waiting","crossed","main-filled","main-race"})
+        {
+            var store=new ServerOrderStore(Path.Combine(root,mode+"-s2.json"),Path.Combine(root,mode+"-s2.db"));
+            var main=new ServerOrderStore(Path.Combine(root,mode+"-main.json"),Path.Combine(root,mode+"-main.db"));
+            var parent=new ServerSignal{Id=Guid.NewGuid(),Symbol="HYPEUSDT",Direction="Long",Timeframe="15",EntryPrice=90,TakeProfit=100,StopLoss=80,Ceiling=110,Floor=70,Status=mode=="main-filled"?"Filled":"Pending"};
+            await main.AddAsync(parent);
+            var pending=new ServerSignal{Id=Guid.NewGuid(),Symbol="HYPEUSDT",Direction="Long",Timeframe="15",EntryPrice=90,TakeProfit=100,StopLoss=80,Ceiling=110,Floor=70,Status="RecoveryRequired",RecoveryOriginalStatus="Pending"};
+            var backlog=new ServerSignal{Id=Guid.NewGuid(),Symbol="HYPEUSDT",Direction="Long",Timeframe="15",EntryPrice=90,TakeProfit=100,StopLoss=80,Ceiling=110,Floor=70,Status="Pending"};
+            await store.AddAsync(pending);await store.AddAsync(backlog);
+            var client=new BybitDemoClient(new("fixture","fixture"),new HttpClient(new Handler(r=>
+            {
+                Check(r.Method==HttpMethod.Get,"Recovery never sends an order");
+                if(r.RequestUri!.AbsolutePath=="/v5/market/tickers")
+                {
+                    if(mode=="main-race"){parent.Status="Filled";main.UpdateAsync(parent,default).GetAwaiter().GetResult();}
+                    return Json(new{retCode=0,result=new{list=new[]{new{symbol="HYPEUSDT",lastPrice=mode=="crossed"?"89":"95"}}}});
+                }
+                Check(r.RequestUri.AbsolutePath is "/v5/position/list" or "/v5/order/realtime","Only read-only account checks and current prices");
+                return Json(new{retCode=0,result=new{list=Array.Empty<object>(),nextPageCursor=""}});
+            })));
+            await new Strategy2Recovery(store,client,main).ReconcileAsync(default);
+            var result=await store.GetAllAsync();
+            Check(!store.EntriesPaused,"Confirmed flat account releases recovery pause");
+            if(mode=="waiting")
+            {
+                Check(result.All(s=>s.Status=="Pending" && s.CompletedAtUtc is null && s.EntryTriggeredAtUtc is null),"Retain both restored and normal waiting mirrors instead of blanket cancellation");
+                Check(result.All(s=>s.LastPrice==95),"Retained mirrors have a current waiting-side price");
+                var restarted=new ServerOrderStore(Path.Combine(root,mode+"-s2.json"),Path.Combine(root,mode+"-s2.db"));
+                Check((await restarted.GetAllAsync()).All(s=>s.Status=="Pending"),"Waiting signals survive restart");
+            }
+            else Check(result.All(s=>s.Status=="Cancelled"),"Never replay an entry already passed, a filled main signal or a fill racing reconciliation");
+        }
     }
     private static HttpResponseMessage Json(object data)=>new(HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(data))};
     private sealed class Handler(Func<HttpRequestMessage,HttpResponseMessage> respond):HttpMessageHandler

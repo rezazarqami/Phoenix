@@ -76,6 +76,30 @@ public sealed class ReviewArchiveStore
     public async Task LinkSignalAsync(string key, Guid? signalId, CancellationToken token) =>
         await ChangeAsync(key, "UPDATE reviews SET signal_id=$value WHERE id=$id", signalId?.ToString() ?? "SubmissionFailed", token);
 
+    // Rebuild pending proposals from their original candles, without public market requests.
+    public async Task<TechnicalFeatureSnapshot?> GetProposalFeaturesAsync(string key,CancellationToken token)
+    {
+        await _gate.WaitAsync(token);
+        try
+        {
+            await using var connection=await OpenAsync(token);
+            using var command=connection.CreateCommand();
+            command.CommandText="SELECT metadata,candles FROM reviews WHERE id=$id";
+            command.Parameters.AddWithValue("$id",key);
+            await using var reader=await command.ExecuteReaderAsync(token);
+            if(!await reader.ReadAsync(token))return null;
+            try
+            {
+                using var metadata=JsonDocument.Parse(reader.GetString(0));
+                var candidate=metadata.RootElement.GetProperty("candidate").Deserialize<SignalCandidate>(Json);
+                var candles=JsonSerializer.Deserialize<BybitKline[]>(reader.GetString(1),Json);
+                return candidate is not null && candles is {Length:>=3}?TechnicalFeatureExtractor.Calculate(candles,candidate):null;
+            }
+            catch(JsonException){return null;}
+        }
+        finally{_gate.Release();}
+    }
+
     public async Task<IReadOnlyDictionary<Guid, TechnicalFeatureSnapshot>> GetTechnicalFeaturesAsync(
         IReadOnlyCollection<Guid> signalIds, CancellationToken token)
     {

@@ -33,12 +33,9 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         var cutoff = candidate.EntryTriggeredAtUtc ?? (candidate.CreatedAtUtc == default ? (DateTime?)null : candidate.CreatedAtUtc);
         patterns = SignalPatternIdentity.Unique(patterns.Where(x => x.Signal.Id != candidate.Id || candidate.Id == Guid.Empty)
             .Where(x => cutoff is null || x.Signal.CompletedAtUtc < cutoff));
-        // A single symbol/anchor pair is one independent wave even if requested repeatedly.
-        patterns = patterns.Where(p=>p.Features.Wave is not null)
-            .GroupBy(p=>(p.Signal.Symbol.ToUpperInvariant(),p.Signal.Timeframe,
-                p.Features.Wave!.Start,p.Features.Wave.End,p.Features.Wave.Floor,p.Features.Wave.Ceiling))
-            .Where(g=>g.Select(p=>p.Outcome).Distinct().Count()==1)
-            .Select(g=>g.First()).ToArray();
+        patterns=patterns.Where(p=>p.Features.Wave?.Version==WaveFingerprint.CurrentVersion &&
+            p.Signal.Direction.Equals(candidate.Direction,StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(candidate.Timeframe) && p.Signal.Timeframe==candidate.Timeframe).ToArray();
         // Evaluate each historical signal once, before splitting by outcome/timeframe.
         // No minimum counts, class quotas, nearest-N truncation or positive score floor.
         var compared=patterns.Select(p => {
@@ -47,7 +44,15 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
                 candidate.TechnicalFeatures,p.Features));
         }).ToArray();
         var usable=compared.Where(x=>x.Match.Comparable).ToArray();
-        var nearby=usable.Where(x=>x.Match.Nearby).ToArray();
+        // Choose representatives using features only, never outcome labels. Overlapping
+        // observations of one market episode cannot multiply evidence.
+        var selected=new List<(LearnedSignalPattern Pattern,TechnicalResemblance Match)>();
+        foreach(var row in usable.Where(x=>x.Match.Nearby).OrderByDescending(x=>x.Match.Score)
+            .ThenBy(x=>x.Pattern.ObservedAtUtc).ThenBy(x=>x.Pattern.Signal.Id))
+        {
+            if(!selected.Any(x=>SameEpisode(x.Pattern,row.Pattern)))selected.Add(row);
+        }
+        var nearby=selected.ToArray();
         bool Same(LearnedSignalPattern p)=>!string.IsNullOrWhiteSpace(candidate.Timeframe) &&
             candidate.Timeframe==p.Signal.Timeframe;
         int Used(string outcome)=>usable.Count(x=>x.Pattern.Outcome==outcome);
@@ -76,6 +81,19 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         return new(null,null,patterns.Count,
             patterns.Count(x=>x.Outcome=="Target"),patterns.Count(x=>x.Outcome=="StopLoss"),
             Used("Target")+Used("StopLoss")){Evidence=support};
+    }
+
+    internal static bool SameEpisode(LearnedSignalPattern a,LearnedSignalPattern b)
+    {
+        if(!a.Signal.Symbol.Equals(b.Signal.Symbol,StringComparison.OrdinalIgnoreCase) ||
+            a.Signal.Timeframe!=b.Signal.Timeframe || !a.Signal.Direction.Equals(b.Signal.Direction,StringComparison.OrdinalIgnoreCase))return false;
+        var l=a.Features.Wave!;var r=b.Features.Wave!;
+        if(l.Rising!=r.Rising)return false;
+        var intersection=Math.Min(l.End,r.End)-Math.Max(l.Start,r.Start);
+        var span=Math.Max(l.End-l.Start,r.End-r.Start);
+        var range=Math.Max(l.Ceiling-l.Floor,r.Ceiling-r.Floor);
+        return span>0 && intersection>0 && (double)intersection/span>=.8 && range>0 &&
+            Math.Abs(l.Floor-r.Floor)/range<=.03m && Math.Abs(l.Ceiling-r.Ceiling)/range<=.03m;
     }
 
     internal static double TechnicalSimilarity(ServerSignal candidate,ServerSignal sample,

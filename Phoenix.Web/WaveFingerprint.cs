@@ -8,7 +8,26 @@ public sealed record WaveFingerprint(int Version, long Start, long End, decimal 
     decimal Countermove, decimal EntryOccupancy, decimal EntryCrossingPower,
     decimal EntryRejections, decimal[] Shape)
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
+    public bool Rising { get; init; }
+    public decimal[] OrderedPath { get; init; } = [];
+
+    // Resample by cumulative price travel, not candle duration. Preserve correction order.
+    internal static decimal[] PricePath(IReadOnlyList<decimal> points)
+    {
+        var lengths = new decimal[points.Count];
+        for(var i=1;i<points.Count;i++) lengths[i]=lengths[i-1]+Math.Abs(points[i]-points[i-1]);
+        if(points.Count<2 || lengths[^1]<=0)return [];
+        var result=new decimal[32];var at=1;
+        for(var i=0;i<result.Length;i++)
+        {
+            var distance=lengths[^1]*i/(result.Length-1);
+            while(at<points.Count-1 && lengths[at]<distance)at++;
+            var span=lengths[at]-lengths[at-1];
+            result[i]=span>0?points[at-1]+(points[at]-points[at-1])*(distance-lengths[at-1])/span:points[at];
+        }
+        return result;
+    }
 
     public static WaveFingerprint? Extract(IReadOnlyList<BybitKline> source, SignalCandidate c)
     {
@@ -61,6 +80,7 @@ public sealed record WaveFingerprint(int Version, long Start, long End, decimal 
             bars.Count(b=>up?b.Close>b.Open:b.Close<b.Open)/(decimal)bars.Length,
             bars.Average(b=>b.High>b.Low?Math.Abs(b.Close-b.Open)/(b.High-b.Low):0),
             overlap/(bars.Length-1),Clamp(counter),occupancy/bars.Length,
-            crossings.Count>0?crossings.Max():0,rejections/bars.Length,shape);
+            crossings.Count>0?crossings.Max():0,rejections/bars.Length,shape)
+        { Rising=up, OrderedPath=PricePath(new[]{0m}.Concat(bars.Select(b=>Oriented(b.Close))).Append(1m).ToArray()) };
     }
 }

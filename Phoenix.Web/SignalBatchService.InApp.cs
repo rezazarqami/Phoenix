@@ -33,7 +33,13 @@ public sealed partial class SignalBatchService
                 if(!item.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase) || item.State!="Ready" ||
                     item.Analysis.ObservedAtUtc is null || professional is null ||
                     item.Analysis.Prediction.Evidence?.ComparisonVersion==TechnicalResemblance.Version)continue;
-                var analysis=await professional.RefreshSimilarityAsync(item.Candidate,item.Interval,item.Analysis,ct);
+                var original=item.Analysis;
+                if(original.Features.Wave?.Version!=WaveFingerprint.CurrentVersion)
+                {
+                    var rebuilt=await reviews.GetProposalFeaturesAsync(item.Key,ct);
+                    if(rebuilt is not null)original=original with {Features=rebuilt};
+                }
+                var analysis=await professional.RefreshSimilarityAsync(item.Candidate,item.Interval,original,ct);
                 var oldSupport=SignalReviewText.Support(item.Analysis.Prediction.Evidence).Trim();
                 var newSupport=SignalReviewText.Support(analysis.Prediction.Evidence).Trim();
                 var caption=item.Caption.Contains(oldSupport,StringComparison.Ordinal)

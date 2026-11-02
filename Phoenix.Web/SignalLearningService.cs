@@ -61,7 +61,7 @@ public sealed class SignalLearningService(
             {
                 var missing = outcomeHistory.Select(x=>x.Item.Signal.Id).Distinct().ToArray();
                 var rebuilt = await archive.GetTechnicalFeaturesAsync(missing, token);
-                patterns = patterns.Select(p=>p.Features.Wave is null && rebuilt.TryGetValue(p.Signal.Id,out var f)
+                patterns = patterns.Select(p=>p.Features.Wave?.Version != WaveFingerprint.CurrentVersion && rebuilt.TryGetValue(p.Signal.Id,out var f)
                     ? p with { Features=f } : p).ToList();
                 var known = proposals.Select(p=>p.Signal.Id).ToHashSet();
                 var recovered = outcomeHistory.Select(x=>x.Item.Signal).DistinctBy(s=>s.Id)
@@ -70,7 +70,7 @@ public sealed class SignalLearningService(
                         rebuilt.TryGetValue(s.Id,out var f) && f.Wave is not null)
                     .Select(s=>new LearnedSignalPattern(s,s.Outcome!,rebuilt[s.Id])
                         {EvidenceStage="proposal",ObservedAtUtc=s.CreatedAtUtc}).ToArray();
-                proposals = proposals.Select(p=>p.Features.Wave is null && rebuilt.TryGetValue(p.Signal.Id,out var f)
+                proposals = proposals.Select(p=>p.Features.Wave?.Version != WaveFingerprint.CurrentVersion && rebuilt.TryGetValue(p.Signal.Id,out var f)
                     ? p with { Features=f } : p).Concat(recovered).ToArray();
             }
             _snapshot = new(patterns, DateTime.UtcNow)

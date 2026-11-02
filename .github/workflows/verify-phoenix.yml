@@ -29,6 +29,11 @@ jobs:
         run: |
           npm ci --prefix Phoenix.Test/ui --ignore-scripts --no-audit --no-fund
           npm test --prefix Phoenix.Test/ui 2>&1 | tee phoenix-ui-tests.log
+      - name: Verify chart delivery and concurrent review decisions
+        run: |
+          node Phoenix.Test/review-images-tests.cjs
+          node Phoenix.Test/review-delivery-browser-tests.cjs
+          node Phoenix.Test/in-app-review-ui-tests.cjs
       - name: Preserve interface failure details
         if: failure()
         uses: actions/upload-artifact@v4

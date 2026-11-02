@@ -15,6 +15,12 @@ builder.Services.AddRateLimiter(options => {
     options.OnRejected = async (context, token) => { context.HttpContext.Response.StatusCode = 429; context.HttpContext.Response.Headers.RetryAfter = "60"; await context.HttpContext.Response.WriteAsJsonAsync(new { error = "تلاش‌های ورود زیاد شده؛ یک دقیقه بعد دوباره امتحان کنید." }, token); };
 });
 builder.Services.AddSingleton<CommodityQuotes>();
+builder.Services.AddHttpClient("MarketRisk", client => {
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("PhoenixRiskObserver/1.0");
+});
+builder.Services.AddSingleton<MarketRiskObserver>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<MarketRiskObserver>());
 builder.Services.AddHttpClient("CommodityQuotes", client => {
     client.Timeout = TimeSpan.FromSeconds(10);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 PhoenixMarket/1.0");
@@ -255,6 +261,11 @@ app.MapGet("/", () => Results.Redirect("/phoenix"));
 app.MapGet("/index.html", () => Results.Redirect("/phoenix"));
 app.MapGet("/phoenix", () => Results.File(Path.Combine(app.Environment.WebRootPath, "phoenix.html"), "text/html; charset=utf-8"));
 app.MapMobileEndpoints();
+
+app.MapGet("/api/market-risk", (MarketRiskObserver observer, HttpResponse response) => {
+    response.Headers.CacheControl = "no-store";
+    return Results.Ok(observer.Snapshot());
+});
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "phoenix-web" }));
 app.MapGet("/notifications", () => Results.File(Path.Combine(app.Environment.WebRootPath,"notifications.html"),"text/html; charset=utf-8"));

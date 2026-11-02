@@ -1,7 +1,7 @@
 /* All authenticated destinations share the one Phoenix header and five-section workspace. */
 (() => {
  'use strict';
- const pages={'/phoenix':'home','/phoenix.html':'home','/analysis/coins':'crypto','/crypto-market.html':'crypto','/analysis/signals':'signal','/signal-lab.html':'signal','/analysis':'elliott','/analysis.html':'elliott','/strategy2.html':'strategy','/notifications':'notifications','/notifications.html':'notifications'};
+ const pages={'/phoenix':'home','/phoenix.html':'home','/analysis/coins':'crypto','/crypto-market.html':'crypto','/analysis/signals':'signal','/signal-lab.html':'signal','/analysis':'elliott','/analysis.html':'elliott','/strategy2.html':'strategy','/market-risk.html':'risk','/notifications':'notifications','/notifications.html':'notifications'};
  function resolve(value){
   const url=new URL(value,location.href),panel=pages[url.pathname];if(url.origin!==location.origin||!panel)return null;
   const query=new URLSearchParams();for(const key of ['symbol','eventId','view','source','section','mode']){const value=url.searchParams.get(key);if(value&&value.length<=200)query.set(key,value);}

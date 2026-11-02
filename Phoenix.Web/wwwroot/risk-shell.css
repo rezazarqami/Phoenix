@@ -1,0 +1,8 @@
+/* Six first-level destinations, with the risk radar directly visible. */
+.organized-shell .home-tabs>.home-tab:nth-child(n+4){grid-column:span 2!important;position:relative}
+.organized-shell #tab-risk .nav-icon svg{width:30px;height:30px}
+#riskBadge{position:absolute;top:7px;right:8px;width:9px;height:9px;border-radius:50%;background:#ff5478;box-shadow:0 0 9px #ff5478}
+#riskToast{position:fixed;z-index:160;bottom:18px;inset-inline:16px;margin:auto;max-width:420px;border:1px solid #ff5478;border-radius:15px;background:#241326;color:#ffdce4;box-shadow:0 8px 40px #0009;padding:16px 18px;font:12px/1.8 PhoenixVazir,Tahoma,sans-serif}
+#riskToast[hidden],#riskBadge[hidden]{display:none}#riskToast b{font-size:14px}#riskToast p{margin:6px 0 12px}#riskToast button{border:1px solid #7e354e;border-radius:9px;background:#391e35;color:#ffe9ef;padding:7px 10px;font:inherit;cursor:pointer}#riskToastClose{float:left}
+@media(min-width:1000px){.organized-shell .home-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}.organized-shell .home-tabs>.home-tab:nth-child(n+4){grid-column:auto!important}}
+@media(max-width:600px){.organized-shell .home-tabs>.home-tab:nth-child(n+4){flex-direction:column;gap:4px;min-height:84px;padding:9px 4px}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-copy{text-align:center}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-arrow{display:none}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-copy b{font-size:11px}.organized-shell .home-tabs>.home-tab:nth-child(n+4) .nav-icon svg{width:24px;height:24px}}

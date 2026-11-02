@@ -4,6 +4,7 @@
     signal: '/analysis/signals?v=20260827-4&embed=1',
     elliott: '/analysis?v=20260827-4&embed=1',
     strategy: '/strategy2.html?embed=1',
+    risk: '/market-risk.html?embed=1',
     notifications: '/notifications?embed=1'
   };
   const tabs = [...document.querySelectorAll('.home-tab')];
@@ -44,7 +45,7 @@
   }
 
   let current={name:'home',query:''},cryptoSection='create';
-  const labels={home:'خانه',crypto:'ایجاد سیگنال',tracking:'مدیریت معاملات',notifications:'رویدادها و نتایج',more:'بیشتر',elliott:'آزمایشگاه الیوت',signal:'آزمایشگاه سیگنال',strategy:'مدیریت استراتژی دو',statistics:'آمار'};
+  const labels={home:'خانه',crypto:'ایجاد سیگنال',tracking:'مدیریت معاملات',notifications:'رویدادها و نتایج',more:'بیشتر',elliott:'آزمایشگاه الیوت',signal:'آزمایشگاه سیگنال',strategy:'مدیریت استراتژی دو',risk:'رادار ریسک بازار',statistics:'آمار'};
   function ensureFrame(name,query='') {
     if(!routes[name])return;
     const host=document.getElementById(name==='crypto'?'cryptoFrameHost':name==='notifications'?'journalFrameHost':'panel-'+name);

@@ -1,0 +1,13 @@
+# Bounded wave alignment and auditable rejection counts
+
+Version 8 compared 32 price-travel samples at exactly the same index and required every individual auxiliary statistic to pass simultaneously. That conflated a modest shift of an internal correction with a different wave. The cumulative conjunction also let one moderately different secondary statistic veto an otherwise matching wave and plan.
+
+Version 9 preserves the anchored logarithmic wave, direction/timeframe/stage restrictions, original observation cutoff, trade-level positions, risk and reward/risk gates, and independent-episode deduplication. It changes neither reference labels nor trading/approval behavior. No minimum count, nearest-N fill, class quota or nonzero fallback exists. Missing data still cannot become a match.
+
+The ordered paths are aligned monotonically with a Sakoe-Chiba radius of four out of 32 samples. Path order and endpoints are preserved. Alignment minimizes squared price difference; equal costs prefer the diagonal. RMS uses a fixed denominator of 32 so extra matching steps cannot dilute error. The existing 0.08 RMS and 0.18 maximum price-range tolerances remain hard gates. Excessively different corrections cannot be averaged away by other features.
+
+Existing candle/body statistics are assessed as one RMS group, and existing entry-interaction statistics as another. Both groups must be <=1 using their original per-feature scales. All five trade-plan gates must still pass individually. The score used for deterministic episode representatives remains outcome-independent. No threshold was selected to prefer winners, create a target/stop gap, or eliminate zeros.
+
+Internal JSON evidence records overlapping rejection counts for ordered-wave, trade-plan, wave-body-group and entry-interaction-group. These diagnostic fields are not rendered in the three-number proposal summary. Missing-stage accounting now compares archived IDs against available stage IDs before timeframe/direction filters, rather than calling all excluded reference records missing snapshots.
+
+Validation includes bounded alignment with correction-phase shifts, structurally different counterexamples, exact-path invariance, valid single auxiliary deviations, invalid geometry, missing legacy data, future outcomes, independent episodes, and the unchanged target/stop/risk-free-only summary. Private local replay additionally used original review candles and registered outcomes; it is an engineering acceptance check, not an out-of-sample performance estimate. No raw private datasets or outcome-based parameter tuning are committed.

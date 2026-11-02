@@ -10,18 +10,30 @@ internal static class WaveSimilarityTests
     public static void Counts()
     {
         GeometryAndEpisodes();
+        var basePath=WaveFingerprint.PricePath([0,.65m,.38m,1]);
+        var closePath=WaveFingerprint.PricePath([0,.69m,.4m,1]);
+        var alignment=TechnicalResemblance.Align(basePath,closePath);
+        Check(alignment.Rms<.08 && alignment.Maximum<.18,"Small correction-phase shifts match within bounded alignment");
+        var opposite=TechnicalResemblance.Align(basePath,WaveFingerprint.PricePath([0,.2m,.05m,1]));
+        Check(opposite.Rms>.08 || opposite.Maximum>.18,"Different correction structure cannot be warped into a match");
+        var identical=TechnicalResemblance.Align(basePath,basePath);
+        Check(identical.Rms==0 && identical.Maximum==0,"Identical paths stay exact matches");
+        var soft=Features with{Wave=Features.Wave! with{EntryCrossingPower=.5m}};
+        var plan=new ServerSignal{Direction="Long",Timeframe="15",EntryPrice=150,TakeProfit=170,StopLoss=140};
+        Check(TechnicalResemblance.Compare(plan,plan,Features,soft).Nearby,"One modest auxiliary deviation cannot veto an otherwise matching wave and plan");
+
         var now=DateTime.UtcNow; var features=Features;
         var query=new ServerSignal{Id=Guid.NewGuid(),Symbol="QUERY",Direction="Long",EntryPrice=150,TakeProfit=170,StopLoss=140,Timeframe="15",CreatedAtUtc=now,TechnicalFeatures=features};
         var patterns=new List<LearnedSignalPattern>();
         foreach(var interval in new[]{"15","D"})
         foreach(var outcome in new[]{"Target","StopLoss","RiskFree"})
         for(var i=0;i<31;i++) patterns.Add(new(new ServerSignal{Id=Guid.NewGuid(),Symbol=$"{outcome}{i}",Direction="Long",EntryPrice=150,TakeProfit=170,StopLoss=140,Timeframe=interval,
-            CompletedAtUtc=now.AddDays(-1)},outcome,features));
+            CompletedAtUtc=now.AddDays(-1)},outcome,interval=="D"?features with{Wave=features.Wave! with{Start=1000,End=2000}}:features));
         var e=SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!;
         Check(e.SameTimeframeNearbyTargets==31 && e.SameTimeframeNearbyStops==31 && e.SameTimeframeNearbyRiskFree==31 &&
-            e.OtherTimeframeNearbyTargets==0 && e.OtherTimeframeNearbyStops==0 && e.OtherTimeframeNearbyRiskFree==0,"All six counts; no sixty-row or nearest-N cap");
+            e.OtherTimeframeNearbyTargets==31 && e.OtherTimeframeNearbyStops==31 && e.OtherTimeframeNearbyRiskFree==31,"All six counts; no sixty-row or nearest-N cap");
         var summary=SignalReviewText.Support(e);
-        Check(summary=="\nنزدیکِ کل: 31 تارگت / 31 استاپ / 31 ریسک‌فری","Same and other timeframes render one combined row");
+        Check(summary=="\nنزدیکِ کل: 62 تارگت / 62 استاپ / 62 ریسک‌فری","Same and other timeframes render one combined row");
         var caption="levels\nنزدیکِ هم‌تایم‌فریم: 31 تارگت / 31 استاپ / 31 ریسک‌فری\nنزدیکِ سایر تایم‌فریم‌ها: 31 تارگت / 31 استاپ / 31 ریسک‌فری";
         var combined=SignalReviewText.CurrentSupport(caption,e);
         Check(combined=="levels"+summary && SignalReviewText.CurrentSupport(combined,e)==combined,
@@ -36,7 +48,7 @@ internal static class WaveSimilarityTests
         query.TechnicalFeatures=features with{Wave=null};
         Check(Total(SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!)==0,"Missing legacy wave never becomes matching zero");
         query.TechnicalFeatures=features with{Rsi14=0,VolumeRatio=999,AtrPercent=0,TrendStrength=-1};
-        Check(Total(SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!)==93,"Unrelated indicators never influence wave counts");
+        Check(Total(SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!)==186,"Unrelated indicators never influence wave counts");
     }
     private static void GeometryAndEpisodes()
     {
@@ -63,6 +75,14 @@ internal static class WaveSimilarityTests
         var reversed=SignalSimilarityService.CalculateFromPatterns(a,rows.Reverse().ToArray()).Evidence!;
         Check(Total(first)==2 && first.SameTimeframeNearbyTargets==1 && first.SameTimeframeNearbyRiskFree==1,"Overlapping wave counts once; independent wave remains");
         Check(Total(reversed)==2 && reversed.SameTimeframeNearbyTargets==1,"Episode selection is stable under archive order");
+        var cross=Row("StopLoss",600,700,2);cross.Signal.Timeframe="60";
+        var overlapping=Row("Target",11,111,2);overlapping.Signal.Timeframe="60";
+        var across=SignalSimilarityService.CalculateFromPatterns(a,rows.Append(cross).Append(overlapping).ToArray()).Evidence!;
+        Check(Total(across)==3 && across.OtherTimeframeNearbyStops==1,"A distinct normalized wave on another timeframe counts; overlapping cross-timeframe wave does not inflate counts");
+        cross.Signal.TakeProfit=199;
+        var excluded=SignalSimilarityService.CalculateFromPatterns(a,[cross]).Evidence!;
+        Check(Total(excluded)==0,"Cross-timeframe access never bypasses trade geometry gates");
+
         Check(SignalReviewText.Support(first)=="\nنزدیکِ کل: 1 تارگت / 0 استاپ / 1 ریسک‌فری","Output remains precisely the three outcome counts");
         Check(WaveFingerprint.PricePath([0,.8m,.4m,1]).SequenceEqual(WaveFingerprint.PricePath([0,0,.8m,.8m,.4m,1])),"Flat waiting candles cannot change price-travel shape");
     }

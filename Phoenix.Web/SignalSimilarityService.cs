@@ -9,18 +9,17 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
         var atEntry = candidate.EntryTriggeredAtUtc is not null;
-        // Prefer the same observation stage, even for small or single-outcome
-        // cohorts. Legacy entry fallback is explicitly labeled in the summary.
+        // Never replace missing proposal evidence with a later observation stage.
         var patterns = !atEntry ? snapshot.ProposalPatterns : snapshot.Patterns;
         var result = CalculateFromPatterns(candidate, patterns, token);
         var cutoff = candidate.EntryTriggeredAtUtc ?? candidate.CreatedAtUtc;
-        var archived = snapshot.OutcomeHistory.Select(x => x.Item.Signal)
+        var archivedIds = snapshot.OutcomeHistory.Select(x => x.Item.Signal)
             .Where(x => (x.Id != candidate.Id || candidate.Id == Guid.Empty) && x.Outcome is "Target" or "StopLoss" or "RiskFree")
             .Where(x => x.CompletedAtUtc is not null && (cutoff == default || x.CompletedAtUtc < cutoff))
-            .Select(x => x.Id).Distinct().Count();
+            .Select(x => x.Id).Distinct().ToArray();
         return result with { Evidence = result.Evidence! with {
-            ArchivedCompletedCount = archived,
-            MissingStageSnapshotCount = Math.Max(0, archived - result.SampleCount),
+            ArchivedCompletedCount = archivedIds.Length,
+            MissingStageSnapshotCount = archivedIds.Except(patterns.Select(p=>p.Signal.Id)).Count(),
             ReferenceRefreshedAtUtc = snapshot.RefreshedAtUtc
         }};
     }
@@ -34,13 +33,13 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             .Where(x => cutoff is null || x.Signal.CompletedAtUtc < cutoff));
         patterns=patterns.Where(p=>p.Features.Wave?.Version==WaveFingerprint.CurrentVersion &&
             p.Signal.Direction.Equals(candidate.Direction,StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(candidate.Timeframe) && p.Signal.Timeframe==candidate.Timeframe).ToArray();
+            !string.IsNullOrWhiteSpace(candidate.Timeframe) && !string.IsNullOrWhiteSpace(p.Signal.Timeframe)).ToArray();
         // Evaluate each historical signal once, before splitting by outcome/timeframe.
         // No minimum counts, class quotas, nearest-N truncation or positive score floor.
         var compared=patterns.Select(p => {
             token.ThrowIfCancellationRequested();
             return (Pattern:p, Match:TechnicalResemblance.Compare(candidate,p.Signal,
-                candidate.TechnicalFeatures,p.Features));
+                candidate.TechnicalFeatures,p.Features,allowOtherTimeframes:true));
         }).ToArray();
         var usable=compared.Where(x=>x.Match.Comparable).ToArray();
         // Choose representatives using features only, never outcome labels. Overlapping
@@ -75,6 +74,8 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             OtherTimeframeNearbyStops=Close("StopLoss",false),
             OtherTimeframeNearbyRiskFree=Close("RiskFree",false),
             // Counts only: do not sort examples or generate historical charts.
+            RejectionCounts=compared.SelectMany(x=>x.Match.Rejections()).GroupBy(x=>x)
+                .ToDictionary(g=>g.Key,g=>g.Count()),
             NearestExamples=[]
         };
         return new(null,null,patterns.Count,
@@ -85,7 +86,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     internal static bool SameEpisode(LearnedSignalPattern a,LearnedSignalPattern b)
     {
         if(!a.Signal.Symbol.Equals(b.Signal.Symbol,StringComparison.OrdinalIgnoreCase) ||
-            a.Signal.Timeframe!=b.Signal.Timeframe || !a.Signal.Direction.Equals(b.Signal.Direction,StringComparison.OrdinalIgnoreCase))return false;
+            !a.Signal.Direction.Equals(b.Signal.Direction,StringComparison.OrdinalIgnoreCase))return false;
         var l=a.Features.Wave!;var r=b.Features.Wave!;
         if(l.Rising!=r.Rising)return false;
         var intersection=Math.Min(l.End,r.End)-Math.Max(l.Start,r.Start);
@@ -98,7 +99,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
     internal static double TechnicalSimilarity(ServerSignal candidate,ServerSignal sample,
         TechnicalFeatureSnapshot candidateFeatures,TechnicalFeatureSnapshot sampleFeatures,bool matchTimeframe=true)
     {
-        var comparison=TechnicalResemblance.Compare(candidate,sample,candidateFeatures,sampleFeatures);
+        var comparison=TechnicalResemblance.Compare(candidate,sample,candidateFeatures,sampleFeatures,allowOtherTimeframes:!matchTimeframe);
         return comparison.Score; // Timeframe only partitions the displayed counts.
     }
 

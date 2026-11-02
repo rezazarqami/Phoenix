@@ -429,7 +429,7 @@ app.MapGet("/api/signals/active-count", async (ServerOrderStore store,HttpRespon
     response.Headers.CacheControl="no-store";
     var signals=await store.GetAllAsync(token);
     return Results.Ok(new{count=signals.Count(s=>s.CompletedAtUtc is null && s.TargetReachedAtUtc is null &&
-        s.StopLossReachedAtUtc is null && s.RiskFreeClosedAtUtc is null && s.RemovedAtUtc is null &&
+        s.StopLossReachedAtUtc is null && s.RiskFreeClosedAtUtc is null &&
         s.Status is not ("Error" or "Rejected" or "Cancelled" or "Deactivated" or "Expired"))});
 });
 

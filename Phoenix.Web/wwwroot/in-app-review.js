@@ -4,6 +4,7 @@
  let items=[],selected=null,loading=false,autoFocus=true;const pending=new Map(),decided=new Set();let deskVersion=0,removing=false;let countVersion=0,lastActiveCount=null,countBusy=false,lastCountAt=0;const failures=new Map();
  // Bound read requests so a stalled mobile connection cannot freeze refresh forever.
  async function read(url){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),8000);try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error(response.status===401?'نشست ورود پایان یافته؛ دوباره وارد شوید.':`دریافت اطلاعات ناموفق بود (HTTP ${response.status}).`);return await response.json();}finally{clearTimeout(timer);}}
+ const visible=()=>!document.hidden&&!pane.hidden&&(!window.frameElement||window.frameElement.getClientRects().length>0);
  const text=(tag,value,className)=>Object.assign(document.createElement(tag),{textContent:value,...(className?{className}:{})});
  function focusReview(active){const standalone=parent===window;document.body.classList.toggle('review-focus',standalone&&active);document.getElementById('closeReviewFocus').hidden=!standalone||!active;}
  const shortLabels={'فاصله تا ورود':'تا ورود','فاصله ورود تا تارگت':'تا تارگت','لوریج محاسبه‌شده':'اهرم محاسبه','حداکثر لوریج ارز':'سقف اهرم','لوریج قابل استفاده با این سقف':'اهرم مجاز','تایم‌فریم سیگنال':'تایم‌فریم'};
@@ -88,7 +89,7 @@
  document.getElementById('market-tab-review').addEventListener('click',()=>{autoFocus=true;render();refresh();});
  document.getElementById('startBatch').addEventListener('click',()=>setTimeout(()=>document.getElementById('market-tab-review').click(),500));
  window.addEventListener('online',()=>{refresh();const retry=[...detail.querySelectorAll('button')].find(b=>b.textContent==='دریافت دوبارهٔ نمودار'&&!b.hidden);retry?.click();});
- document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pane.hidden)refresh();});
+ document.addEventListener('visibilitychange',()=>{if(visible())refresh();});
  window.addEventListener('message',e=>{if(e.origin===location.origin&&e.source===parent&&e.data?.type==='phoenix-frame-visible'&&!pane.hidden)refresh();});
- setInterval(()=>{if(!document.hidden&&!pane.hidden)refresh();},5000);render();refresh();
+ setInterval(()=>{if(visible())refresh();},5000);render();refresh();
 })();

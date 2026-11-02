@@ -48,6 +48,11 @@ public sealed class ShadowSignalWorker(
         {
             if (DemoOrderWorker.EntryReached(signal, price))
             {
+                // A pending paper signal has no entered history to reinterpret.
+                // Start the explicit observation policy at its first observed entry.
+                signal.ObservationPolicyVersion ??= 1;
+                signal.StopLoss2 ??= signal.EntryPrice+(signal.TakeProfit-signal.EntryPrice)*.5m;
+                signal.RiskFreePrice ??= signal.EntryPrice+(signal.TakeProfit-signal.EntryPrice)*.75m;
                 signal.Status = "Filled";
                 signal.FilledAtUtc = DateTime.UtcNow;
                 signal.EntryTriggeredAtUtc = signal.FilledAtUtc;

@@ -510,6 +510,7 @@ public sealed partial class ServerOrderStore
 
     private static ServerSignal Clone(ServerSignal signal) => new()
     {
+        ObservationPolicyVersion = signal.ObservationPolicyVersion,
         ResultWalletBalanceUsdt = signal.ResultWalletBalanceUsdt, ResultWalletAtUtc = signal.ResultWalletAtUtc,
         RecoveryOriginalStatus = signal.RecoveryOriginalStatus,
         RecoveryResolvedAtUtc = signal.RecoveryResolvedAtUtc,

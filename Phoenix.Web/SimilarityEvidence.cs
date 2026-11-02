@@ -14,6 +14,7 @@ public sealed record SimilarityEvidence(string QueryStage, string ReferenceStage
     public DateTime? ReferenceRefreshedAtUtc { get; init; }
     public int ComparisonVersion { get; init; }
     public string? Metric { get; init; }
+    public IReadOnlyDictionary<string,int>? RejectionCounts { get; init; }
     public int InsufficientFeatureCount { get; init; }
     public IReadOnlyList<SimilarityExample>? NearestExamples { get; init; }
     public int ComparableRiskFree { get; init; }

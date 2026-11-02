@@ -10,6 +10,18 @@ internal static class WaveSimilarityTests
     public static void Counts()
     {
         GeometryAndEpisodes();
+        var basePath=WaveFingerprint.PricePath([0,.65m,.38m,1]);
+        var closePath=WaveFingerprint.PricePath([0,.69m,.4m,1]);
+        var alignment=TechnicalResemblance.Align(basePath,closePath);
+        Check(alignment.Rms<.08 && alignment.Maximum<.18,"Small correction-phase shifts match within bounded alignment");
+        var opposite=TechnicalResemblance.Align(basePath,WaveFingerprint.PricePath([0,.2m,.05m,1]));
+        Check(opposite.Rms>.08 || opposite.Maximum>.18,"Different correction structure cannot be warped into a match");
+        var identical=TechnicalResemblance.Align(basePath,basePath);
+        Check(identical.Rms==0 && identical.Maximum==0,"Identical paths stay exact matches");
+        var soft=Features with{Wave=Features.Wave! with{EntryCrossingPower=.5m}};
+        var plan=new ServerSignal{Direction="Long",Timeframe="15",EntryPrice=150,TakeProfit=170,StopLoss=140};
+        Check(TechnicalResemblance.Compare(plan,plan,Features,soft).Nearby,"One modest auxiliary deviation cannot veto an otherwise matching wave and plan");
+
         var now=DateTime.UtcNow; var features=Features;
         var query=new ServerSignal{Id=Guid.NewGuid(),Symbol="QUERY",Direction="Long",EntryPrice=150,TakeProfit=170,StopLoss=140,Timeframe="15",CreatedAtUtc=now,TechnicalFeatures=features};
         var patterns=new List<LearnedSignalPattern>();

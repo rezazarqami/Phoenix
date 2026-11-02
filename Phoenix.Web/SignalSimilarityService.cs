@@ -9,18 +9,17 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         if (candidate.TechnicalFeatures is null) return new(null, null, 0, 0, 0);
         var snapshot = await learning.GetSnapshotAsync(token);
         var atEntry = candidate.EntryTriggeredAtUtc is not null;
-        // Prefer the same observation stage, even for small or single-outcome
-        // cohorts. Legacy entry fallback is explicitly labeled in the summary.
+        // Never replace missing proposal evidence with a later observation stage.
         var patterns = !atEntry ? snapshot.ProposalPatterns : snapshot.Patterns;
         var result = CalculateFromPatterns(candidate, patterns, token);
         var cutoff = candidate.EntryTriggeredAtUtc ?? candidate.CreatedAtUtc;
-        var archived = snapshot.OutcomeHistory.Select(x => x.Item.Signal)
+        var archivedIds = snapshot.OutcomeHistory.Select(x => x.Item.Signal)
             .Where(x => (x.Id != candidate.Id || candidate.Id == Guid.Empty) && x.Outcome is "Target" or "StopLoss" or "RiskFree")
             .Where(x => x.CompletedAtUtc is not null && (cutoff == default || x.CompletedAtUtc < cutoff))
-            .Select(x => x.Id).Distinct().Count();
+            .Select(x => x.Id).Distinct().ToArray();
         return result with { Evidence = result.Evidence! with {
-            ArchivedCompletedCount = archived,
-            MissingStageSnapshotCount = Math.Max(0, archived - result.SampleCount),
+            ArchivedCompletedCount = archivedIds.Length,
+            MissingStageSnapshotCount = archivedIds.Except(patterns.Select(p=>p.Signal.Id)).Count(),
             ReferenceRefreshedAtUtc = snapshot.RefreshedAtUtc
         }};
     }
@@ -75,6 +74,8 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
             OtherTimeframeNearbyStops=Close("StopLoss",false),
             OtherTimeframeNearbyRiskFree=Close("RiskFree",false),
             // Counts only: do not sort examples or generate historical charts.
+            RejectionCounts=compared.SelectMany(x=>x.Match.Rejections()).GroupBy(x=>x)
+                .ToDictionary(g=>g.Key,g=>g.Count()),
             NearestExamples=[]
         };
         return new(null,null,patterns.Count,

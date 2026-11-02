@@ -62,7 +62,7 @@ public sealed class SignalLearningService(
                 var missing = outcomeHistory.Select(x=>x.Item.Signal.Id).Distinct().ToArray();
                 var rebuilt = await archive.GetTechnicalFeaturesAsync(missing, token);
                 patterns = patterns.Select(p=>p.Features.Wave?.Version != WaveFingerprint.CurrentVersion && rebuilt.TryGetValue(p.Signal.Id,out var f)
-                    ? p with { Features=f } : p).ToList();
+                    ? p with { Features=UpgradeEntry(p.Features,f) } : p).ToList();
                 var known = proposals.Select(p=>p.Signal.Id).ToHashSet();
                 var recovered = outcomeHistory.Select(x=>x.Item.Signal).DistinctBy(s=>s.Id)
                     .Where(s=>!known.Contains(s.Id) && s.Outcome is "Target" or "StopLoss" or "RiskFree")
@@ -83,6 +83,16 @@ public sealed class SignalLearningService(
         }
         finally { _refreshGate.Release(); }
     }
+    // Archived proposal candles may add only the ordered path to the exact same
+    // entry wave. Never substitute proposal-time measurements for entry evidence.
+    private static TechnicalFeatureSnapshot UpgradeEntry(TechnicalFeatureSnapshot original,TechnicalFeatureSnapshot archived)
+    {
+        var old=original.Wave;var wave=archived.Wave;
+        if(old is null || wave is null || old.Start!=wave.Start || old.End!=wave.End ||
+            old.Floor!=wave.Floor || old.Ceiling!=wave.Ceiling)return original;
+        return original with{Wave=old with{Version=wave.Version,Rising=wave.Rising,OrderedPath=wave.OrderedPath}};
+    }
+
     // Validity depends on the measurements actually shared, not the schema age.
     internal static (List<LearnedSignalPattern> Entries, LearnedSignalPattern[] Proposals)
         BuildPatterns(IEnumerable<SignalHistoryItem> items)

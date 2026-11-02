@@ -34,7 +34,7 @@ public sealed partial class SignalBatchService
                     item.Analysis.ObservedAtUtc is null || professional is null ||
                     item.Analysis.Prediction.Evidence?.ComparisonVersion==TechnicalResemblance.Version)continue;
                 var original=item.Analysis;
-                if(original.Features.Wave?.Version!=WaveFingerprint.CurrentVersion)
+                if(reviews is not null && original.Features.Wave?.Version!=WaveFingerprint.CurrentVersion)
                 {
                     var rebuilt=await reviews.GetProposalFeaturesAsync(item.Key,ct);
                     if(rebuilt is not null)original=original with {Features=rebuilt};

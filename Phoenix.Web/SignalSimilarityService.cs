@@ -11,8 +11,7 @@ public sealed class SignalSimilarityService(SignalLearningService learning)
         var atEntry = candidate.EntryTriggeredAtUtc is not null;
         // Prefer the same observation stage, even for small or single-outcome
         // cohorts. Legacy entry fallback is explicitly labeled in the summary.
-        var patterns = !atEntry && snapshot.ProposalPatterns.Count > 0
-            ? snapshot.ProposalPatterns : snapshot.Patterns;
+        var patterns = !atEntry ? snapshot.ProposalPatterns : snapshot.Patterns;
         var result = CalculateFromPatterns(candidate, patterns, token);
         var cutoff = candidate.EntryTriggeredAtUtc ?? candidate.CreatedAtUtc;
         var archived = snapshot.OutcomeHistory.Select(x => x.Item.Signal)

@@ -21,7 +21,7 @@ internal static class OutcomeWindowTests
     public static void DenominatorsAndCohorts()
     {
         var at=new DateTime(2026,1,1,0,0,0,DateTimeKind.Utc);
-        var f=new TechnicalFeatureSnapshot(.5m,1,0,0,0,1,1,.5m,.5m,1,.5m) {Wave=new(1,1,2,90,110,.8m,.8m,.8m,.1m,.1m,.1m,.8m,.1m,new decimal[8])};
+        var f=new TechnicalFeatureSnapshot(.5m,1,0,0,0,1,1,.5m,.5m,1,.5m) {Wave=new(2,1,2,90,110,.8m,.8m,.8m,.1m,.1m,.1m,.8m,.1m,new decimal[8]) {Rising=true,OrderedPath=Enumerable.Range(0,32).Select(i=>i/31m).ToArray()}};
         var candidate=new ServerSignal {Id=Guid.NewGuid(),CreatedAtUtc=at.AddDays(20),Direction="Long",Timeframe="5",EntryPrice=100,TakeProfit=110,StopLoss=90,TechnicalFeatures=f};
         var history=Enumerable.Range(0,10).Select(i=>
         {

@@ -1,0 +1,15 @@
+# Wave/plan similarity v8
+
+The user-facing output remains one row: counts of nearby Target, StopLoss and RiskFree examples. No probabilities, additional indicators, commentary or decision controls are added. Execution and approval behavior is unchanged.
+
+Membership requires the same trade direction, declared timeframe, anchored wave orientation, complete v2 wave features and valid entry/target/stop ordering. References must have completed before the query's original proposal/entry time. Proposal queries use proposal evidence only; missing proposal history cannot silently become entry history.
+
+Wave features retain the v7 candle body, overlap, correction and entry-interaction measurements. An ordered 32-point close-price path additionally preserves the sequence of internal corrections. It is normalized logarithmically to the actual Fibonacci anchor range and resampled by cumulative price travel, not elapsed duration. Flat waiting bars and price-unit scaling do not alter this path. It is not an unconstrained time warp and adds no outside-wave candles or market indicators.
+
+Entry, target and stop positions are normalized to the same anchor range. Initial tolerances are 0.04, 0.05 and 0.04 respectively. Normalized risk distance and reward/risk ratios must each be within a factor of 1.25. Ordered-path RMS distance must be <=0.08 and maximum point difference <=0.18. Every existing and new feature gate must pass; no class quotas, winner-directed thresholds, minimum nonzero count or nearest-N cap exist. These are explicit initial engineering thresholds, not empirically calibrated success probabilities.
+
+Among eligible matches, feature similarity ranks representatives without access to outcomes; ties use observation time and signal ID. A reference overlapping a selected wave for >=80% of the larger anchor span, with endpoints within 3% of the larger price range, counts only once per symbol, direction and timeframe. This deterministic representative rule avoids repeated exact or slightly shifted scans multiplying evidence. It does not merge unrelated symbols or nonoverlapping market episodes.
+
+Historical proposal features are rebuilt in the existing background learning refresh from original archived candles. Entry fingerprints receive an ordered-path upgrade only when archived and original anchors match exactly, preserving entry-time measurements. Missing/corrupt evidence remains unusable. Existing ready proposals refresh counts using their original archived wave, observation timestamp and unchanged trading levels/chart; no fresh exchange histories are fetched for migration.
+
+Tests cover plan geometry, direction/timeframe exclusion, correction order, overlapping episodes, stable input permutation, missing legacy data, price scaling and duration invariance, future-label exclusion, archival reconstruction and the unchanged three-count output. These checks establish implementation behavior, not better live trading performance. Threshold evaluation should use time-separated, nonoverlapping historical episodes before any predictive-performance claim; no automatic parameter training is enabled.

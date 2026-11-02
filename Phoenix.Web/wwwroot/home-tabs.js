@@ -86,8 +86,7 @@
     document.getElementById('workspaceBreadcrumb').hidden=!nested;
     const sectionLabels={search:'مرور و جستجوی بازار',approved:'پیگیری بدون ارسال سفارش',history:'خروجی داده‌های معاملات',archive:'آرشیو میز تأیید',statistics:'گزارش تفصیلی معاملات'};
     document.getElementById('workspaceLocation').textContent=sectionLabels[section]||labels[name];
-    document.querySelector('#createHeading h1').textContent=sectionLabels[section]||'ایجاد سیگنال';
-    document.querySelector('#createHeading>p:last-child').hidden=category!=='crypto';
+    document.querySelector('#createHeading h1').textContent=sectionLabels[section]||'ایجاد سیگنال جدید';
     if(!form&&!statistics)ensureFrame(name,query);
     document.querySelector('#panel-'+target+' iframe')?.contentWindow?.postMessage({type:'phoenix-frame-visible'},location.origin);
     document.body.classList.remove('review-focus-host','chart-focus-host');

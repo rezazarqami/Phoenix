@@ -39,6 +39,7 @@ public sealed class ServerSignal
     public string ExpireStage { get; set; } = "Initial";
     public string Status { get; set; } = "Pending";
     public string? RecoveryOriginalStatus { get; set; }
+    public DateTime? RecoveryResolvedAtUtc { get; set; }
     public string OrderLinkId { get; set; } = string.Empty;
     public string? BybitOrderId { get; set; }
     public string? Error { get; set; }
@@ -511,6 +512,7 @@ public sealed partial class ServerOrderStore
     {
         ResultWalletBalanceUsdt = signal.ResultWalletBalanceUsdt, ResultWalletAtUtc = signal.ResultWalletAtUtc,
         RecoveryOriginalStatus = signal.RecoveryOriginalStatus,
+        RecoveryResolvedAtUtc = signal.RecoveryResolvedAtUtc,
         Id = signal.Id, Symbol = signal.Symbol, Direction = signal.Direction,
         Ceiling = signal.Ceiling, Floor = signal.Floor, PositionSizeUsdt = signal.PositionSizeUsdt,
         Leverage = signal.Leverage,

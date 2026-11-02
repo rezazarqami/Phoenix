@@ -113,9 +113,22 @@ public sealed class Strategy2Worker(
         }
     }
 
+    private DateTime nextRecoveryCheck;
+
     private async Task ProcessCycleAsync(CancellationToken token)
     {
         var orders = await runtime.Store.GetAllAsync(token);
+        if (runtime.Store.EntriesPaused)
+        {
+            if (DateTime.UtcNow >= nextRecoveryCheck)
+            {
+                nextRecoveryCheck = DateTime.UtcNow.AddSeconds(30);
+                var result = await new Strategy2Recovery(runtime.Store, runtime.Client).ReconcileAsync(token);
+                if (!result.EntriesPaused)
+                    logger.LogInformation("Strategy 2 recovery resolved: {Recovered} archived records, {Pending} stale pending entries cancelled without replay", result.RecoveredRecords, result.CancelledPending);
+            }
+            return;
+        }
         foreach (var group in orders.Where(IsActive).GroupBy(x => x.Symbol))
         {
             try

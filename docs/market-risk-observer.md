@@ -25,3 +25,7 @@ External feed coverage and live reachability must be assessed in production; tes
 ## Verification
 
 `MarketRiskTests` covers shock aggregation, inverse depth, insufficient data, partial/stale feeds, Eastern DST, real BLS timezone naming, ICS folding, Fed JSON parsing, read-only requests, persistence and absence of execution dependencies. `market-risk-ui-tests.cjs` checks tabs, keyboard navigation, red/unknown indicators, read acknowledgment, disconnection behavior and no trading requests at 320/390/1440 pixels. Shared-shell tests include direct primary navigation and viewer access; quote assertions follow the existing compact cards and current journal theme.
+
+## Compact radar layout
+
+The radar uses an explicitly opaque navy HTML/body canvas with dark color-scheme, including inside Android WebView; transparent iframe documents must not expose the browser white canvas. Only while radar is active, the existing hero and six-card menu condense. Both tabs and all eight live indicators fit alongside navigation at 320x640, 390x844 and desktop sizes. Events paginate three at a time; alerts paginate one at a time. Calculation details open in a themed modal rather than expanding the main page. Layout checks measure the complete parent document, not only the child iframe, and do not suppress overflow to conceal content.

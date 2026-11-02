@@ -1,9 +1,12 @@
 const assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),vm=require('vm');
 const {JSDOM,VirtualConsole}=require('./ui/node_modules/jsdom'),root=path.join(__dirname,'../Phoenix.Web/wwwroot'),read=f=>fs.readFileSync(path.join(root,f),'utf8'),flush=()=>new Promise(r=>setImmediate(r));
 (async()=>{
- let calls=0,release;const events={},context={window:{addEventListener:(n,f)=>events[n]=f},document:{addEventListener:()=>{}},Date,AbortController,setTimeout,clearTimeout,fetch:()=>{calls++;return new Promise(r=>release=()=>r(Response.json({isAdmin:true})));}};
+ let calls=0,release;const events={},context={window:{addEventListener:(n,f)=>events[n]=f},document:{addEventListener:()=>{}},Date,Response,AbortController,setTimeout,clearTimeout,fetch:()=>{calls++;return new Promise(r=>release=()=>r(Response.json({isAdmin:true})));}};
  vm.runInNewContext(read('session-request.js'),context);const request=context.window.PhoenixSessionRequest;
- const consumers=Array.from({length:4},()=>request().then(r=>r.json()));assert.equal(calls,1);release();assert.ok((await Promise.all(consumers)).every(x=>x.isAdmin));await request();assert.equal(calls,1);events['phoenix-native-resume']();const renewed=request();assert.equal(calls,2);release();await renewed;
+ const consumers=Array.from({length:4},()=>request().then(r=>r.json()));assert.equal(calls,1);release();assert.ok((await Promise.all(consumers)).every(x=>x.isAdmin));await request().then(r=>r.json());assert.equal(calls,1);events['phoenix-native-resume']();const renewed=request();assert.equal(calls,2);release();await renewed.then(r=>r.json());
+ // The deadline covers the response body as well as the initial headers.
+ let expire;const stalled={...context,window:{addEventListener:()=>{}},setTimeout:fn=>{expire=fn;return 1;},clearTimeout:()=>{},fetch:async(url,o)=>({ok:true,status:200,headers:{},text:()=>new Promise((resolve,reject)=>o.signal.addEventListener('abort',()=>reject(Error('body timeout'))))})};
+ vm.runInNewContext(read('session-request.js'),stalled);const bodyRequest=stalled.window.PhoenixSessionRequest();await flush();expire();await assert.rejects(bodyRequest,/body timeout/);
  for(const native of [false,true]){
   const html=native?fs.readFileSync(path.join(__dirname,'../android/app/src/main/assets/phoenix-login.html'),'utf8'):read('login.html');
   const console=new VirtualConsole(),dom=new JSDOM(html,{url:'https://fixture.test/login',runScripts:'outside-only',virtualConsole:console}),w=dom.window,d=w.document,timers=[];let posts=0;

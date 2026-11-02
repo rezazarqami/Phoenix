@@ -61,6 +61,8 @@ internal static class SignalPatternIdentity
         var s=p.Signal;
         if (string.IsNullOrWhiteSpace(s.Symbol) || p.ObservedAtUtc is null || s.EntryPrice <= 0 ||
             s.TakeProfit <= 0 || s.StopLoss <= 0) return $"row:{index}";
-        return FormattableString.Invariant($"{p.EvidenceStage}|{s.Symbol.ToUpperInvariant()}|{s.Direction}|{s.Timeframe}|{s.EntryPrice}|{s.TakeProfit}|{s.StopLoss}|{p.ObservedAtUtc.Value.Ticks / TimeSpan.TicksPerMinute}");
+        var wave=p.Features.Wave;
+        var anchors=wave is not null?FormattableString.Invariant($"|{wave.Start}|{wave.End}|{wave.Floor}|{wave.Ceiling}"):"";
+        return FormattableString.Invariant($"{p.EvidenceStage}|{s.Symbol.ToUpperInvariant()}|{s.Direction}|{s.Timeframe}|{s.EntryPrice}|{s.TakeProfit}|{s.StopLoss}|{p.ObservedAtUtc.Value.Ticks / TimeSpan.TicksPerMinute}")+anchors;
     }
 }

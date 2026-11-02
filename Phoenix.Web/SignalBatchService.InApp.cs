@@ -10,15 +10,47 @@ public sealed partial class SignalBatchService
     public sealed record PendingProposal(string Key, string Owner, SignalCandidate Candidate, string Interval,
         bool LineMode, ProfessionalSignalAnalysis Analysis, string Caption, byte[] Image, decimal PositionSizeUsdt,
         DateTime CreatedAt, string State = "Ready", string? Error = null);
-    private async Task<List<PendingProposal>> ReadProposalsAsync(CancellationToken ct) => File.Exists(PendingPath)
-        ? JsonSerializer.Deserialize<List<PendingProposal>>(await File.ReadAllTextAsync(PendingPath,ct),ReviewJson)
-            ?? throw new InvalidDataException("صف پیشنهادها قابل خواندن نیست.") : [];
+    private sealed record ProposalCache(string Path,DateTime Write,long Length,PendingProposal[] Items);
+    private ProposalCache? proposalCache;
+    private PendingProposal[]? CachedProposals(string path)
+    {
+        var snapshot=Volatile.Read(ref proposalCache);
+        if(snapshot is null || snapshot.Path!=path)return null;
+        var file=new FileInfo(path);
+        return file.Exists && snapshot.Write==file.LastWriteTimeUtc && snapshot.Length==file.Length ? snapshot.Items : null;
+    }
+    // Readers receive a new list; the published snapshot is never mutated.
+    private async Task<List<PendingProposal>> ReadProposalsAsync(CancellationToken ct)
+    {
+        var path=PendingPath;
+        if(CachedProposals(path) is { } cached)return new(cached);
+        var file=new FileInfo(path);
+        if(!file.Exists){Volatile.Write(ref proposalCache,null);return [];}
+        var items=JsonSerializer.Deserialize<List<PendingProposal>>(await File.ReadAllTextAsync(path,ct),ReviewJson)
+            ?? throw new InvalidDataException("صف پیشنهادها قابل خواندن نیست.");
+        Volatile.Write(ref proposalCache,new(path,file.LastWriteTimeUtc,file.Length,items.ToArray()));
+        return items;
+    }
     private async Task WriteProposalsAsync(List<PendingProposal> items, CancellationToken ct)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(PendingPath)!);
-        var temp=PendingPath+".tmp";
+        var path=PendingPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temp=path+".tmp";
         await File.WriteAllTextAsync(temp,JsonSerializer.Serialize(items,ReviewJson),ct);
-        File.Move(temp,PendingPath,true);
+        File.Move(temp,path,true);
+        var file=new FileInfo(path);
+        Volatile.Write(ref proposalCache,new(path,file.LastWriteTimeUtc,file.Length,items.ToArray()));
+    }
+    // Warm chart reads do not wait for similarity migration or a trading decision.
+    public async Task<byte[]?> PendingImageAsync(string owner,string key,CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if(CachedProposals(PendingPath) is { } cached)
+            return cached.SingleOrDefault(x=>x.Key==key && x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase))?.Image;
+        await reviewGate.WaitAsync(ct);
+        try{return (await ReadProposalsAsync(ct)).SingleOrDefault(x=>x.Key==key &&
+            x.Owner.Equals(owner,StringComparison.OrdinalIgnoreCase))?.Image;}
+        finally{reviewGate.Release();}
     }
     public async Task<IReadOnlyList<PendingProposal>> PendingAsync(string owner,CancellationToken ct)
     {

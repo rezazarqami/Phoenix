@@ -424,6 +424,15 @@ app.MapPost("/api/ai/parse-signal", async (AiSignalTextRequest request, AiSignal
     return result.Complete ? Results.Ok(result) : Results.BadRequest(result);
 });
 
+// No leverage refresh, similarity refresh or exchange calls for a UI counter.
+app.MapGet("/api/signals/active-count", async (ServerOrderStore store,HttpResponse response,CancellationToken token) => {
+    response.Headers.CacheControl="no-store";
+    var signals=await store.GetAllAsync(token);
+    return Results.Ok(new{count=signals.Count(s=>s.CompletedAtUtc is null && s.TargetReachedAtUtc is null &&
+        s.StopLossReachedAtUtc is null && s.RiskFreeClosedAtUtc is null && s.RemovedAtUtc is null &&
+        s.Status is not ("Error" or "Rejected" or "Cancelled" or "Deactivated" or "Expired"))});
+});
+
 app.MapGet("/api/signals", async (ServerOrderStore store, BybitDemoClient bybit,
     SignalSimilarityService similarity, CancellationToken token) =>
 {
@@ -609,10 +618,17 @@ app.MapGet("/api/analysis/proposals", async (HttpRequest request, SignalBatchSer
     return Results.Ok(items.Select(x=>new {x.Key,x.Caption,x.CreatedAt,x.State,x.Error,evidence=x.Analysis.Prediction.Evidence,symbol=x.Candidate.Symbol,
         image="/api/analysis/proposals/"+x.Key+"/image"}));
 });
-app.MapGet("/api/analysis/proposals/{key}/image", async (string key,HttpRequest request,SignalBatchService batches,CancellationToken ct)=>{
+app.MapGet("/api/analysis/proposals/{key}/image", async (string key,HttpRequest request,HttpResponse response,SignalBatchService batches,CancellationToken ct)=>{
     PhoenixSessionAuth.TryGetIdentity(request,out var identity);
-    var item=(await batches.PendingAsync(identity.Username ?? "",ct)).SingleOrDefault(x=>x.Key==key);
-    return item is null?Results.NotFound():Results.File(item.Image,"image/png");
+    var image=await batches.PendingImageAsync(identity.Username ?? "",key,ct);
+    if(image is null)return Results.NotFound();
+    var etag="\""+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(image))+"\"";
+    response.Headers.CacheControl="private, max-age=0, must-revalidate";
+    response.Headers.ETag=etag;
+    response.Headers["Vary"]="Cookie";
+    if(request.Headers.IfNoneMatch.Any(v=>v is not null && v.Split(',').Any(t=>t.Trim()==etag)))
+        return Results.StatusCode(StatusCodes.Status304NotModified);
+    return Results.File(image,"image/png");
 });
 app.MapPost("/api/analysis/proposals/restore", async (HttpRequest request, SignalBatchService batches) => {
     PhoenixSessionAuth.TryGetIdentity(request, out var identity);

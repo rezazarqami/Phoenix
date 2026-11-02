@@ -48,3 +48,5 @@ body.review-focus .review-chart img{height:100%;max-height:100%;width:100%;objec
  #market-pane-review .review-heading p{font-size:10px;line-height:1.8}
  #market-pane-review .review-heading strong{justify-self:end;padding:6px 8px;font-size:11px}
 }
+
+.review-chart{position:relative}.review-image-state{position:absolute;inset:0;display:grid;place-items:center;padding:16px;background:#061a37;color:#92bad5;font-size:11px;text-align:center;pointer-events:none}.review-image-state[hidden]{display:none}

@@ -2,13 +2,13 @@ const assert=require('node:assert/strict'),fs=require('fs'),path=require('path')
 const {JSDOM}=require('./ui/node_modules/jsdom');
 (async()=>{
  const root=path.join(__dirname,'../Phoenix.Web/wwwroot'),dom=new JSDOM(fs.readFileSync(path.join(root,'crypto-market.html'),'utf8'),{url:'https://fixture.test/analysis/coins',runScripts:'outside-only',pretendToBeVisual:true});
- const w=dom.window,d=w.document;let tick,active=2;w.setInterval=f=>{tick=f;return 0;};w.scrollTo=()=>{};
+ const w=dom.window,d=w.document;let tick,active=2;w.setInterval=f=>{tick=f;return 0;};w.scrollTo=()=>{};d.getElementById('market-pane-review').hidden=false;
  const proposal=(key,symbol)=>({key,symbol,caption:'<script>unsafe</script>\nورود: 100',image:'/fixture.png',state:'Ready'});
  let items=[proposal('one','BTCUSDT'),proposal('two','ETHUSDT'),proposal('three','SOLUSDT')],posts=[],releases=new Map();
  w.fetch=async(url,options)=>{
   if(url==='/api/analysis/proposals/remove'){const keys=JSON.parse(options.body).keys;items=items.filter(x=>!keys.includes(x.key));return {ok:true};}
   if(options?.method==='POST'){const key=url.split('/').at(-2);posts.push({key,...JSON.parse(options.body)});await new Promise(r=>releases.set(key,r));items=items.filter(x=>x.key!==key);if(key==='one')active++;return {ok:true};}
-  return {ok:true,json:async()=>url==='/api/signals'?Array.from({length:active},()=>({status:'Pending'})):JSON.parse(JSON.stringify(items))};
+  return {ok:true,json:async()=>url==='/api/signals/active-count'?{count:active}:JSON.parse(JSON.stringify(items))};
  };
  w.eval(fs.readFileSync(path.join(root,'in-app-review.js'),'utf8'));const flush=()=>new Promise(r=>setImmediate(r));await flush();
  assert.equal(d.querySelector('#reviewBadge').textContent,'۳');assert.equal(d.querySelector('#reviewDetail script'),null);assert.match(d.querySelector('.review-details-dialog pre').textContent,/<script>/);

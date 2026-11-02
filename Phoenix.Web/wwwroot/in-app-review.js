@@ -1,9 +1,9 @@
 (() => {
  'use strict';
  const list=document.getElementById('reviewList'),detail=document.getElementById('reviewDetail'),status=document.getElementById('reviewStatus'),pane=document.getElementById('market-pane-review');
- let items=[],selected=null,loading=false,autoFocus=true;const pending=new Map(),decided=new Set();let deskVersion=0,removing=false;let countVersion=0,lastActiveCount=null;const failures=new Map();
+ let items=[],selected=null,loading=false,autoFocus=true;const pending=new Map(),decided=new Set();let deskVersion=0,removing=false;let countVersion=0,lastActiveCount=null,countBusy=false,lastCountAt=0;const failures=new Map();
  // Bound read requests so a stalled mobile connection cannot freeze refresh forever.
- async function read(url){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30000);try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error(response.status===401?'نشست ورود پایان یافته؛ دوباره وارد شوید.':`دریافت اطلاعات ناموفق بود (HTTP ${response.status}).`);return await response.json();}finally{clearTimeout(timer);}}
+ async function read(url){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),8000);try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error(response.status===401?'نشست ورود پایان یافته؛ دوباره وارد شوید.':`دریافت اطلاعات ناموفق بود (HTTP ${response.status}).`);return await response.json();}finally{clearTimeout(timer);}}
  const text=(tag,value,className)=>Object.assign(document.createElement(tag),{textContent:value,...(className?{className}:{})});
  function focusReview(active){const standalone=parent===window;document.body.classList.toggle('review-focus',standalone&&active);document.getElementById('closeReviewFocus').hidden=!standalone||!active;}
  const shortLabels={'فاصله تا ورود':'تا ورود','فاصله ورود تا تارگت':'تا تارگت','لوریج محاسبه‌شده':'اهرم محاسبه','حداکثر لوریج ارز':'سقف اهرم','لوریج قابل استفاده با این سقف':'اهرم مجاز','تایم‌فریم سیگنال':'تایم‌فریم'};
@@ -31,10 +31,16 @@
   const data=summary(item),title=document.createElement('div');title.className='review-title';
   title.append(text('h3',item.symbol),text('span',[data.direction,data.interval].filter(Boolean).join(' · '),'review-direction'));
   const expand=text('button','جزئیات','review-more');expand.type='button';title.append(expand);detail.append(title);
-  const chart=document.createElement('div');chart.className='review-chart';const image=document.createElement('img');image.src=item.image;image.alt='نمودار '+item.symbol;chart.append(image);detail.append(chart);
+  const chart=document.createElement('div');chart.className='review-chart';const image=document.createElement('img');image.alt='نمودار '+item.symbol;image.decoding='async';chart.append(image);detail.append(chart);
   const retryImage=text('button','دریافت دوبارهٔ نمودار','review-more');retryImage.type='button';retryImage.hidden=true;
-  image.onerror=()=>{retryImage.hidden=false;};image.onload=()=>{retryImage.hidden=true;};
-  retryImage.onclick=()=>{retryImage.hidden=true;image.src=item.image+'?retry='+Date.now();};detail.append(retryImage);
+  const imageState=text('span','در حال دریافت نمودار…','review-image-state');chart.append(imageState);
+  async function loadImage(){retryImage.hidden=true;imageState.hidden=false;imageState.textContent='در حال دریافت نمودار…';
+   try{if(window.PhoenixReviewImages){const url=await window.PhoenixReviewImages.load(item.image);if(!image.isConnected)return;image.src=url;}else image.src=item.image;}
+   catch(error){if(!image.isConnected)return;imageState.textContent=navigator.onLine===false?'اتصال قطع است؛ نمودار پس از اتصال دوباره دریافت می‌شود.':'دریافت نمودار طول کشید؛ دوباره تلاش کن.';retryImage.hidden=false;}}
+  image.onload=()=>{imageState.hidden=true;retryImage.hidden=true;};
+  image.onerror=()=>{window.PhoenixReviewImages?.invalidate(item.image);imageState.hidden=false;imageState.textContent='نمایش نمودار ناموفق بود.';retryImage.hidden=false;};
+  retryImage.onclick=loadImage;detail.append(retryImage);loadImage();
+  window.PhoenixReviewImages?.prefetch(items.filter(x=>x.key!==selected));
   const grid=document.createElement('div');grid.className='review-metrics';
   for(const f of data.fields){const cell=document.createElement('div');cell.append(text('span',f.key),text('b',f.value));grid.append(cell);}detail.append(grid);
   if(data.near.length){const near=document.createElement('div');near.className='review-neighbors';for(const row of data.near){const label=row.key.replace('نزدیکِ ','').replace('نزدیکی ','');near.append(text('div',label+': '+row.value));}detail.append(near);}
@@ -51,7 +57,11 @@
   const received=await read('/api/analysis/proposals');if(version!==deskVersion)return;const next=received.filter(x=>!pending.has(x.key)&&!decided.has(x.key));if(JSON.stringify(next)!==JSON.stringify(items)){const previous=selected,oldActive=JSON.stringify(items.find(x=>x.key===selected));items=next;if(!items.some(x=>x.key===selected))selected=items[0]?.key;if(previous!==selected||oldActive!==JSON.stringify(items.find(x=>x.key===selected))||!detail.children.length)render();else{renderList();document.getElementById('reviewCapacity').textContent=items.length.toLocaleString('fa-IR')+' / ۱۰';document.getElementById('reviewBadge').textContent=items.length.toLocaleString('fa-IR');/* Do not reset chart/rejection text while new proposals arrive. */}}
   if(!pending.size&&!failures.size)status.textContent=items.length===10?'صف کامل است؛ پس از بررسی یک مورد، تحلیل ادامه می‌یابد.':items.length.toLocaleString('fa-IR')+' پیشنهاد آمادهٔ بررسی';
  }catch(error){status.textContent=error.name==='AbortError'?'دریافت صف طول کشید؛ اطلاعات قبلی حفظ شده و دوباره بررسی می‌شود.':error.message;}finally{loading=false;if(!pane.hidden)updateActiveCount();}}
- async function updateActiveCount(){const version=++countVersion;try{const signals=await read('/api/signals');if(version!==countVersion)return;const active=signals.filter(s=>!s.completedAtUtc&&!s.targetReachedAtUtc&&!s.stopLossReachedAtUtc&&!s.riskFreeClosedAtUtc&&!s.removedAtUtc&&!['Error','Rejected','Cancelled','Deactivated','Expired'].includes(s.status));const counter=document.getElementById('activeCount');if(counter)counter.textContent=active.length.toLocaleString('fa-IR');if(lastActiveCount!==active.length){lastActiveCount=active.length;window.dispatchEvent(new CustomEvent('phoenix-signals-invalidated'));if(parent!==window)parent.postMessage({type:'phoenix-signals-invalidated'},location.origin);}}catch{}}
+ async function updateActiveCount(force=false){if(countBusy||!force&&Date.now()-lastCountAt<5000)return;countBusy=true;const version=++countVersion;try{
+  const data=await read('/api/signals/active-count');if(version!==countVersion||!Number.isInteger(data.count)||data.count<0)return;
+  lastCountAt=Date.now();const counter=document.getElementById('activeCount');if(counter)counter.textContent=data.count.toLocaleString('fa-IR');
+  if(lastActiveCount!==data.count){lastActiveCount=data.count;window.dispatchEvent(new CustomEvent('phoenix-signals-invalidated'));if(parent!==window)parent.postMessage({type:'phoenix-signals-invalidated'},location.origin);}
+ }catch{}finally{countBusy=false;}}
  function progress(){status.textContent=(pending.size?pending.size.toLocaleString('fa-IR')+' پاسخ در حال ثبت در پس‌زمینه · ':'')+(failures.size?[...failures.values()].join(' · '):items.length.toLocaleString('fa-IR')+' پیشنهاد آمادهٔ بررسی');}
  async function decide(key,action,reason){if(pending.has(key))return;const item=items.find(x=>x.key===key);if(!item||item.state!=='Ready')return;
   pending.set(key,item);decided.add(key);failures.delete(key);items=items.filter(x=>x.key!==key);selected=items[0]?.key;
@@ -60,7 +70,7 @@
   try{const response=await fetch('/api/analysis/proposals/'+encodeURIComponent(key)+'/decision',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({action,reason})});
    if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.error||'ثبت پاسخ ناموفق بود.');}
   }catch(error){decided.delete(key);failures.set(key,item.symbol+': '+error.message+' وضعیت را در صف بررسی کن؛ ارسال خودکار تکرار نمی‌شود.');}
-  finally{pending.delete(key);await updateActiveCount();await refresh();progress();}
+  finally{pending.delete(key);await Promise.allSettled([updateActiveCount(true),refresh()]);progress();}
  }
  async function removeFromDesk(snapshot){
   if(removing||!snapshot.length)return;
@@ -77,5 +87,8 @@
  document.getElementById('closeReviewFocus').addEventListener('click',()=>{autoFocus=false;focusReview(false);});
  document.getElementById('market-tab-review').addEventListener('click',()=>{autoFocus=true;render();refresh();});
  document.getElementById('startBatch').addEventListener('click',()=>setTimeout(()=>document.getElementById('market-tab-review').click(),500));
- setInterval(()=>{if(!document.hidden)refresh();},2500);render();refresh();
+ window.addEventListener('online',()=>{refresh();const retry=[...detail.querySelectorAll('button')].find(b=>b.textContent==='دریافت دوبارهٔ نمودار'&&!b.hidden);retry?.click();});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pane.hidden)refresh();});
+ window.addEventListener('message',e=>{if(e.origin===location.origin&&e.source===parent&&e.data?.type==='phoenix-frame-visible'&&!pane.hidden)refresh();});
+ setInterval(()=>{if(!document.hidden&&!pane.hidden)refresh();},5000);render();refresh();
 })();

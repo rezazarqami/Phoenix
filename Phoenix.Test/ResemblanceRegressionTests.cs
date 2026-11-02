@@ -139,6 +139,22 @@ internal static class ResemblanceRegressionTests
             await batches.AddProposalAsync(new("owner-key","owner",candidate,"60",true,analysis,
                 "chart and levels"+SignalReviewText.Support(prediction.Evidence),[1,2],5,observed),default);
             await batches.AddProposalAsync(new("other-key","other",candidate,"60",true,analysis,"other caption",[3],5,observed),default);
+            Check((await batches.PendingImageAsync("OWNER","owner-key",default))!.SequenceEqual(new byte[]{1,2}),
+                "Authenticated chart read returns bytes without similarity work");
+            var gate=(SemaphoreSlim)typeof(SignalBatchService).GetField("reviewGate",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)!.GetValue(batches)!;
+            await gate.WaitAsync();
+            try
+            {
+                using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                Check((await batches.PendingImageAsync("owner","owner-key",deadline.Token)) is not null,
+                    "Warm chart delivery cannot wait behind a busy desk or decision gate");
+            }
+            finally{gate.Release();}
+            Check(await batches.PendingImageAsync("other","owner-key",default) is null,
+                "Chart lookup never crosses owners");
+            using(var unchanged=System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"in-app-proposals.json"))))
+                Check(unchanged.RootElement[0].GetProperty("analysis").GetProperty("prediction").GetProperty("evidence")
+                    .GetProperty("comparisonVersion").GetInt32()==4,"Reading a chart cannot migrate the desk");
             var item=(await batches.PendingAsync("owner",default)).Single();
             Check(item.Analysis.Prediction.Evidence is {ComparisonVersion:10,SameTimeframeNearbyTargets:0,SameTimeframeNearbyStops:0},
                 "Migrate old desk counts with only outcomes known at the original proposal time");

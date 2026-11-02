@@ -24,7 +24,19 @@ with tempfile.TemporaryDirectory() as tmp:
     time.sleep(.1)
    else:raise AssertionError('Server startup failed')
    assert request('/api/analysis/connection')[0]==401
-   assert request('/api/auth/login',{'username':'owner','password':password})[0]==200
+   chart='/api/analysis/proposals/chart-fixture/image'
+   assert request(chart)[0]==401
+   fixture=Path(tmp)/'in-app-proposals.json'
+   fixture.write_text(json.dumps([{'key':'chart-fixture','owner':'owner','image':'AQID'}]))
+   assert request('/api/auth/login' ,{'username':'owner','password':password})[0]==200
+   status,headers,body=request('/api/signals/active-count');assert status==200 and json.loads(body)=={'count':0}
+   status,headers,body=request(chart);assert status==200 and body==bytes([1,2,3])
+   chart_tag=headers['ETag'];assert 'private' in headers['Cache-Control'] and 'must-revalidate' in headers['Cache-Control']
+   assert request(chart,headers={'If-None-Match':chart_tag})[0]==304
+   fixture.write_text(json.dumps([{'key':'chart-fixture','owner':'other','image':'AQID'}]))
+   assert request(chart,headers={'If-None-Match':chart_tag})[0]==404
+   fixture.write_text(json.dumps([{'key':'chart-fixture','owner':'owner','image':'AQIE'}]))
+   status,headers,body=request(chart,headers={'If-None-Match':chart_tag});assert status==200 and body==bytes([1,2,4]) and headers['ETag']!=chart_tag
    status,headers,body=request('/api/analysis/connection');probe=json.loads(body)
    assert status==200 and probe['status']=='ok' and probe['instance'] and probe['startedAtUtc'] and probe['serverTimeUtc']
    assert 'no-store' in headers['Cache-Control'] and headers['X-Phoenix-Request-Id'] and headers['X-Phoenix-Instance']==probe['instance']
@@ -40,5 +52,6 @@ with tempfile.TemporaryDirectory() as tmp:
    status,headers,body=request('/api/mobile/history?view=results&source=normal',headers={'If-None-Match':tag});assert status==304 and body==b''
    assert request('/api/auth/logout',{})[0]==200
    assert request('/api/mobile/history?view=results&source=normal',headers={'If-None-Match':tag})[0]==401
+   assert request(chart,headers={'If-None-Match':chart_tag})[0]==401
    print('PASS HTTP cache: private authenticated assets, gzip, static revalidation, body-free history and session expiry.')
   finally:process.terminate();process.wait(timeout=10)

@@ -125,9 +125,9 @@
     const page=await response.json();if(!Array.isArray(page.events))throw Error('پاسخ تاریخچه معتبر نیست.');
     return {page,etag:response.headers?.get('ETag')};
    }});
-   if(result.status===401){sessionInvalid=true;try{if(cacheKey)localStorage.removeItem(cacheKey);}catch{}for(const views of Object.values(sources))for(const state of Object.values(views)){state.entries.clear();state.etag=null;}render();throw Error('برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.');}
+   if(result.status===401){sessionInvalid=true;try{if(cacheKey)localStorage.removeItem(cacheKey);}catch{}for(const views of Object.values(sources))for(const state of Object.values(views)){state.entries.clear();state.etag=null;}render();status.textContent='برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.';throw Error('برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.');}
    if(sessionInvalid||sources[currentSource][currentView]!==state)return;
-   if(result.status===304){if(active())status.textContent='سوابق به‌روز است.';return;}
+   if(result.status===304){if(!headers['If-None-Match'])throw Error('پاسخ تاریخچه معتبر نیست.');if(active())status.textContent='سوابق به‌روز است.';return;}
    const page=result.page;
    if(active()&&focus&&!page.focusFound&&!sourceResolved&&currentSource==='normal'){sourceResolved=true;selectSource('manual');return;}
    let changed=false;for(const e of page.events){if(JSON.stringify(state.entries.get(e.id))!==JSON.stringify(e)){state.entries.set(e.id,e);changed=true;}}
@@ -146,7 +146,7 @@
   view=next;for(const tab of tabs){const selected=tab.dataset.journalTab===view;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;if(selected&&focusTab)tab.focus();}
   panel.setAttribute('aria-labelledby','journal-tab-'+view);document.getElementById('viewDescription').textContent=view==='results'?(source==='strategy2'?'نتایج استراتژی دو: تارگت، ریسک‌فری، استاپ، اکسپایر و خطای ورود':'نتایج نهایی: تارگت، خروج ریسک‌فری و استاپ‌لاس'):'تمام اعلان‌ها؛ از نزدیک ورود تا پایان معامله';
   const url=new URL(location.href);url.searchParams.set('view',view);url.searchParams.set('source',source);history.replaceState(null,'',url);
-  status.textContent=states[view].initialized?'سوابق ذخیره‌شده؛ در حال بررسی موارد تازه…':'در حال دریافت…';render();load();
+  status.textContent=sessionInvalid?'برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.':states[view].initialized?'سوابق ذخیره‌شده؛ در حال بررسی موارد تازه…':'در حال دریافت…';render();load();
  }
  function selectSource(next){source=next;document.querySelectorAll('.wallet-import').forEach(e=>e.hidden=source==='strategy2');states=sources[source];for(const tab of document.querySelectorAll('[data-journal-source]'))tab.setAttribute('aria-pressed',String(tab.dataset.journalSource===source));select(view);}
  document.querySelectorAll('[data-journal-source]').forEach(tab=>tab.addEventListener('click',()=>{sourceResolved=true;selectSource(tab.dataset.journalSource);}));

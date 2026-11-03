@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict'),fs=require('fs'),path=require('path');
+const {JSDOM}=require('./ui/node_modules/jsdom'),root=path.join(__dirname,'../Phoenix.Web/wwwroot'),flush=()=>new Promise(r=>setImmediate(r));
+const id='11111111-1111-1111-1111-111111111111',event={id:id+':Target',sequence:10,kind:'Target',symbol:'BTCUSDT',direction:'Long',at:'2026-11-03T00:00:00Z'};
+const response=(events,etag='A')=>({ok:true,status:200,headers:{get:()=>etag},json:async()=>({events,before:1,hasMore:false,focusFound:true})});
+(async()=>{
+ const dom=new JSDOM(fs.readFileSync(path.join(root,'notifications.html'),'utf8'),{url:'https://fixture.test/notifications?source=normal',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,d=w.document,timers=[];let mounts=0,stops=0,writes=0;
+ w.setInterval=(fn,ms)=>{timers.push({fn,ms});return 1;};w.PhoenixLiveChart={mount(){mounts++;return {stop(){stops++;}};}};
+ const setItem=w.Storage.prototype.setItem;w.Storage.prototype.setItem=function(...args){writes++;return setItem.apply(this,args);};
+ let handler=()=>response([event]),requests=[];
+ w.fetch=async(url,options)=>{if(url==='/api/auth/me')return {ok:true,json:async()=>({username:'owner'})};if(url.includes('wallet-recovery'))return {ok:true,json:async()=>({state:'waiting'})};requests.push({url,options});return handler(url,options);};
+ w.eval(fs.readFileSync(path.join(root,'notifications.js'),'utf8'));await flush();
+ const tick=timers.find(t=>t.ms===5000).fn,original=d.querySelector('.event-card');original.querySelector('details').open=true;await new Promise(r=>setTimeout(r,10));assert.equal(mounts,1);
+ handler=()=>response([{...event,id:'22222222-2222-2222-2222-222222222222:StopLoss',sequence:11,kind:'StopLoss'},event],'B');tick();await flush();
+ assert.equal([...d.querySelectorAll('.event-card')].find(e=>e.dataset.eventId===event.id),original);assert.equal(mounts,1);assert.equal(stops,0);
+ const beforeWrites=writes;tick();await flush();assert.equal(writes,beforeWrites,'Identical 200 responses do not rewrite all persisted views');
+ handler=()=>({ok:true,status:200,headers:{get:()=> 'C'},json:async()=>{throw Error('truncated body');}});tick();await flush();
+ handler=()=>response([event],'C');tick();await flush();assert.equal(requests.at(-1).options.headers['If-None-Match'],'B','Failed bodies cannot commit a new ETag');
+ let late;handler=url=>url.includes('source=manual')?new Promise(r=>late=r):response([event],'C');d.getElementById('journal-source-manual').click();await flush();d.getElementById('journal-source-normal').click();await flush();assert.ok(stops>=1);
+ const manual={...event,id:'33333333-3333-3333-3333-333333333333:Target',symbol:'ETHUSDT',sequence:9};late(response([manual],'M'));await flush();assert.doesNotMatch(d.getElementById('eventTimeline').textContent,/ETHUSDT/);
+ d.getElementById('journal-source-manual').click();assert.match(d.getElementById('eventTimeline').textContent,/ETHUSDT/,'Late results populate only their own cache');await flush();late(response([manual],'M'));await flush();
+ let prior;handler=url=>url.includes('source=normal')?new Promise(r=>prior=r):{ok:false,status:401};d.getElementById('journal-source-normal').click();await flush();d.getElementById('journal-source-manual').click();await flush();assert.equal(d.querySelectorAll('.event-card').length,0);prior(response([event],'D'));await flush();assert.equal(d.querySelectorAll('.event-card').length,0);assert.equal(w.localStorage.getItem('phoenix-journal-v1:owner'),null);
+ dom.window.close();console.log('PASS page work: retained charts, immediate disposal, no unchanged cache writes, ETag integrity, source caching and session-expiry isolation.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

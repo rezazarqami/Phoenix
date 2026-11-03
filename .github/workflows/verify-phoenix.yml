@@ -42,6 +42,16 @@ jobs:
           node Phoenix.Test/connection-status-ui-tests.cjs
           node Phoenix.Test/live-positions-ui-tests.cjs
           node Phoenix.Test/live-chart-scale-tests.cjs
+      - name: Verify creation, journal and management work
+        timeout-minutes: 5
+        run: |
+          node Phoenix.Test/page-work-regressions.cjs
+          node Phoenix.Test/page-work-browser-tests.cjs
+          node Phoenix.Test/active-signals-ui-tests.cjs
+          node Phoenix.Test/journal-cache-ui-tests.cjs
+          node Phoenix.Test/journal-results-ui-tests.cjs
+          node Phoenix.Test/notification-history-ui-tests.cjs
+          node Phoenix.Test/ice-market-login-ui-tests.cjs
       - name: Preserve interface failure details
         if: failure()
         uses: actions/upload-artifact@v4
@@ -56,3 +66,4 @@ jobs:
         run: node Phoenix.Test/batch-controls-tests.cjs
       - name: Verify complete Crypto Markets page initialization
         run: node Phoenix.Test/crypto-market-ui-tests.cjs
+

@@ -47,16 +47,19 @@ document.querySelector('.results-report').insertAdjacentHTML('beforebegin', `
 <div class="results-filters"><button id="copyEvaluation" type="button">کپی این صفحه</button><button id="nextEvaluation" type="button" hidden>صفحه بعد</button></div></div>
 </div></details>`);
 async function loadLearningStatus() {
-  const element = document.querySelector('#learningStatus');
+  const element = document.querySelector('#learningStatus'),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   try {
-    const response = await fetch('/api/analysis/learning', {cache:'no-store'});
+    const response = await fetch('/api/analysis/learning', {cache:'no-store',signal:controller.signal});
     if (!response.ok) throw new Error();
     const state = await response.json();
     if (!Number.isInteger(state.proposalSamples)) throw new Error();
     element.textContent = `سوابق پیشنهاد: ${faMarket.format(state.proposalSamples)} · ورود: ${faMarket.format(state.entrySamples)}. مقایسه بر پایهٔ شباهت فنی است.`;
-  } catch { element.textContent = 'تعداد سوابق فعلاً قابل دریافت نیست.'; }
+    return true;
+  } catch { element.textContent = 'تعداد سوابق فعلاً قابل دریافت نیست.';return false; }finally{clearTimeout(timer);}
 }
-loadLearningStatus();
+let learningLoaded=false,learningPending=false;
+async function visibleLearning(){if(learningLoaded||learningPending||document.querySelector('#market-pane-history')?.hidden)return;learningPending=true;try{learningLoaded=await loadLearningStatus();}finally{learningPending=false;}}
+if(typeof window!=='undefined'){window.addEventListener('phoenix-market-tab-changed',e=>{if(e.detail==='history')visibleLearning();});visibleLearning();}
 const evaluationStart = new Date(); evaluationStart.setDate(evaluationStart.getDate()-365);
 document.querySelector('#evaluationFrom').value = reviewDate(evaluationStart);
 document.querySelector('#evaluationTo').value = reviewDate(new Date());
@@ -131,19 +134,25 @@ function renderMarket() {
   document.querySelector('#marketMore').hidden = rows.length <= marketLimit;
 }
 
-async function loadMarket() {
+let marketDataTask=null,marketData=null,marketDataAt=0;
+async function readMarketData(force=false){
+ if(marketDataTask)return marketDataTask;if(!force&&marketData&&Date.now()-marketDataAt<30000)return marketData;
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ marketDataTask=(async()=>{const response=await fetch('/api/analysis/coins',{cache:'no-store',signal:controller.signal});
+  if(response.status===401){location.replace('/login');throw Error('نشست ورود پایان یافته است.');}
+  const data=await response.json();if(!response.ok)throw Error(data.error||'اطلاعات بازار دریافت نشد.');
+  if(!Array.isArray(data.assets))throw Error('فهرست بازار معتبر نیست.');marketData=data;marketDataAt=Date.now();return data;
+ })();try{return await marketDataTask;}finally{clearTimeout(timer);marketDataTask=null;}
+}
+if(typeof window!=='undefined')window.PhoenixReadMarket=readMarketData;
+async function loadMarket(force=false) {
   if (marketLoading) return;
   marketLoading = true;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
   const rows = document.querySelector('#marketRows');
   rows.innerHTML = '<div class="market-loading">در حال دریافت فهرست Bybit و اطلاعات مارکت‌کپ…</div>';
   document.querySelector('#marketMessage').textContent = '';
   try {
-    const response = await fetch('/api/analysis/coins', { cache: 'no-store', signal: controller.signal });
-    if (response.status === 401) return location.replace('/login');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'اطلاعات بازار دریافت نشد.');
+    const data=await readMarketData(force);
     marketAssets = data.assets || [];
     if (typeof window !== "undefined") { window.phoenixMarketAssets = marketAssets;
       window.dispatchEvent(new CustomEvent("phoenix-market-assets", {detail:marketAssets})); }
@@ -151,7 +160,7 @@ async function loadMarket() {
     document.querySelector('#activeCount').textContent = faMarket.format(marketAssets.reduce((sum, asset) => sum + asset.activeCount, 0));
     renderMarket();
   } catch (error) { rows.innerHTML = '<div class="market-loading error">دریافت اطلاعات ناموفق بود.</div>'; document.querySelector('#marketMessage').textContent = error.name === 'AbortError' ? 'دریافت بازار طول کشید؛ به‌روزرسانی را بزنید.' : error.message; }
-  finally { clearTimeout(timeout); marketLoading = false; }
+  finally { marketLoading = false; }
 }
 
 document.querySelector('#marketMore').addEventListener('click', () => { marketLimit += 50; renderMarket(); });
@@ -167,20 +176,23 @@ document.querySelector('#marketRows').addEventListener('click', event => {
   window.parent.postMessage({ type: 'phoenix-open-signal', symbol: new URL(link.href).searchParams.get('symbol') }, location.origin);
 });
 document.querySelector('#marketFilter').addEventListener('change', () => { marketLimit = 50; renderMarket(); });
-document.querySelector('#marketRefresh').addEventListener('click', loadMarket);
+document.querySelector('#marketRefresh').addEventListener('click',()=>loadMarket(true));
 const shadowStatus = s => s.outcome === 'Target' ? 'تارگت ✅' : s.outcome === 'StopLoss' ? 'استاپ ❌' : s.status === 'Filled' ? 'ورود فعال شده' : 'منتظر ورود';
-async function loadShadowSignals() {
+let shadowPending=false,shadowReadAt=0;
+async function loadShadowSignals(force=false) {
+  if(shadowPending||(!force&&Date.now()-shadowReadAt<3000))return;shadowPending=true;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   try {
-    const response = await fetch('/api/analysis/shadow-signals', { cache: 'no-store' });
+    const response = await fetch('/api/analysis/shadow-signals', { cache: 'no-store',signal:controller.signal });
     if (!response.ok) throw new Error('دریافت صف فقط تأیید ناموفق بود.');
-    const data = await response.json(), summary = data.summary;
+    const data = await response.json(), summary = data.summary;shadowReadAt=Date.now();
     document.querySelector('#shadowCount').textContent = faMarket.format(summary.total);
     document.querySelector('#shadowSummary').textContent = `منتظر ورود ${faMarket.format(summary.waitingEntry)} · ورود فعال ${faMarket.format(summary.entered)} · تارگت ${faMarket.format(summary.target)} · استاپ ${faMarket.format(summary.stopLoss)}`;
     document.querySelector('#shadowRows').innerHTML = data.signals.length ? data.signals.map(s => `<a class="shadow-row" href="${s.imageUrl}" target="_blank"><b>${s.symbol}</b><span>${s.direction} · ${s.timeframe || '—'}</span><span>${shadowStatus(s)}</span></a>`).join('') : '<div class="results-empty">هنوز سیگنالی در این صف نیست.</div>';
-  } catch (error) { document.querySelector('#shadowSummary').textContent = error.message; }
+  } catch (error) { document.querySelector('#shadowSummary').textContent = error.message; }finally{clearTimeout(timer);shadowPending=false;}
 }
-document.querySelector('#refreshShadow').addEventListener('click', loadShadowSignals);
-document.querySelector('.shadow-signals').addEventListener('toggle', event => { if (event.target.open) loadShadowSignals(); });
+document.querySelector('#refreshShadow').addEventListener('click',()=>loadShadowSignals(true));
+document.querySelector('.shadow-signals').addEventListener('toggle', event => { if (event.target.open&&!event.target.hidden) loadShadowSignals(); });
 const reportPrice = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 12, useGrouping: false });
 const dateInputValue = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const reportToday = new Date();
@@ -230,6 +242,8 @@ document.querySelector('#loadResults').addEventListener('click', async () => {
   } finally { button.disabled = false; }
 });
 document.querySelector('#analysisLogout').addEventListener('click', async () => { await fetch('/api/analysis/auth/logout', { method: 'POST' }); try{for(const key of Object.keys(localStorage))if(key.startsWith('phoenix-journal-v1:'))localStorage.removeItem(key);}catch{} location.replace('/login'); });
-loadMarket();
+if(typeof window!=='undefined')window.addEventListener('phoenix-market-tab-changed',e=>{if(e.detail==='search')loadMarket();if(e.detail==='approved')loadShadowSignals();});
+if(typeof window==='undefined'||window===window.top)loadMarket();
 
 })();
+

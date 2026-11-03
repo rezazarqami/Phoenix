@@ -10,7 +10,8 @@
  const sources={normal:{all:fresh(),results:fresh()},manual:{all:fresh(),results:fresh()},strategy2:{all:fresh(),results:fresh()}};
  let source=['normal','manual','strategy2'].includes(params.get('source'))?params.get('source'):'normal',states=sources[source],view=initialView;
  let sourceResolved=!!params.get('source');
- const openedDetails=new Set();
+ const openedDetails=new Set(),renderedCards=new Map();let started=false,sessionInvalid=false;
+ async function read(url,options={}){const {consume,...init}=options,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);try{return await consume(await fetch(url,{cache:'no-store',...init,signal:controller.signal}));}finally{clearTimeout(timer);}}
  const eventDate=new Intl.DateTimeFormat('fa-IR',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit'});
  const eventClock=new Intl.DateTimeFormat('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
  const text=(tag,value)=>Object.assign(document.createElement(tag),{textContent:value});
@@ -47,13 +48,13 @@
    let identity;
    if(parent!==window&&parent.location.origin===location.origin)identity=parent.PhoenixSessionIdentity;
    if(!identity){
-    const response=await fetch('/api/auth/me',{cache:'no-store'});
+    const response=await read('/api/auth/me',{consume:async r=>({status:r.status,ok:r.ok,identity:r.ok?await r.json():null})});
     if(response.status===401){status.textContent='برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.';return;}
-    if(response.ok)identity=await response.json();
+    if(response.ok)identity=response.identity;
    }
    if(typeof identity?.username==='string'&&identity.username){cacheKey='phoenix-journal-v1:'+identity.username.toLowerCase();restore();}
   }catch{/* A failed identity check must never expose another account's stored results. */}
-  select(view);recovery();
+  started=true;select(view);recovery();
   if(focus)[...timeline.children].find(x=>x.dataset.eventId===focus)?.scrollIntoView?.({block:'center'});
  }
  function eventMessage(e){
@@ -66,9 +67,12 @@
   return e.reason||messages[e.kind]||'رویداد سیگنال ثبت شد.';
  }
  function render(){
-  const state=states[view],fragment=document.createDocumentFragment();let count=0;
+  const state=states[view],fragment=document.createDocumentFragment(),retained=new Set();let count=0;
   for(const e of [...state.entries.values()].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||b.sequence-a.sequence)){
    if(view==='results'&&!resultKinds.has(e.kind)&&!(source==='strategy2'&&e.kind==='Expired'))continue;count++;
+   const cardKey=source+'|'+view+'|'+e.id,fingerprint=JSON.stringify(e),existing=renderedCards.get(cardKey);retained.add(cardKey);
+   if(existing?.fingerprint===fingerprint){fragment.append(existing.card);continue;}existing?.stop?.();
+   const eventSource=source,openKey=source+'|'+e.id;
    const card=document.createElement('article');card.className='event-card'+(e.id===focus?' focused':'');card.dataset.kind=e.kind;card.dataset.eventId=e.id;
    const code=e.kind==='Target'?'TP':e.kind==='StopLoss'?'SL':e.kind==='FirstProtection'?'RF1':e.kind==='RiskFree'?(e.exitKind==='FirstStepLimit'?'RF1':e.exitKind==='SecondStepLimit'?'RF2':'RF'):e.kind==='RiskFreeReached'?'RF2':null;
    const head=document.createElement('div');head.className='event-top';
@@ -78,7 +82,7 @@
    const stamp=text('time','');stamp.className='event-time';const occurred=e.at?new Date(e.at):new Date(NaN);
    if(Number.isFinite(occurred.getTime())){stamp.dateTime=occurred.toISOString();stamp.textContent=eventDate.format(occurred)+' · '+eventClock.format(occurred);stamp.title='زمان وقوع رویداد، به وقت تهران';stamp.setAttribute('aria-label',stamp.textContent+'، به وقت تهران');}else stamp.textContent='زمان این رویداد ثبت نشده';
    card.append(stamp);
-   if(e.kind==='TimeframeLocked'){fragment.append(card);continue;}
+   if(e.kind==='TimeframeLocked'){renderedCards.set(cardKey,{card,fingerprint});fragment.append(card);continue;}
    const detail=document.createElement('details');detail.className='event-detail';
    const summary=text('summary','نمودار و جزئیات');summary.setAttribute('aria-label','نمودار ثبت‌شدهٔ سیگنال و جزئیات '+(e.symbol||'Phoenix'));detail.append(summary);
    const body=text('div','');body.className='event-detail-body';
@@ -86,9 +90,9 @@
    function showChart(){if(chartRequested)return;chartRequested=true;
     if(!/^[a-f0-9-]{36}$/i.test(id)){body.prepend(text('p','نمودار این سابقه در دسترس نیست.'));return;}
     const host=text('div','');host.className='signal-live-host';body.prepend(host);
-    if(window.PhoenixLiveChart)liveChart=window.PhoenixLiveChart.mount(host,id,source);else host.append(text('p','دریافت نمودار زنده در دسترس نیست.'));
+    if(window.PhoenixLiveChart)liveChart=window.PhoenixLiveChart.mount(host,id,eventSource);else host.append(text('p','دریافت نمودار زنده در دسترس نیست.'));
     const archive=document.createElement('details');archive.className='signal-archive-chart';archive.append(text('summary','تصویر زمان ثبت سیگنال'));
-    archive.addEventListener('toggle',()=>{if(archive.open&&!archive.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image'+(source==='strategy2'?'?strategy=strategy2':'');image.alt='تصویر زمان ثبت '+e.symbol;image.onerror=()=>image.replaceWith(text('p','تصویر زمان ثبت در دسترس نیست.'));archive.append(image);}});body.append(archive);
+    archive.addEventListener('toggle',()=>{if(archive.open&&!archive.querySelector('img')){const image=document.createElement('img');image.src='/api/analysis/results/'+id+'/image'+(eventSource==='strategy2'?'?strategy=strategy2':'');image.alt='تصویر زمان ثبت '+e.symbol;image.onerror=()=>image.replaceWith(text('p','تصویر زمان ثبت در دسترس نیست.'));archive.append(image);}});body.append(archive);
    }
    const levels=document.createElement('div');levels.className='event-levels';
    for(const [label,value] of [['ورود',e.entryPrice],['تارگت',e.takeProfit],['استاپ ثبت‌شده',e.stopLoss]])if(Number(value)>0){const cell=document.createElement('div');cell.append(text('small',label),text('b',Number(value).toLocaleString('en-US',{maximumFractionDigits:10})));levels.append(cell);}
@@ -96,37 +100,47 @@
    body.append(Object.assign(text('div',[e.direction,e.timeframe?'تایم‌فریم '+e.timeframe:null].filter(Boolean).join(' · ')),{className:'event-meta'}));
    if(e.kind==='RiskFree'&&exits[e.exitKind])body.append(text('p',exits[e.exitKind]));
    if(e.walletSource==='BybitTransaction')body.append(Object.assign(text('small','پس از تسویه در بای‌بیت'+(e.walletAtUtc?' · '+new Date(e.walletAtUtc).toLocaleString('fa-IR'):'')),{className:'wallet-source'}));
-   detail.append(body);detail.open=openedDetails.has(e.id);if(detail.open)showChart();
-   detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;if(detail.open){openedDetails.add(e.id);showChart();}else{openedDetails.delete(e.id);liveChart?.stop();liveChart=null;chartRequested=false;body.querySelector('.signal-live-host')?.remove();body.querySelector('.signal-archive-chart')?.remove();}});card.append(detail);
+   detail.append(body);detail.open=openedDetails.has(openKey);if(detail.open)showChart();
+   detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;if(detail.open){openedDetails.add(openKey);showChart();}else{openedDetails.delete(openKey);liveChart?.stop();liveChart=null;chartRequested=false;body.querySelector('.signal-live-host')?.remove();body.querySelector('.signal-archive-chart')?.remove();}});card.append(detail);
    if(resultKinds.has(e.kind)&&!['EntryError','EntryBlocked'].includes(e.kind)){const wallet=text('div','');wallet.className='event-wallet';const known=e.walletBalanceUsdt!=null&&Number.isFinite(Number(e.walletBalanceUsdt));
     wallet.append(text('span','موجودی کیف پول'),Object.assign(text(known?'b':'span',known?Number(e.walletBalanceUsdt).toLocaleString('en-US',{maximumFractionDigits:8})+' USDT':'در این سابقه ثبت نشده'),{className:known?'':'wallet-missing'}));card.append(wallet);}
-   fragment.append(card);
+   renderedCards.set(cardKey,{card,fingerprint,stop:()=>liveChart?.stop()});fragment.append(card);
   }
+  for(const [key,entry] of renderedCards)if(!retained.has(key)){entry.stop?.();renderedCards.delete(key);}
   timeline.replaceChildren(fragment);if(!count)timeline.append(text('p',state.initialized?(view==='results'?'هنوز نتیجهٔ نهایی ثبت نشده است.':'هنوز رویدادی ثبت نشده است.'):'در حال دریافت…'));
   older.hidden=!state.hasMore;older.disabled=state.busy;panel.setAttribute('aria-busy',String(state.busy));
  }
  async function load(mode='latest'){
-  const currentView=view,state=states[currentView];if(state.busy)return;state.busy=true;older.disabled=true;panel.setAttribute('aria-busy','true');
+  if(!started||sessionInvalid)return;
+  const currentView=view,currentSource=source,state=states[currentView];if(state.busy)return;state.busy=true;older.disabled=true;panel.setAttribute('aria-busy','true');
+  const active=()=>view===currentView&&source===currentSource&&states[currentView]===state;
   const first=timeline.querySelector('.event-card'),anchor=first?.getBoundingClientRect().top;
   try{
-   const query=new URLSearchParams({view:currentView,source});if(mode==='older'&&state.before)query.set('before',state.before);else if(focus&&!state.entries.has(focus)&&currentView===initialView)query.set('eventId',focus);
+   const query=new URLSearchParams({view:currentView,source:currentSource});if(mode==='older'&&state.before)query.set('before',state.before);else if(focus&&!state.entries.has(focus)&&currentView===initialView)query.set('eventId',focus);
    const url='/api/mobile/history?'+query;
    const headers=state.etag&&state.etagUrl===url&&state.entries.size?{'If-None-Match':state.etag}:{};
-   const response=await fetch(url,{cache:'no-store',headers});
-   if(response.status===304){status.textContent='سوابق به‌روز است.';return;}
-   if(mode!=='older'){state.etag=response.headers?.get('ETag');state.etagUrl=url;}
-   if(response.status===401){try{if(cacheKey)localStorage.removeItem(cacheKey);}catch{}for(const views of Object.values(sources))for(const state of Object.values(views))state.entries.clear();render();}if(!response.ok)throw Error(response.status===401?'برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.':'دریافت تاریخچه ناموفق بود؛ دوباره تلاش کن.');
-   const page=await response.json();if(states[currentView]!==state)return;
-   if(focus&&!page.focusFound&&!sourceResolved&&source==='normal'){sourceResolved=true;selectSource('manual');return;}
+   const result=await read(url,{headers,consume:async response=>{
+    if(response.status===304)return {status:304};if(response.status===401)return {status:401};
+    if(!response.ok)throw Error('دریافت تاریخچه ناموفق بود؛ دوباره تلاش کن.');
+    const page=await response.json();if(!Array.isArray(page.events))throw Error('پاسخ تاریخچه معتبر نیست.');
+    return {page,etag:response.headers?.get('ETag')};
+   }});
+   if(result.status===401){sessionInvalid=true;try{if(cacheKey)localStorage.removeItem(cacheKey);}catch{}for(const views of Object.values(sources))for(const state of Object.values(views)){state.entries.clear();state.etag=null;}render();throw Error('برای مشاهدهٔ رویدادها دوباره وارد فونیکس شو.');}
+   if(sessionInvalid||sources[currentSource][currentView]!==state)return;
+   if(result.status===304){if(active())status.textContent='سوابق به‌روز است.';return;}
+   const page=result.page;
+   if(active()&&focus&&!page.focusFound&&!sourceResolved&&currentSource==='normal'){sourceResolved=true;selectSource('manual');return;}
    let changed=false;for(const e of page.events){if(JSON.stringify(state.entries.get(e.id))!==JSON.stringify(e)){state.entries.set(e.id,e);changed=true;}}
-   const wasInitialized=state.initialized;if(!wasInitialized||mode==='older'){state.before=page.before;state.hasMore=page.hasMore;}state.initialized=true;persist();
-   if(view!==currentView)return;
-   if(changed||!wasInitialized)render();older.hidden=!state.hasMore;
+   const wasInitialized=state.initialized,oldBefore=state.before,oldMore=state.hasMore,oldTag=state.etag;
+   if(!wasInitialized||mode==='older'){state.before=page.before;state.hasMore=page.hasMore;}state.initialized=true;
+   if(mode!=='older'){state.etag=result.etag;state.etagUrl=url;}
+   if(changed||!wasInitialized||oldBefore!==state.before||oldMore!==state.hasMore||oldTag!==state.etag)persist();
+   if(!active())return;if(changed||!wasInitialized)render();older.hidden=!state.hasMore;
    status.textContent=!page.focusFound&&focus&&!wasInitialized&&currentView===initialView?'رویداد انتخاب‌شده در این نما پیدا نشد؛ جدیدترین موارد نمایش داده شده‌اند.':state.entries.size.toLocaleString('fa-IR')+(view==='results'?' نتیجهٔ نهایی':' رویداد')+' نمایش داده شده؛ سوابق قدیمی‌تر محفوظ‌اند.';
    if(!wasInitialized){const selected=[...timeline.children].find(x=>x.dataset.eventId===focus);if(selected)selected.scrollIntoView?.({block:'center'});}
    else if(changed&&anchor!=null&&anchor<0){const retained=[...timeline.children].find(x=>x.dataset.eventId===first.dataset.eventId);if(retained)window.scrollBy?.(0,retained.getBoundingClientRect().top-anchor);}
-  }catch(error){if(view===currentView&&states[currentView]===state)status.textContent=error.message;}
-  finally{state.busy=false;if(view===currentView&&states[currentView]===state){older.disabled=false;panel.setAttribute('aria-busy','false');}}
+  }catch(error){if(active())status.textContent=error.name==='AbortError'?'دریافت تاریخچه طول کشید؛ اطلاعات قبلی حفظ شده است.':error.message;}
+  finally{state.busy=false;if(active()){older.disabled=false;panel.setAttribute('aria-busy','false');}}
  }
  function select(next,focusTab=false){
   view=next;for(const tab of tabs){const selected=tab.dataset.journalTab===view;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;if(selected&&focusTab)tab.focus();}
@@ -151,9 +165,9 @@
  });
  const recoveryButton=document.getElementById('recoverBybitWallets'),recoveryStatus=document.getElementById('bybitRecoveryStatus');let recovering=false,lastRecovery=null;
  async function recovery(manual=false){
-  if(source==='strategy2')return;
+  if(!started||sessionInvalid||source==='strategy2')return;
   if(recovering)return;recovering=true;if(manual){recoveryButton.disabled=true;recoveryStatus.textContent='در حال بازیابی از سوابق بای‌بیت…';}
-  try{const response=await fetch('/api/mobile/history/'+(manual?'recover-wallets':'wallet-recovery'),manual?{method:'POST'}:{cache:'no-store'});if(!response.ok)throw Error();const result=await response.json();
+  try{const result=manual?await (async()=>{const response=await fetch('/api/mobile/history/recover-wallets',{method:'POST'});if(!response.ok)throw Error();return response.json();})():await read('/api/mobile/history/wallet-recovery',{consume:async response=>{if(!response.ok)throw Error();return response.json();}});
    recoveryStatus.textContent=result.state==='running'?'در حال بازیابی خودکار موجودی‌ها از بای‌بیت…':(result.message||'')+(result.atUtc?' '+Number(result.recovered||0).toLocaleString('fa-IR')+' موجودی بازیابی شد؛ '+Number(result.unresolved||0).toLocaleString('fa-IR')+' مورد بدون تطبیق قطعی.':'');
    recoveryButton.disabled=result.state==='running';if(result.atUtc!==lastRecovery&&result.state!=='running'){lastRecovery=result.atUtc;if(result.recovered>0)load();}
   }catch{recoveryStatus.textContent='وضعیت بازیابی فعلاً در دسترس نیست؛ سابقهٔ نتایج محفوظ است.';recoveryButton.disabled=false;}
@@ -162,6 +176,7 @@
  recoveryButton.addEventListener('click',()=>recovery(true));setInterval(()=>{if(visible())recovery();},30000);
  setInterval(()=>{if(visible())load();},5000);
  document.addEventListener('visibilitychange',()=>{if(visible())load();});
- window.addEventListener('message',event=>{if(event.origin===location.origin&&event.source===parent&&event.data?.type==='phoenix-frame-visible')load();});
+ window.addEventListener('message',event=>{if(event.origin===location.origin&&event.source===parent&&event.data?.type==='phoenix-frame-visible'&&visible())load();});
  start();
 })();
+

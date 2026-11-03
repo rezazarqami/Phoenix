@@ -30,11 +30,12 @@
     if(!tabs.some(t=>t.dataset.marketTab===name))name='create';
     document.body.classList.toggle('manual-desk-open',name==='manual');
     document.getElementById('manualChartCard').hidden=name!=='manual';
-    if(name==='approved')document.getElementById('refreshShadow').click();
     for(const tab of tabs){const selected=tab.dataset.marketTab===name;tab.classList.toggle('active',selected);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;const pane=document.getElementById(tab.getAttribute('aria-controls'));pane.hidden=!selected;if(pane.tagName==='DETAILS')pane.open=true;if(selected&&focus)tab.focus();}
+    window.dispatchEvent(new CustomEvent('phoenix-market-tab-changed',{detail:name}));
   }
   tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>activate(tab.dataset.marketTab));tab.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;activate(tabs[next].dataset.marketTab,true);});});
   document.querySelectorAll('[role=tabpanel]>summary').forEach(summary=>summary.addEventListener('click',e=>e.preventDefault()));
   window.PhoenixMarketNavigate=activate;
   activate(new URLSearchParams(location.search).get('section')||'create');
 })();
+

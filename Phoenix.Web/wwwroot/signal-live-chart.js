@@ -17,9 +17,9 @@
   const caption=document.createElement('div'),canvas=document.createElement('div');caption.className='signal-live-status';canvas.className='signal-live-canvas';caption.textContent='دریافت نمودار زنده…';const reset=document.createElement('button');reset.type='button';reset.className='signal-live-reset';reset.textContent='تنظیم خودکار نمودار';reset.addEventListener('click',()=>{if(!chart)return;chart.priceScale('right').applyOptions({autoScale:true});chart.timeScale().fitContent();});host.replaceChildren(caption,reset,canvas);
   let chart,series,priceLine,lines=[],levelKey='',lastAt=null,disposed=false,busy=false,controller,resize;
   const state={host,stop(){if(disposed)return;disposed=true;controller?.abort();resize?.disconnect();chart?.remove();charts.delete(state);},load};charts.add(state);
-  function visible(){if(document.hidden||host.closest('[hidden]'))return false;for(let el=host.parentElement;el;el=el.parentElement)if(el.tagName==='DETAILS'&&!el.open)return false;const r=host.getBoundingClientRect();return r.bottom>=0&&r.top<=innerHeight;}
+  function visible(){if(document.hidden||!host.isConnected||host.closest('[hidden]')||(window.frameElement&&!window.frameElement.getClientRects().length))return false;for(let el=host.parentElement;el;el=el.parentElement)if(el.tagName==='DETAILS'&&!el.open)return false;const r=host.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)return false;if(window.frameElement){const outer=window.frameElement.getBoundingClientRect();if(outer.top+r.bottom<0||outer.top+r.top>parent.innerHeight)return false;}return true;}
   async function load(first=false){
-   if(disposed||busy||(!first&&!visible()))return;busy=true;controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);
+   if(disposed||busy||!visible())return;busy=true;controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);
    try{
     await chartLibrary();if(disposed)return;
     const response=await fetch('/api/signals/'+encodeURIComponent(id)+'/live-chart'+(strategy==='strategy2'?'?strategy=strategy2':''),{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();const data=await response.json();if(disposed)return;if(!host.isConnected){state.stop();return;}
@@ -37,8 +37,9 @@
    }catch(error){if(disposed)return;caption.dataset.stale='true';caption.textContent=lastAt?'ارتباط قطع شد؛ نمودار مربوط به '+new Date(lastAt).toLocaleTimeString('fa-IR')+' است.':'دریافت نمودار زنده انجام نشد؛ دوباره بخش نمودار را باز کن.';}
    finally{clearTimeout(timeout);busy=false;}
   }
-  load(true);return state;
+  Promise.resolve().then(()=>load(true));return state;
  }};
  setInterval(()=>{for(const state of charts){if(!state.host.isConnected)state.stop();else state.load();}},5000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)for(const state of charts)state.load();});
 })();
+

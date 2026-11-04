@@ -4,7 +4,7 @@ public sealed partial class MobileSignalFeed
 {
     public async Task<IReadOnlyList<WalletRecoveryCandidate>> WalletRecoveryCandidatesAsync(string owner,CancellationToken ct)
     {
-        await HistoryAsync(owner,null,null,ct,"results");
+        await HistoryAsync(owner,null,null,ct,"results",refresh:false);
         var signals=(await store.NotificationSignalsAsync(DateTime.MinValue,ct)).ToDictionary(s=>s.Id);
         // Recover journal rows from actual archived lifecycle facts as well as from the current queue.
         await gate.WaitAsync(ct);
@@ -22,7 +22,7 @@ public sealed partial class MobileSignalFeed
             tx.Commit();
         }
         finally{gate.Release();}
-        var page=await HistoryAsync(owner,null,null,ct,"results");
+        var page=await HistoryAsync(owner,null,null,ct,"results",refresh:false);
         return page.Events.Select(e=>new WalletRecoveryCandidate(e,Guid.TryParse(e.Id.Split(':')[0],out var id)&&signals.TryGetValue(id,out var s)?s:null)).ToArray();
     }
     public async Task<bool> SaveRecoveredWalletAsync(string owner,string eventId,decimal balance,DateTime at,string source,string reference,string transaction,CancellationToken ct)

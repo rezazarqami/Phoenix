@@ -36,7 +36,7 @@ public static class MobilePushTests
             Check(eventKind is "NearEntry" or "EntryError","Missing event kind.");
             if(eventKind=="EntryError")Check(data.GetProperty("reason").GetString()=="تایم‌فریم ۱ دقیقه به‌خاطر BTCUSDT و ETHUSDT قفل شد.","Risk reason must survive the durable push outbox");
             Check(!message.TryGetProperty("notification",out _),"Private fields must not become background notification content.");
-            calls.Add((token,id));
+            lock (calls) calls.Add((token,id));
             return token.StartsWith("token-a")&&calls.Count(x=>x.Token==token)==1
                 ?Response(HttpStatusCode.ServiceUnavailable,"{\"error\":{\"status\":\"UNAVAILABLE\"}}")
                 :Response(HttpStatusCode.OK,"{\"name\":\"projects/test-project/messages/1\"}");

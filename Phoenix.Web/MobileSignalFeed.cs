@@ -10,21 +10,41 @@ public sealed record DeviceSignalPage(long Cursor,string Account,IReadOnlyList<D
 public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTelegramOptions dedicated,string? storagePath=null,bool includeInitialExpiry=false,bool includeUnowned=false,bool includeTimeframeLocks=true)
 {
     private readonly SemaphoreSlim gate=new(1,1);
-    private DateTime refreshed=DateTime.MinValue;
+    private readonly SemaphoreSlim captureGate = new(1, 1);
+    private volatile bool schemaInitialized;
+    private readonly Dictionary<string, DateTime> refreshed = new(StringComparer.OrdinalIgnoreCase);
     private readonly string path=storagePath??(Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")??Path.Combine(AppContext.BaseDirectory,"data","server-signals.json"))+".device-alerts.db";
     private async Task<SqliteConnection> OpenAsync(CancellationToken token)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var db=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=path}.ToString());await db.OpenAsync(token);
+        if (schemaInitialized) return db;
         using var cmd=db.CreateCommand();cmd.CommandText="""
+            PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS device_signal_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,at_utc TEXT NOT NULL,UNIQUE(owner,event_id));
             CREATE INDEX IF NOT EXISTS device_signal_owner_seq ON device_signal_events(owner,seq);
             CREATE TABLE IF NOT EXISTS device_signal_history(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL,event_id TEXT NOT NULL,payload TEXT NOT NULL,at_utc TEXT NOT NULL,UNIQUE(owner,event_id));
             CREATE INDEX IF NOT EXISTS device_history_time ON device_signal_history(owner,at_utc,seq);
             CREATE TABLE IF NOT EXISTS device_history_initialized(owner TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS device_history_sources_initialized(owner TEXT PRIMARY KEY);
-            """;await cmd.ExecuteNonQueryAsync(token);return db;
+            """;
+        try { await cmd.ExecuteNonQueryAsync(token); schemaInitialized = true; return db; }
+        catch { await db.DisposeAsync(); throw; }
     }
+    private async Task<SqliteConnection> OpenReadAsync(CancellationToken token)
+    {
+        if (!schemaInitialized)
+        {
+            await gate.WaitAsync(token);
+            try { return await OpenAsync(token); }
+            finally { gate.Release(); }
+        }
+
+        var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path }.ToString());
+        try { await db.OpenAsync(token); return db; }
+        catch { await db.DisposeAsync(); throw; }
+    }
+
     internal static string? EventReason(ServerSignal s) => s.Outcome=="EntryError" || s.Status is "Error" or "Rejected" or "Deactivated" or "RecoveryRequired"
         ? (s.Error?.Contains("110007")==true || s.Error?.Contains("110004")==true || s.Error?.Contains("balance",StringComparison.OrdinalIgnoreCase)==true ? "ورود انجام نشد: موجودی قابل استفاده کافی نیست." : "ورود با خطا مواجه شد: "+(s.Error??s.Status))
         : s.ExpireReason=="InitialBoundary" ? "سیگنال پیش از ورود از مرز اولیه عبور کرد."
@@ -41,62 +61,87 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
         return page with{Events=events};
     }
 
-    public async Task CaptureAsync(string owner,CancellationToken token)
+    public async Task CaptureAsync(string owner,CancellationToken token, IReadOnlyList<ServerSignal>? snapshot = null)
+    {
+        await captureGate.WaitAsync(token);
+        try
+        {
+            if(refreshed.TryGetValue(owner, out var lastRefresh) && DateTime.UtcNow-lastRefresh<TimeSpan.FromSeconds(1))return;
+            var now=DateTime.UtcNow;
+            var signals=snapshot ?? await store.NotificationSignalsAsync(now.AddDays(-1),token);
+            await gate.WaitAsync(token);
+            try
+            {
+                await using var db=await OpenAsync(token);using var tx=db.BeginTransaction();
+                foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated,includeInitialExpiry,includeUnowned).Select(e=>(Signal:s,Event:e))).OrderBy(p=>p.Event.At))
+                {
+                    var e=pair.Event;var s=pair.Signal;
+                    if(e.At.Kind!=DateTimeKind.Utc || e.At<now.AddDays(-1) || e.At>now)continue;
+                    await SaveLiveEventAsync(db,tx,owner,s,e,token);
+                }
+                await SaveLockNoticesAsync(db,tx,owner,now.AddDays(-1),true,token);
+                using var clean=db.CreateCommand();clean.Transaction=tx;clean.CommandText="DELETE FROM device_signal_events WHERE at_utc<$before";
+                clean.Parameters.AddWithValue("$before",now.AddDays(-7).ToString("O"));await clean.ExecuteNonQueryAsync(token);
+                using var filtered=db.CreateCommand();filtered.Transaction=tx;
+                filtered.CommandText="""
+                    DELETE FROM device_signal_events WHERE json_extract(payload,'$.Kind') IN ('Created','Cancelled')
+                    OR (json_extract(payload,'$.Kind')='Expired' AND NOT EXISTS(
+                        SELECT 1 FROM device_signal_events near WHERE near.owner=device_signal_events.owner
+                        AND near.event_id=replace(device_signal_events.event_id,':Expired',':NearEntry')));
+                    """;
+                await filtered.ExecuteNonQueryAsync(token);
+                tx.Commit();refreshed[owner]=now;
+            }
+            finally { gate.Release(); }
+        }
+        finally { captureGate.Release(); }
+    }
+    internal async Task RecordConfirmedEntryAsync(string owner, ServerSignal signal, MobileSignalEvent opened, CancellationToken token)
     {
         await gate.WaitAsync(token);
         try
         {
-            if(DateTime.UtcNow-refreshed<TimeSpan.FromSeconds(1))return;
-            var now=DateTime.UtcNow;
-            var signals=await store.NotificationSignalsAsync(now.AddDays(-1),token);
-            await using var db=await OpenAsync(token);using var tx=db.BeginTransaction();
-            foreach(var pair in signals.SelectMany(s=>MobileSignalWorker.Events(s,owner,dedicated,includeInitialExpiry,includeUnowned).Select(e=>(Signal:s,Event:e))).OrderBy(p=>p.Event.At))
-            {
-                var e=pair.Event;var s=pair.Signal;
-                if(e.At.Kind!=DateTimeKind.Utc || e.At<now.AddDays(-1) || e.At>now)continue;
-                using var cmd=db.CreateCommand();cmd.Transaction=tx;
-                var payload=new DeviceSignalAlert(0,e.Id,e.Kind,e.At,s.Symbol,s.Direction,s.RiskFreeCloseKind,Origin:s.Origin,Reason:EventReason(s));
-                cmd.CommandText="INSERT OR IGNORE INTO device_signal_events(owner,event_id,payload,at_utc) VALUES($owner,$id,$payload,$at)";
-                cmd.Parameters.AddWithValue("$owner",owner.ToLowerInvariant());cmd.Parameters.AddWithValue("$id",e.Id);
-                cmd.Parameters.AddWithValue("$payload",JsonSerializer.Serialize(payload));cmd.Parameters.AddWithValue("$at",e.At.ToString("O"));
-                await cmd.ExecuteNonQueryAsync(token);
-                await SaveHistoryAsync(db,tx,owner,s,e,token);
-            }
-            await SaveLockNoticesAsync(db,tx,owner,now.AddDays(-1),true,token);
-            using var clean=db.CreateCommand();clean.Transaction=tx;clean.CommandText="DELETE FROM device_signal_events WHERE at_utc<$before";
-            clean.Parameters.AddWithValue("$before",now.AddDays(-7).ToString("O"));await clean.ExecuteNonQueryAsync(token);
-            using var filtered=db.CreateCommand();filtered.Transaction=tx;
-            filtered.CommandText="""
-                DELETE FROM device_signal_events WHERE json_extract(payload,'$.Kind') IN ('Created','Cancelled')
-                OR (json_extract(payload,'$.Kind')='Expired' AND NOT EXISTS(
-                    SELECT 1 FROM device_signal_events near WHERE near.owner=device_signal_events.owner
-                    AND near.event_id=replace(device_signal_events.event_id,':Expired',':NearEntry')));
-                """;
-            await filtered.ExecuteNonQueryAsync(token);
-            tx.Commit();refreshed=now;
+            await using var db = await OpenAsync(token);
+            using var transaction = db.BeginTransaction();
+            await SaveLiveEventAsync(db, transaction, owner, signal, opened, token);
+            transaction.Commit();
         }
-        finally{gate.Release();}
+        finally { gate.Release(); }
     }
-    public async Task<DeviceSignalPage> ReadAsync(string owner,long? after,CancellationToken token)
+
+    private static async Task SaveLiveEventAsync(SqliteConnection db, SqliteTransaction transaction, string owner,
+        ServerSignal signal, MobileSignalEvent signalEvent, CancellationToken token)
     {
-        await CaptureAsync(owner,token);await gate.WaitAsync(token);
-        try
+        using var command = db.CreateCommand();
+        command.Transaction = transaction;
+        var payload = new DeviceSignalAlert(0, signalEvent.Id, signalEvent.Kind, signalEvent.At, signal.Symbol,
+            signal.Direction, signal.RiskFreeCloseKind, Origin: signal.Origin, Reason: EventReason(signal));
+        command.CommandText = "INSERT OR IGNORE INTO device_signal_events(owner,event_id,payload,at_utc) VALUES($owner,$id,$payload,$at)";
+        command.Parameters.AddWithValue("$owner", owner.ToLowerInvariant());
+        command.Parameters.AddWithValue("$id", signalEvent.Id);
+        command.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(payload));
+        command.Parameters.AddWithValue("$at", signalEvent.At.ToString("O"));
+        await command.ExecuteNonQueryAsync(token);
+        await SaveHistoryAsync(db, transaction, owner, signal, signalEvent, token);
+    }
+
+    public async Task<DeviceSignalPage> ReadAsync(string owner,long? after,CancellationToken token,bool refresh=true)
+    {
+        if(refresh) await CaptureAsync(owner,token);
+        await using var db = await OpenReadAsync(token);
+        using var cmd = db.CreateCommand();
+        cmd.Parameters.AddWithValue("$owner",owner.ToLowerInvariant());
+        if(after is null)
         {
-            await using var db=await OpenAsync(token);using var cmd=db.CreateCommand();
-            cmd.Parameters.AddWithValue("$owner",owner.ToLowerInvariant());
-            if(after is null)
-            {
-                cmd.CommandText="SELECT COALESCE(MAX(seq),0) FROM device_signal_events WHERE owner=$owner";
-                return new(Convert.ToInt64(await cmd.ExecuteScalarAsync(token)),owner,[],DateTime.UtcNow);
-            }
-            if(after<0)throw new ArgumentException("نشانگر اعلان معتبر نیست.");
-            cmd.CommandText="SELECT seq,payload FROM device_signal_events WHERE owner=$owner AND seq>$after ORDER BY seq LIMIT 100";
-            cmd.Parameters.AddWithValue("$after",after.Value);var events=new List<DeviceSignalAlert>();
-            using var reader=await cmd.ExecuteReaderAsync(token);
-            while(await reader.ReadAsync(token))
-                if(JsonSerializer.Deserialize<DeviceSignalAlert>(reader.GetString(1)) is { } alert)events.Add(alert with{Sequence=reader.GetInt64(0)});
-            return new(events.Count==0?after.Value:events[^1].Sequence,owner,events,DateTime.UtcNow);
+            cmd.CommandText="SELECT COALESCE(MAX(seq),0) FROM device_signal_events WHERE owner=$owner";
+            return new(Convert.ToInt64(await cmd.ExecuteScalarAsync(token)),owner,[],DateTime.UtcNow);
         }
-        finally{gate.Release();}
+        if(after<0)throw new ArgumentException("نشانگر اعلان معتبر نیست.");
+        cmd.CommandText="SELECT seq,payload FROM device_signal_events WHERE owner=$owner AND seq>$after ORDER BY seq LIMIT 100";
+        cmd.Parameters.AddWithValue("$after",after.Value);var events=new List<DeviceSignalAlert>();
+        using var reader=await cmd.ExecuteReaderAsync(token);
+        while(await reader.ReadAsync(token))
+            if(JsonSerializer.Deserialize<DeviceSignalAlert>(reader.GetString(1)) is { } alert)events.Add(alert with{Sequence=reader.GetInt64(0)});
+        return new(events.Count==0?after.Value:events[^1].Sequence,owner,events,DateTime.UtcNow);
     }
 }

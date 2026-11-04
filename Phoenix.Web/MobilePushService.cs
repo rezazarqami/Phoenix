@@ -160,8 +160,8 @@ public static class MobileEndpoints
         {
             var owner=Owner(request);
             var page=source=="strategy2"
-                ? await strategy2.Journal(dedicated).HistoryAsync(owner,before,eventId,ct,view)
-                : await feed.HistoryAsync(owner,before,eventId,ct,view,source);
+                ? await strategy2.Journal(dedicated).HistoryAsync(owner,before,eventId,ct,view,refresh:false)
+                : await feed.HistoryAsync(owner,before,eventId,ct,view,source,refresh:false);
             var bytes=System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new {owner,page});
             var etag="W/\""+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))+"\"";
             request.HttpContext.Response.Headers.ETag=etag;
@@ -178,7 +178,7 @@ public static class MobileEndpoints
             DeviceSignalPage page;
             do
             {
-                page=await feed.ReadAsync(Owner(request),after,ct);
+                page=await feed.ReadAsync(Owner(request),after,ct,refresh:after is null);
                 if(after is null || page.Events.Count>0 || DateTime.UtcNow>=until)return Results.Ok(MobileSignalFeed.ForClient(page,int.TryParse(request.Headers["X-Phoenix-Event-Version"],out var version)?version:1));
                 await Task.Delay(1000,ct);
             }while(true);

@@ -153,7 +153,12 @@
  for(const tab of document.querySelectorAll('[data-journal-source]'))tab.setAttribute('aria-pressed',String(tab.dataset.journalSource===source));
  document.querySelectorAll('.wallet-import').forEach(e=>e.hidden=source==='strategy2');
  tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>select(tab.dataset.journalTab));tab.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(i+1)%tabs.length;select(tabs[next].dataset.journalTab,true);});});
- older.addEventListener('click',()=>load('older'));document.getElementById('refreshEvents').addEventListener('click',()=>load());
+ older.addEventListener('click',()=>load('older'));
+ document.getElementById('refreshEvents').addEventListener('click',()=>{
+  if(!started||sessionInvalid)return;
+  status.textContent='در حال تازه‌سازی گزارش ذخیره‌شده…';
+  load();
+ });
  const importButton=document.getElementById('importWallets'),importStatus=document.getElementById('walletImportStatus');
  importButton.addEventListener('click',async()=>{
   const file=document.getElementById('walletImportFile').files[0];if(!file){importStatus.textContent='ابتدا فایل خروجی JSON تلگرام را انتخاب کن.';return;}
@@ -168,7 +173,7 @@
   if(!started||sessionInvalid||source==='strategy2')return;
   if(recovering)return;recovering=true;if(manual){recoveryButton.disabled=true;recoveryStatus.textContent='در حال بازیابی از سوابق بای‌بیت…';}
   try{const result=manual?await (async()=>{const response=await fetch('/api/mobile/history/recover-wallets',{method:'POST'});if(!response.ok)throw Error();return response.json();})():await read('/api/mobile/history/wallet-recovery',{consume:async response=>{if(!response.ok)throw Error();return response.json();}});
-   recoveryStatus.textContent=result.state==='running'?'در حال بازیابی خودکار موجودی‌ها از بای‌بیت…':(result.message||'')+(result.atUtc?' '+Number(result.recovered||0).toLocaleString('fa-IR')+' موجودی بازیابی شد؛ '+Number(result.unresolved||0).toLocaleString('fa-IR')+' مورد بدون تطبیق قطعی.':'');
+   recoveryStatus.textContent=result.state==='running'?'در حال تکمیل موجودی نتایج از بای‌بیت…':(result.message||'')+(result.atUtc?' '+Number(result.recovered||0).toLocaleString('fa-IR')+' موجودی بازیابی شد؛ '+Number(result.unresolved||0).toLocaleString('fa-IR')+' مورد بدون تطبیق قطعی.':'');
    recoveryButton.disabled=result.state==='running';if(result.atUtc!==lastRecovery&&result.state!=='running'){lastRecovery=result.atUtc;if(result.recovered>0)load();}
   }catch{recoveryStatus.textContent='وضعیت بازیابی فعلاً در دسترس نیست؛ سابقهٔ نتایج محفوظ است.';recoveryButton.disabled=false;}
   finally{recovering=false;}

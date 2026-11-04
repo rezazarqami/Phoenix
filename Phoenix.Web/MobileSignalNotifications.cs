@@ -87,7 +87,7 @@ public sealed partial class MobilePushService
                 DELETE FROM mobile_delivery WHERE kind IN ('Created','Cancelled');
                 SELECT n.owner,n.device_id,n.event_id,n.kind,n.attempts,n.reason FROM mobile_delivery n
                 JOIN mobile_devices d ON d.owner=n.owner AND d.device_id=n.device_id AND d.enabled_since<=n.event_at
-                WHERE n.sent=0 AND n.next_attempt<=$now AND n.event_at>=$since ORDER BY n.event_at LIMIT 50
+                WHERE n.sent=0 AND n.next_attempt<=$now AND n.event_at>=$since ORDER BY CASE WHEN n.kind='Opened' THEN 0 ELSE 1 END, n.event_at DESC LIMIT 12
                 """;
             cmd.Parameters.AddWithValue("$now", now.ToUnixTimeMilliseconds());
             cmd.Parameters.AddWithValue("$since", now.AddMinutes(-15).ToUnixTimeMilliseconds());
@@ -95,13 +95,14 @@ public sealed partial class MobilePushService
             while (await reader.ReadAsync(ct)) jobs.Add((reader.GetString(0), Guid.Parse(reader.GetString(1)), reader.GetString(2), reader.GetString(3), reader.GetInt32(4),reader.IsDBNull(5)?null:reader.GetString(5)));
         }
         finally { gate.Release(); }
-        foreach (var job in jobs)
+        await Parallel.ForEachAsync(jobs, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct }, async (job, token) =>
         {
-            ct.ThrowIfCancellationRequested();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(8));
             var success = false;
             try
             {
-                var result = await SendCoreAsync(job.Owner, "signal", job.Id, job.Kind, job.Device, ct,job.Reason);
+                var result = await SendCoreAsync(job.Owner, "signal", job.Id, job.Kind, job.Device, timeout.Token,job.Reason);
                 success = result.Configured && result.Sent > 0 && result.Failed == 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -112,12 +113,12 @@ public sealed partial class MobilePushService
                 await using var db = await OpenAsync(ct); using var cmd = db.CreateCommand();
                 cmd.CommandText = "UPDATE mobile_delivery SET sent=$s,attempts=attempts+1,next_attempt=$next WHERE owner=$o AND device_id=$d AND event_id=$e";
                 cmd.Parameters.AddWithValue("$s", success ? 1 : 0);
-                cmd.Parameters.AddWithValue("$next", now.AddSeconds(Math.Min(300, 5 * Math.Pow(2, Math.Min(job.Attempts, 6)))).ToUnixTimeMilliseconds());
+                cmd.Parameters.AddWithValue("$next", now.AddSeconds(Math.Min(60, 5 * Math.Pow(2, Math.Min(job.Attempts, 4)))).ToUnixTimeMilliseconds());
                 cmd.Parameters.AddWithValue("$o", job.Owner); cmd.Parameters.AddWithValue("$d", job.Device.ToString()); cmd.Parameters.AddWithValue("$e", job.Id);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             finally { gate.Release(); }
-        }
+        });
     }
 }
 
@@ -125,10 +126,14 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
     ILogger<MobileSignalWorker> logger) : BackgroundService
 {
     public static readonly IReadOnlySet<string> Kinds = new HashSet<string> { "NearEntry", "Opened", "FirstProtection", "RiskFreeReached", "Target", "StopLoss", "RiskFree", "Expired", "EntryError", "ManualClosed", "EntryBlocked", "TimeframeLocked" };
+    internal static bool CanNotify(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated, bool includeUnowned = false) =>
+        string.Equals(signal.RequestedByUsername, owner, StringComparison.OrdinalIgnoreCase) ||
+        (includeUnowned && string.IsNullOrWhiteSpace(signal.RequestedByUsername)) ||
+        (signal.PublicSignalNumber is not null && !dedicated.Owns(signal.RequestedByUsername));
+
     public static IEnumerable<MobileSignalEvent> Events(ServerSignal signal, string owner, DedicatedTelegramOptions dedicated, bool includeInitialExpiry = false, bool includeUnowned = false)
     {
-        var own = string.Equals(signal.RequestedByUsername, owner, StringComparison.OrdinalIgnoreCase);
-        if (!own && !(includeUnowned && string.IsNullOrWhiteSpace(signal.RequestedByUsername)) && (signal.PublicSignalNumber is null || dedicated.Owns(signal.RequestedByUsername))) yield break;
+        if (!CanNotify(signal, owner, dedicated, includeUnowned)) yield break;
         var blocked=signal.ExpireReason=="TimeframeBlocked";
         if (!blocked && (signal.ExpireAdjustedAtUtc ?? signal.EntryTriggeredAtUtc) is { } near)
             yield return new($"{signal.Id}:NearEntry","NearEntry",near);
@@ -153,18 +158,17 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
             {
                 if (PhoenixSessionAuth.CredentialsConfigured(out var owner, out _))
                 {
-                    await feed.CaptureAsync(owner,ct);
-                    var signals = await store.GetAllAsync(ct);
+                    var signals = await store.NotificationSignalsAsync(DateTime.UtcNow.AddDays(-1), ct);
+                    await feed.CaptureAsync(owner, ct, signals);
                     var now=DateTimeOffset.UtcNow;
                     var locks=await store.TimeframeLockNoticesAsync(now.UtcDateTime.AddMinutes(-15),ct);
                     await push.QueueAsync(owner, signals.SelectMany(s => Events(s, owner, dedicated)).Concat(locks.Select(TimeframeAlertText.Locked)).OrderBy(e => e.At), now, ct);
-                    await push.DeliverPendingAsync(DateTimeOffset.UtcNow, ct);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             // Do not log credential files, registration tokens or provider response bodies.
             catch (Exception e) { logger.LogWarning("Mobile signal notification cycle failed ({FailureType})", e.GetType().Name); }
-            await Task.Delay(TimeSpan.FromSeconds(5), ct);
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
         }
     }
 }

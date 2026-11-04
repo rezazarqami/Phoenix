@@ -1,0 +1,65 @@
+.entry-control {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  direction: rtl;
+  padding: 14px 16px;
+  min-width: 0;
+  border: 1px solid #254968;
+  border-radius: 17px;
+  background: linear-gradient(115deg, #0b223b, #081629 75%);
+  box-shadow: 0 5px 16px #0005;
+  color: #ecf6ff;
+}
+.entry-control[hidden] { display: none; }
+.entry-control[data-state="off"] { border-color: #8e5438; background: linear-gradient(115deg, #302026, #111a2d 75%); }
+.entry-control-kicker { color: #9ab2c8; font-size: 10px; font-weight: 700; }
+.entry-control h2 { font-size: 18px; line-height: 1.5; margin: 2px 0; }
+.entry-control p { font-size: 11px; line-height: 1.7; color: #b4c6da; margin: 0; }
+.entry-control-switch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  padding: 9px 10px;
+  min-height: 46px;
+  border: 1px solid #347668;
+  border-radius: 13px;
+  background: #102f32;
+  color: #a2f5d5;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.entry-control-switch:focus-visible { outline: 2px solid #c8e6ff; outline-offset: 3px; }
+.entry-control-switch:disabled { opacity: .7; cursor: wait; }
+.entry-control-track {
+  position: relative;
+  display: block;
+  width: 37px;
+  height: 21px;
+  border-radius: 20px;
+  background: #227f62;
+}
+.entry-control-track::before {
+  content: "";
+  position: absolute;
+  inset: 3px 3px auto auto;
+  width: 15px;
+  height: 15px;
+  background: #f7fffc;
+  border-radius: 50%;
+}
+.entry-control[data-state="off"] .entry-control-switch { color: #ffd6b1; background: #402b29; border-color: #a66745; }
+.entry-control[data-state="off"] .entry-control-track { background: #996044; }
+.entry-control[data-state="off"] .entry-control-track::before,
+.entry-control[data-state="unknown"] .entry-control-track::before { inset: 3px auto auto 3px; }
+.entry-control[data-state="unknown"] .entry-control-track { background: #455368; }
+@media (max-width: 360px) {
+  .entry-control { padding: 12px; gap: 8px; }
+  .entry-control h2 { font-size: 16px; }
+  .entry-control-switch { padding-inline: 8px; }
+}

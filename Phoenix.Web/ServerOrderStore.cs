@@ -136,6 +136,55 @@ public sealed partial class ServerOrderStore
     private bool _historyMigrated;
     public string NotificationLedgerPath => _filePath + ".public-notifications.json";
     public SemaphoreSlim ExecutionGate { get; } = new(1, 1);
+    public EntryIntakeSwitch EntryIntake { get; }
+
+    internal async Task<bool> TryExpirePausedEntryAsync(Guid id, decimal price, DateTime observedAt,
+        EntryIntakeSwitch intake, CancellationToken token)
+    {
+        if (!intake.BlocksObservation(observedAt)) return false;
+        await _gate.WaitAsync(token);
+        try
+        {
+            var signals = await LoadUnsafeAsync(token);
+            var signal = signals.SingleOrDefault(item => item.Id == id);
+            if (signal is not { Status: "Pending", CompletedAtUtc: null } ||
+                observedAt < signal.CreatedAtUtc || !DemoOrderWorker.EntryReached(signal, price))
+                return false;
+            await ExpirePausedEntryUnsafeAsync(signals, signal, price, observedAt, token);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task ExpirePausedEntryUnsafeAsync(List<ServerSignal> signals, ServerSignal signal,
+        decimal price, DateTime observedAt, CancellationToken token)
+    {
+        signal.LastPrice = price;
+        signal.EntryTriggeredAtUtc ??= observedAt;
+        signal.CompletedAtUtc = DateTime.UtcNow;
+        signal.ExpiredAtUtc = signal.CompletedAtUtc;
+        signal.Status = signal.Outcome = "Expired";
+        signal.ExpireReason = "OperatorEntryPause";
+        await SaveUnsafeAsync(signals, token);
+        await _history.UpsertAsync(signal, "OperatorEntryPause", token);
+    }
+
+    internal async Task<T?> DispatchEntryAsync<T>(ServerSignal order, EntryIntakeSwitch intake,
+        Func<Task<T>> submit, CancellationToken token) where T : class =>
+        await intake.DispatchAsync(order.EntryTriggeredAtUtc, submit, async () =>
+        {
+            await _gate.WaitAsync(token);
+            try
+            {
+                var signals = await LoadUnsafeAsync(token);
+                var current = signals.SingleOrDefault(item => item.Id == order.Id);
+                if (current is { Status: "Submitting", CompletedAtUtc: null })
+                    await ExpirePausedEntryUnsafeAsync(signals, current, order.LastPrice,
+                        order.EntryTriggeredAtUtc ?? DateTime.UtcNow, token);
+            }
+            finally { _gate.Release(); }
+        }, token);
+
     public bool EntriesPaused => _signals?.Any(x => x.Status == "RecoveryRequired") == true;
     public Task SetEntriesPausedAsync(bool paused, CancellationToken token = default)
     {
@@ -174,6 +223,7 @@ public sealed partial class ServerOrderStore
         _filePath = filePath ?? Environment.GetEnvironmentVariable("PHOENIX_QUEUE_PATH")
             ?? Path.Combine(AppContext.BaseDirectory, "data", "server-signals.json");
         _history = new SignalHistoryStore(_filePath, historyPath);
+        EntryIntake = new EntryIntakeSwitch(_filePath + ".operator-entry-switch.json");
     }
 
     public async Task<IReadOnlyList<ServerSignal>> GetAllAsync(CancellationToken token = default)
@@ -345,16 +395,24 @@ public sealed partial class ServerOrderStore
 
     public async Task<bool> TryClaimSubmissionAsync(Guid id, decimal price, CancellationToken token = default,DateTime? observedAtUtc=null)
     {
+        var observation = observedAtUtc ?? DateTime.UtcNow;
         await _gate.WaitAsync(token);
         try
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
-            if (signals.Any(x => x.Status == "RecoveryRequired")) return false;
             if (signal is null || signal.Status != "Pending") return false;
+            var claimAt = DateTime.UtcNow;
+            if (EntryIntake.BlocksObservation(observation))
+            {
+                if (observation >= signal.CreatedAtUtc && DemoOrderWorker.EntryReached(signal, price))
+                    await ExpirePausedEntryUnsafeAsync(signals, signal, price, observation, token);
+                return false;
+            }
+            if (signals.Any(x => x.Status == "RecoveryRequired")) return false;
             if(!await RiskAllowsUnsafeAsync(signal,signals,price,token,observedAtUtc)) return false;
             signal.Status = "Submitting";
-            signal.EntryTriggeredAtUtc = DateTime.UtcNow;
+            signal.EntryTriggeredAtUtc = claimAt;
             signal.LastPrice = price;
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);
@@ -364,19 +422,28 @@ public sealed partial class ServerOrderStore
     }
 
     public async Task<ExclusiveClaimResult> TryClaimExclusiveSubmissionAsync(
-        Guid id, decimal price, CancellationToken token = default)
+        Guid id, decimal price, CancellationToken token = default,
+        EntryIntakeSwitch? intake = null, DateTime? observedAtUtc = null)
     {
         await _gate.WaitAsync(token);
         try
         {
             var signals = await LoadUnsafeAsync(token);
             var signal = signals.SingleOrDefault(x => x.Id == id);
-            if (signals.Any(x => x.Status == "RecoveryRequired")) return ExclusiveClaimResult.Unavailable;
             if (signal is null || signal.Status != "Pending") return ExclusiveClaimResult.Unavailable;
+            var claimAt = DateTime.UtcNow;
+            var observation = observedAtUtc ?? claimAt;
+            if ((intake ?? EntryIntake).BlocksObservation(observation))
+            {
+                if (observation >= signal.CreatedAtUtc && DemoOrderWorker.EntryReached(signal, price))
+                    await ExpirePausedEntryUnsafeAsync(signals, signal, price, observation, token);
+                return ExclusiveClaimResult.Unavailable;
+            }
+            if (signals.Any(x => x.Status == "RecoveryRequired")) return ExclusiveClaimResult.Unavailable;
             if (signals.Any(x => x.Id != id && x.Status is "Submitting" or "Submitted" or "Filled"))
                 return ExclusiveClaimResult.PositionBusy;
             signal.Status = "Submitting";
-            signal.EntryTriggeredAtUtc = DateTime.UtcNow;
+            signal.EntryTriggeredAtUtc = claimAt;
             signal.LastPrice = price;
             await SaveUnsafeAsync(signals, token);
             await _history.UpsertAsync(signal, "Status:Pending->Submitting", token);

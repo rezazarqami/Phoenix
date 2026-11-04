@@ -106,18 +106,22 @@ public sealed class Strategy2EntryWebSocketWorker(
                 var symbol = trade.GetProperty("s").GetString();
                 if (symbol is not null && decimal.TryParse(trade.GetProperty("p").GetString(),
                         NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
-                    await HandleAsync(symbol, price, token);
+                {
+                    var observedAt = trade.TryGetProperty("T", out var timestamp) && timestamp.TryGetInt64(out var milliseconds)
+                        ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime : DateTime.UtcNow;
+                    await HandleAsync(symbol, price, token, observedAt);
+                }
             }
         }
     }
 
-    private async Task HandleAsync(string symbol, decimal price, CancellationToken token)
+    private async Task HandleAsync(string symbol, decimal price, CancellationToken token, DateTime observedAt)
     {
         foreach (var watch in _pending.Values.Where(x => x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase)))
         {
             var reached = watch.Direction == "Long" ? price <= watch.Entry : price >= watch.Entry;
             if (!reached) continue;
-            await engine.ObservePriceAsync(watch.Id, price, false, token);
+            await engine.ObservePriceAsync(watch.Id, price, false, token, observedAt);
         }
     }
 

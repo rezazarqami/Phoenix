@@ -136,8 +136,9 @@ public sealed class BybitEntryWebSocketWorker(
                 ?? throw new InvalidOperationException("Signal leverage is missing."), token);
             var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
                 order.Direction == "Long" ? "Buy" : "Sell", token);
-            var result = await client.PlaceMarketOrderAsync(
-                order.ToPreview(), order.OrderLinkId, positionIndex, token);
+            var result = await store.DispatchEntryAsync(order, store.EntryIntake,
+                () => client.PlaceMarketOrderAsync(order.ToPreview(), order.OrderLinkId, positionIndex, token), token);
+            if (result is null) return;
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;

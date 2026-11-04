@@ -961,6 +961,23 @@ app.MapPost("/api/positions/close-all/{previewId:guid}", async (Guid previewId, 
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
     catch { return Results.Problem("عملیات کامل نشد؛ وضعیت صرافی و توقف ورودها را بررسی کنید."); }
 });
+app.MapGet("/api/positions/operator-entry-pause", (HttpRequest request, ServerOrderStore store) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    return Results.Ok(new { paused = store.EntryIntake.Paused });
+});
+
+app.MapPost("/api/positions/operator-entry-pause", async (EntryPauseRequest change, HttpRequest request,
+    ServerOrderStore store, CancellationToken token) =>
+{
+    if (!PhoenixSessionAuth.TryGetIdentity(request, out var identity) || !identity.IsAdmin)
+        return Results.StatusCode(403);
+    if (change.Paused is not { } paused) return Results.BadRequest();
+    await store.EntryIntake.SetPausedAsync(paused, token);
+    return Results.Ok(new { paused = store.EntryIntake.Paused });
+});
+
 app.MapGet("/api/positions/entry-pause", (ServerOrderStore store) => Results.Ok(new { paused = store.EntriesPaused }));
 app.MapPost("/api/positions/resume-entries", async (HttpRequest request, ServerOrderStore store, CancellationToken token) =>
 {

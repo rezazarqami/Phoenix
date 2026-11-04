@@ -49,6 +49,8 @@ public sealed class DemoOrderWorker(
                         if (order.Status == "Pending")
                         {
                             var entryReached = EntryReached(order, ticker.LastPrice);
+                            if (entryReached && await store.TryExpirePausedEntryAsync(order.Id, ticker.LastPrice,
+                                ticker.ReceivedAtUtc, store.EntryIntake, stoppingToken)) continue;
                             if (entryReached && IsTradingEnabled(options))
                             {
                                 if (await store.TryClaimSubmissionAsync(order.Id, ticker.LastPrice, stoppingToken,ticker.ReceivedAtUtc))
@@ -190,8 +192,9 @@ public sealed class DemoOrderWorker(
                 ?? throw new InvalidOperationException("Signal leverage is missing."), token);
             var positionIndex = await client.GetPositionIndexAsync(order.Symbol,
                 order.Direction == "Long" ? "Buy" : "Sell", token);
-            var result = await client.PlaceMarketOrderAsync(
-                order.ToPreview(), order.OrderLinkId, positionIndex, token);
+            var result = await store.DispatchEntryAsync(order, store.EntryIntake,
+                () => client.PlaceMarketOrderAsync(order.ToPreview(), order.OrderLinkId, positionIndex, token), token);
+            if (result is null) return;
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;

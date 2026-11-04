@@ -14,7 +14,7 @@ public sealed class Strategy2Worker(
     private readonly Channel<ServerSignal> expirations = Channel.CreateUnbounded<ServerSignal>(
         new UnboundedChannelOptions { SingleReader = true });
 
-    public async Task ObservePriceAsync(Guid id, decimal price, bool allowExpiry, CancellationToken token)
+    public async Task ObservePriceAsync(Guid id, decimal price, bool allowExpiry, CancellationToken token, DateTime? observedAtUtc = null)
     {
         ServerSignal? claimed = null;
         ServerSignal? expired = null;
@@ -23,13 +23,17 @@ public sealed class Strategy2Worker(
         {
             var order = (await runtime.Store.GetAllAsync(token)).SingleOrDefault(x => x.Id == id);
             if (order is null || order.Status != "Pending" || order.CompletedAtUtc is not null) return;
+            if (DemoOrderWorker.EntryReached(order, price) &&
+                await runtime.Store.TryExpirePausedEntryAsync(id, price, observedAtUtc ?? DateTime.UtcNow,
+                    (mainStore ?? runtime.Store).EntryIntake, token)) return;
             // Recovery is an explicit trading pause, never evidence of a missed/expired entry.
             if (runtime.Store.EntriesPaused) return;
             order.LastPrice = price;
             // An observed entry always wins over expiry evaluation for the same price.
             if (DemoOrderWorker.EntryReached(order, price))
             {
-                var result = await runtime.Store.TryClaimExclusiveSubmissionAsync(id, price, token);
+                var result = await runtime.Store.TryClaimExclusiveSubmissionAsync(id, price, token,
+                    (mainStore ?? runtime.Store).EntryIntake, observedAtUtc);
                 if (result == ExclusiveClaimResult.Claimed)
                     claimed = (await runtime.Store.GetAllAsync(token)).Single(x => x.Id == id);
                 else if (result == ExclusiveClaimResult.PositionBusy)
@@ -133,11 +137,12 @@ public sealed class Strategy2Worker(
         {
             try
             {
-                var price = (await runtime.Client.GetLastPriceAsync(group.Key, token)).LastPrice;
+                var ticker = await runtime.Client.GetLastPriceAsync(group.Key, token);
+                var price = ticker.LastPrice;
                 foreach (var order in group)
                 {
                     order.LastPrice = price;
-                    if (order.Status == "Pending") await ObservePriceAsync(order.Id, price, true, token);
+                    if (order.Status == "Pending") await ObservePriceAsync(order.Id, price, true, token, ticker.ReceivedAtUtc);
                     else if (order.Status == "Submitted") await SynchronizeAsync(order, price, token);
                     else if (order.Status == "Filled") await TrackLevelsAsync(order, price, token);
                 }
@@ -162,8 +167,9 @@ public sealed class Strategy2Worker(
             await runtime.Client.SetLeverageAsync(order.Symbol, order.Leverage!.Value, token);
             var positionIndex = await runtime.Client.GetPositionIndexAsync(
                 order.Symbol, order.Direction == "Long" ? "Buy" : "Sell", token);
-            var result = await runtime.Client.PlaceMarketOrderAsync(
-                order.ToPreview(), order.OrderLinkId, positionIndex, token);
+            var result = await runtime.Store.DispatchEntryAsync(order, (mainStore ?? runtime.Store).EntryIntake,
+                () => runtime.Client.PlaceMarketOrderAsync(order.ToPreview(), order.OrderLinkId, positionIndex, token), token);
+            if (result is null) return;
             order.BybitOrderId = result.OrderId;
             order.Status = "Submitted";
             order.SubmittedAtUtc = DateTime.UtcNow;

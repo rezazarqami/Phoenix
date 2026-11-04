@@ -47,6 +47,7 @@ public sealed partial class MobileSignalFeed(ServerOrderStore store,DedicatedTel
 
     internal static string? EventReason(ServerSignal s) => s.Outcome=="EntryError" || s.Status is "Error" or "Rejected" or "Deactivated" or "RecoveryRequired"
         ? (s.Error?.Contains("110007")==true || s.Error?.Contains("110004")==true || s.Error?.Contains("balance",StringComparison.OrdinalIgnoreCase)==true ? "ورود انجام نشد: موجودی قابل استفاده کافی نیست." : "ورود با خطا مواجه شد: "+(s.Error??s.Status))
+        : s.ExpireReason=="OperatorEntryPause" ? "سیگنال هنگام توقف ورودهای جدید به نقطهٔ ورود رسید و منقضی شد."
         : s.ExpireReason=="InitialBoundary" ? "سیگنال پیش از ورود از مرز اولیه عبور کرد."
         : s.ExpireReason=="TargetAfterActivation" ? "پس از نزدیک شدن به ورود، پیش از ثبت ورود به تارگت برگشت."
         : s.ExpireReason=="PositionAlreadyOpen" ? "هنگام رسیدن به ورود، معاملهٔ دیگری در استراتژی دو فعال بود."

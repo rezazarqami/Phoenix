@@ -89,7 +89,7 @@ public sealed class MobileEntryConfirmationWorker(ServerOrderStore store, BybitD
                     var opened = MobileSignalWorker.Events(signal, owner, dedicated).SingleOrDefault(item => item.Kind == "Opened");
                     if (opened is null) return;
                     await feed.RecordConfirmedEntryAsync(owner, signal, opened, cancellation);
-                    await push.QueueAsync(owner, [opened], now, cancellation);
+                    if (push.Configured) await push.QueueAsync(owner, [opened], now, cancellation);
                     confirmed.TryAdd(key, 0);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }

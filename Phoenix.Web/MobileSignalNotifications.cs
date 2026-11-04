@@ -33,6 +33,7 @@ public sealed partial class MobilePushService
                 PRIMARY KEY(owner,device_id,event_id));
             CREATE TABLE IF NOT EXISTS mobile_state(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
             INSERT OR IGNORE INTO mobile_state VALUES('since', $now);
+            DELETE FROM mobile_delivery WHERE kind IN ('Created','Cancelled');
             """;
         cmd.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         await cmd.ExecuteNonQueryAsync(ct);
@@ -84,7 +85,6 @@ public sealed partial class MobilePushService
         {
             await using var db = await OpenAsync(ct); using var cmd = db.CreateCommand();
             cmd.CommandText = """
-                DELETE FROM mobile_delivery WHERE kind IN ('Created','Cancelled');
                 SELECT n.owner,n.device_id,n.event_id,n.kind,n.attempts,n.reason FROM mobile_delivery n
                 JOIN mobile_devices d ON d.owner=n.owner AND d.device_id=n.device_id AND d.enabled_since<=n.event_at
                 WHERE n.sent=0 AND n.next_attempt<=$now AND n.event_at>=$since ORDER BY CASE WHEN n.kind='Opened' THEN 0 ELSE 1 END, n.event_at DESC LIMIT 12
@@ -160,9 +160,13 @@ public sealed class MobileSignalWorker(ServerOrderStore store, MobilePushService
                 {
                     var signals = await store.NotificationSignalsAsync(DateTime.UtcNow.AddDays(-1), ct);
                     await feed.CaptureAsync(owner, ct, signals);
-                    var now=DateTimeOffset.UtcNow;
-                    var locks=await store.TimeframeLockNoticesAsync(now.UtcDateTime.AddMinutes(-15),ct);
-                    await push.QueueAsync(owner, signals.SelectMany(s => Events(s, owner, dedicated)).Concat(locks.Select(TimeframeAlertText.Locked)).OrderBy(e => e.At), now, ct);
+                    if (push.Configured)
+                    {
+                        var now = DateTimeOffset.UtcNow;
+                        var locks = await store.TimeframeLockNoticesAsync(now.UtcDateTime.AddMinutes(-15), ct);
+                        await push.QueueAsync(owner, signals.SelectMany(signal => Events(signal, owner, dedicated))
+                            .Concat(locks.Select(TimeframeAlertText.Locked)).OrderBy(item => item.At), now, ct);
+                    }
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }

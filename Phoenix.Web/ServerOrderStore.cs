@@ -179,7 +179,7 @@ public sealed partial class ServerOrderStore
                 var signals = await LoadUnsafeAsync(token);
                 var current = signals.SingleOrDefault(item => item.Id == order.Id);
                 if (current is { Status: "Submitting", CompletedAtUtc: null })
-                    await ExpirePausedEntryUnsafeAsync(signals, current, order.LastPrice,
+                    await ExpirePausedEntryUnsafeAsync(signals, current, order.LastPrice ?? order.EntryPrice,
                         order.EntryTriggeredAtUtc ?? DateTime.UtcNow, token);
             }
             finally { _gate.Release(); }

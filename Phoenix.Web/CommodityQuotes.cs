@@ -45,6 +45,80 @@ public sealed class CommodityQuotes(IHttpClientFactory clients, TimeProvider? ti
     }
 
 
+    public sealed record HistoryPoint(DateTimeOffset AtUtc, decimal Value);
+    public sealed record AssetHistory(string Symbol, HistoryPoint[] Points);
+    private readonly SemaphoreSlim historyGate = new(1, 1);
+    private readonly Dictionary<string, AssetHistory> histories = new();
+    private readonly Dictionary<string, DateTimeOffset> historyRefresh = new();
+
+    // Independent from the live-price cache: slow archives cannot delay current quotes.
+    public async Task<AssetHistory[]> ReadHistoryAsync(CancellationToken token)
+    {
+        await historyGate.WaitAsync(token);
+        try
+        {
+            var symbols = new[] { "XAU", "BRENT", "USD_TOMAN", "GOLD18_TOMAN", "EUR_TOMAN" };
+            var results = await Task.WhenAll(symbols.Select(async symbol =>
+            {
+                var old = histories.GetValueOrDefault(symbol) ?? new AssetHistory(symbol, []);
+                if (historyRefresh.TryGetValue(symbol, out var next) && clock.GetUtcNow() < next) return old;
+                try
+                {
+                    var key = symbol switch { "XAU" => "ons", "USD_TOMAN" => "price_dollar_rl", "EUR_TOMAN" => "price_eur", _ => "geram18" };
+                    var url = symbol == "BRENT"
+                        ? "https://query1.finance.yahoo.com/v8/finance/chart/BZ%3DF?range=1mo&interval=1d"
+                        : "https://api.tgju.org/v1/market/indicator/summary-table-data/" + key + "?length=14";
+                    using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                    using var client = clients.CreateClient("CommodityQuotes");
+                    using var response = await client.GetAsync(url, deadline.Token);
+                    response.EnsureSuccessStatusCode();
+                    using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(deadline.Token));
+                    var points = ParseHistory(symbol, doc.RootElement, clock.GetUtcNow());
+                    return points.Length >= 2 ? new AssetHistory(symbol, points) : old;
+                }
+                catch { return old; }
+            }));
+            foreach (var result in results)
+            {
+                histories[result.Symbol] = result;
+                historyRefresh[result.Symbol] = clock.GetUtcNow().AddMinutes(result.Points.Length >= 2 ? 30 : 1);
+            }
+            return results;
+        }
+        finally { historyGate.Release(); }
+    }
+
+    public static HistoryPoint[] ParseHistory(string symbol, JsonElement data, DateTimeOffset now)
+    {
+        var points = new List<HistoryPoint>();
+        if (symbol == "BRENT")
+        {
+            var result = data.GetProperty("chart").GetProperty("result")[0];
+            var meta = result.GetProperty("meta");
+            if (meta.GetProperty("symbol").GetString() != "BZ=F" || meta.GetProperty("currency").GetString() != "USD")
+                throw new FormatException("Unexpected Brent history identity.");
+            var timestamps = result.GetProperty("timestamp");
+            var closes = result.GetProperty("indicators").GetProperty("quote")[0].GetProperty("close");
+            for (var i = 0; i < Math.Min(timestamps.GetArrayLength(), closes.GetArrayLength()); i++)
+                if (timestamps[i].ValueKind == JsonValueKind.Number && timestamps[i].TryGetInt64(out var stamp) && closes[i].ValueKind == JsonValueKind.Number && closes[i].TryGetDecimal(out var value) && value > 0)
+                    points.Add(new(DateTimeOffset.FromUnixTimeSeconds(stamp), value));
+        }
+        else
+        {
+            foreach (var row in data.GetProperty("data").EnumerateArray())
+            {
+                if (row.GetArrayLength() < 7 || !DateTime.TryParseExact(row[6].GetString(), "yyyy/MM/dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+                    || !decimal.TryParse(row[3].GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value) || value <= 0) continue;
+                var at = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(day, DateTimeKind.Unspecified), TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran")));
+                points.Add(new(at, symbol.EndsWith("_TOMAN") ? value / 10m : value));
+            }
+        }
+        var valid = points.Where(p => p.AtUtc <= now).DistinctBy(p => p.AtUtc).OrderBy(p => p.AtUtc).ToArray();
+        var week = valid.Where(p => p.AtUtc >= now.AddDays(-7)).ToArray();
+        // Retain the last seven sessions through extended market holidays.
+        return week.Length >= 2 ? week : valid.TakeLast(7).ToArray();
+    }
+
     private async Task<CommodityQuote[]> ReadIranAsync(CommodityQuote[] previous)
     {
         try

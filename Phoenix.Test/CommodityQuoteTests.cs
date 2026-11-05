@@ -21,6 +21,12 @@ internal static class CommodityQuoteTests
     }
     private static async Task Verify()
     {
+        using (var archive = JsonDocument.Parse("""{"data":[["0","0","0","2,000","","","2026/11/03"],["0","0","0","1,000","","","2026/11/02"]]}"""))
+        {
+            var points = CommodityQuotes.ParseHistory("USD_TOMAN", archive.RootElement, new DateTimeOffset(2026, 11, 5, 0, 0, 0, TimeSpan.Zero));
+            Check(points.Length == 2 && points[0].Value == 100 && points[1].Value == 200 && points[0].AtUtc < points[1].AtUtc, "Archive closes are chronological and rial converts exactly once");
+            Check(CommodityQuotes.ParseHistory("XAU", archive.RootElement, new DateTimeOffset(2026, 11, 5, 0, 0, 0, TimeSpan.Zero))[0].Value == 1000, "International gold archive remains in dollars");
+        }
         var clock = new Clock(); var at = clock.Now.AddSeconds(-30); var calls = 0; var failGold = false; var brokenIranGold = false;
         var factory = new Factory(r => {
             Interlocked.Increment(ref calls);

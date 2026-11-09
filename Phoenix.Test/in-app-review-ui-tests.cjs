@@ -17,7 +17,7 @@ const {JSDOM}=require('./ui/node_modules/jsdom');
  d.querySelectorAll('.review-actions button')[2].click();await flush();assert.equal(posts.length,2);assert.match(d.querySelector('.review-title').textContent,/SOLUSDT/,'Next rejection also advances immediately');tick();await flush();assert.equal(d.querySelectorAll('#reviewList button').length,1,'Polling cannot resurrect pending or completed choices');
  releases.get('two')();await flush();await flush();assert.match(d.querySelector('.review-title').textContent,/SOLUSDT/,'Out-of-order completion preserves current proposal');
  releases.get('one')();await flush();await flush();assert.equal(d.querySelector('#activeCount').textContent,'۳','Counter refreshes after acknowledged registration');assert.match(d.querySelector('.review-title').textContent,/SOLUSDT/);
- assert.match(fs.readFileSync(path.join(root,'in-app-review.css'),'utf8'),/aspect-ratio:4\/3/,'Reserve chart space before image loads');
+ assert.match(fs.readFileSync(path.join(root,'in-app-review.css'),'utf8'),/aspect-ratio:\s*4\s*\/\s*3/,'Reserve chart space before image loads');
  items=[{...proposal('stuck','AKEUSDT'),state:'NeedsReview',error:'failed'},proposal('fresh','GASUSDT')];await tick();await flush();
  assert.match(d.querySelector('.review-title').textContent,/AKEUSDT/);assert.equal(d.querySelector('.review-actions'),null);
  w.confirm=()=>false;d.querySelector('#reviewDetail .review-remove').click();await flush();assert.equal(items.length,2,'Cancelled delete preserves desk');

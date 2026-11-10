@@ -39,6 +39,24 @@ internal static class TimeframeRiskTests
             var error=history.Events.Single(e=>e.Id==failed.Id+":EntryError");Check(error.Reason?.Contains("موجودی")==true&&error.Direction=="Long","Entry failure result must identify balance reason and direction");
             var manual=New("60");manual.Status="Filled";manual.FilledAtUtc=DateTime.UtcNow;await store.AddAsync(manual);manual.Status="Completed";manual.Outcome="ManualClosed";manual.CompletedAtUtc=DateTime.UtcNow;await store.UpdateAsync(manual);
             Check(MobileSignalWorker.Events(manual,"owner",new("dedicated",null,null)).Any(e=>e.Kind=="ManualClosed"),"Confirmed manual closure must emit its own terminal notification");
+            await store.ChangeTimeframeRuleAsync("3", 2, stopLimit: 3);
+            for (var count = 1; count <= 3; count++)
+            {
+                var threeMinute = New("3");
+                await store.AddAsync(threeMinute);
+                Check(await store.TryClaimSubmissionAsync(threeMinute.Id, 100), "Three-minute entries stay available before their configured stop limit");
+                threeMinute = (await store.GetAllAsync()).Single(s => s.Id == threeMinute.Id);
+                threeMinute.FilledAtUtc = DateTime.UtcNow;
+                threeMinute.Status = "Completed";
+                threeMinute.Outcome = "StopLoss";
+                threeMinute.CompletedAtUtc = DateTime.UtcNow;
+                await store.UpdateAsync(threeMinute);
+                var rule = (await store.TimeframeRulesAsync()).Single(x => x.Rule.Timeframe == "3").Rule;
+                Check(rule.ConsecutiveStops == count && rule.Blocked == (count == 3), "The three-minute rule must lock at its saved stop limit");
+            }
+            store = Open();
+            var threeMinuteRule = (await store.TimeframeRulesAsync()).Single(x => x.Rule.Timeframe == "3").Rule;
+            Check(threeMinuteRule.Blocked && threeMinuteRule.StopLimit == 3, "The custom three-minute rule and lock must survive restart");
             var untouched=New("240");await store.AddAsync(untouched);Check((await store.TimeframeRulesAsync()).Single(x=>x.Rule.Timeframe=="240").Rule.MaximumOpen==2,"Four-hour timeframe has the same default policy");
         }finally{Environment.SetEnvironmentVariable("PHOENIX_QUEUE_PATH",old);SignalHistoryStore.ClearConnectionPools();Directory.Delete(path,true);}
     }

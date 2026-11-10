@@ -3,11 +3,11 @@ using Phoenix.Engine.Exchanges.Bybit;
 namespace Phoenix.Web;
 
 public sealed record TimeframeRiskRule(string Timeframe, int MaximumOpen = 2, int ConsecutiveStops = 0,
-    bool Blocked = false, DateTime? BlockedAtUtc = null, DateTime? ResumedAtUtc = null, DateTime? ProbationResolvedAtUtc = null);
+    bool Blocked = false, DateTime? BlockedAtUtc = null, DateTime? ResumedAtUtc = null, DateTime? ProbationResolvedAtUtc = null, int StopLimit = 2);
 public sealed record TimeframeStop(Guid SignalId, string Symbol);
-public sealed record TimeframeLockNotice(Guid Id, string Timeframe, DateTime AtUtc, List<TimeframeStop> Stops);
+public sealed record TimeframeLockNotice(Guid Id, string Timeframe, DateTime AtUtc, List<TimeframeStop> Stops, int StopLimit = 2);
 public sealed record TimeframeRiskView(TimeframeRiskRule Rule, int Open, int EffectiveMaximumOpen = 2, bool AwaitingResult = false);
-public sealed record TimeframeRiskChange(int MaximumOpen);
+public sealed record TimeframeRiskChange(int MaximumOpen, int? StopLimit = null);
 public sealed partial class ServerOrderStore
 {
     private sealed class RiskState
@@ -26,12 +26,12 @@ public sealed partial class ServerOrderStore
         if(_risk is not null)return _risk;
         var state=_risk=File.Exists(RiskPath)
             ? JsonSerializer.Deserialize<RiskState>(await File.ReadAllTextAsync(RiskPath,ct),JsonOptions) ?? throw new InvalidDataException("قواعد تایم‌فریم قابل خواندن نیست.") : new();
-        // A previously configured larger cap must not bypass the two-stop brake after upgrade.
+        // A previously configured larger cap must not bypass the stop brake after upgrade.
         var changed=false;
-        foreach(var (key,rule) in state.Rules.ToArray())if(!rule.Blocked&&rule.ConsecutiveStops>=2){
+        foreach(var (key,rule) in state.Rules.ToArray())if(!rule.Blocked&&rule.ConsecutiveStops>=rule.StopLimit){
             var at=DateTime.UtcNow;var causes=await StopCausesUnsafeAsync(state,key,rule,ct);
             state.Rules[key]=rule with{Blocked=true,BlockedAtUtc=at};
-            state.LockNotices.Add(new(Guid.NewGuid(),key,at,causes.ToList()));changed=true;
+            state.LockNotices.Add(new(Guid.NewGuid(),key,at,causes.TakeLast(rule.StopLimit).ToList(),rule.StopLimit));changed=true;
         }
         if(changed)await SaveRiskUnsafeAsync(ct);
         return state;
@@ -53,14 +53,14 @@ public sealed partial class ServerOrderStore
         var causes=await StopCausesUnsafeAsync(state,key,rule,ct);
         if(signal.Outcome=="StopLoss"){
             causes.Add(new(signal.Id,signal.Symbol));
-            if(causes.Count>2)causes.RemoveRange(0,causes.Count-2);
+            if(causes.Count>10)causes.RemoveAt(0);
         }else causes.Clear();
         var stops=signal.Outcome=="StopLoss" ? rule.ConsecutiveStops+1 : 0;
-        var blocked=rule.Blocked || stops>=2;
+        var blocked=rule.Blocked || stops>=rule.StopLimit;
         var at=rule.BlockedAtUtc??(blocked?DateTime.UtcNow:(DateTime?)null);
         state.Rules[key]=rule with {ConsecutiveStops=stops,Blocked=blocked,BlockedAtUtc=at,
             ProbationResolvedAtUtc=rule.ConsecutiveStops>0&&stops==0&&!rule.Blocked?DateTime.UtcNow:rule.ProbationResolvedAtUtc};
-        if(!rule.Blocked&&blocked)state.LockNotices.Add(new(Guid.NewGuid(),key,at!.Value,causes.ToList()));
+        if(!rule.Blocked&&blocked)state.LockNotices.Add(new(Guid.NewGuid(),key,at!.Value,causes.TakeLast(rule.StopLimit).ToList(),rule.StopLimit));
         await SaveRiskUnsafeAsync(ct);
     }
     private async Task<List<TimeframeStop>> StopCausesUnsafeAsync(RiskState state,string key,TimeframeRiskRule rule,CancellationToken ct)
@@ -71,7 +71,7 @@ public sealed partial class ServerOrderStore
         if(rule.ConsecutiveStops>0){
             var known=(_signals??new List<ServerSignal>()).Concat(await _history.RiskStopSignalsAsync(key,ct))
                 .Where(s=>state.Completed.Contains(s.Id)&&RiskKey(s)==key&&s.Outcome=="StopLoss")
-                .DistinctBy(s=>s.Id).OrderByDescending(s=>s.CompletedAtUtc).Take(Math.Min(2,rule.ConsecutiveStops)).Reverse();
+                .DistinctBy(s=>s.Id).OrderByDescending(s=>s.CompletedAtUtc).Take(Math.Min(10,rule.ConsecutiveStops)).Reverse();
             causes.AddRange(known.Select(s=>new TimeframeStop(s.Id,s.Symbol)));
         }
         state.StopStreaks[key]=causes;return causes;
@@ -111,15 +111,16 @@ public sealed partial class ServerOrderStore
                 }).ToArray();
         }finally{_gate.Release();}
     }
-    public async Task ChangeTimeframeRuleAsync(string key,int maximum,CancellationToken ct=default)
+    public async Task ChangeTimeframeRuleAsync(string key,int maximum,CancellationToken ct=default,int? stopLimit=null)
     {
-        if(maximum is <1 or >100 || !ValidRiskKey(key))throw new ArgumentException("تایم‌فریم یا سقف معتبر نیست.");
+        if(maximum is <1 or >100 || stopLimit is <1 or >10 || !ValidRiskKey(key))throw new ArgumentException("تایم‌فریم یا سقف معتبر نیست.");
         await _gate.WaitAsync(ct);try{var state=await RiskUnsafeAsync(ct);var old=Rule(state,key);
             // Changing a limit must never silently release a stopped timeframe.
-            var blocked=old.Blocked||old.ConsecutiveStops>=2;
+            var limit=stopLimit??old.StopLimit;
+            var blocked=old.Blocked||old.ConsecutiveStops>=limit;
             var at=old.BlockedAtUtc??(blocked?DateTime.UtcNow:(DateTime?)null);
-            state.Rules[key]=old with{MaximumOpen=maximum,Blocked=blocked,BlockedAtUtc=at};
-            if(!old.Blocked&&blocked)state.LockNotices.Add(new(Guid.NewGuid(),key,at!.Value,(await StopCausesUnsafeAsync(state,key,old,ct)).ToList()));
+            state.Rules[key]=old with{MaximumOpen=maximum,StopLimit=limit,Blocked=blocked,BlockedAtUtc=at};
+            if(!old.Blocked&&blocked)state.LockNotices.Add(new(Guid.NewGuid(),key,at!.Value,(await StopCausesUnsafeAsync(state,key,old,ct)).TakeLast(limit).ToList(),limit));
             await SaveRiskUnsafeAsync(ct);
         }finally{_gate.Release();}
     }
@@ -145,7 +146,7 @@ public static class TimeframeRiskEndpoints
         app.MapGet("/api/signals/timeframe-rules",async(ServerOrderStore store,CancellationToken ct)=>Results.Ok(await store.TimeframeRulesAsync(ct)));
         app.MapPost("/api/signals/timeframe-rules/{timeframe}",async(string timeframe,TimeframeRiskChange input,HttpRequest request,ServerOrderStore store,CancellationToken ct)=>{
             if(!PhoenixSessionAuth.TryGetIdentity(request,out var identity)||!identity.IsAdmin)return Results.StatusCode(403);
-            try{await store.ChangeTimeframeRuleAsync(timeframe,input.MaximumOpen,ct);return Results.Ok();}catch(ArgumentException e){return Results.BadRequest(new{error=e.Message});}
+            try{await store.ChangeTimeframeRuleAsync(timeframe,input.MaximumOpen,ct,input.StopLimit);return Results.Ok();}catch(ArgumentException e){return Results.BadRequest(new{error=e.Message});}
         });
         app.MapPost("/api/signals/timeframe-rules/{timeframe}/resume",async(string timeframe,HttpRequest request,ServerOrderStore store,BybitDemoClient client,CancellationToken ct)=>{
             if(!PhoenixSessionAuth.TryGetIdentity(request,out var identity)||!identity.IsAdmin)return Results.StatusCode(403);

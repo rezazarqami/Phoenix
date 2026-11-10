@@ -13,8 +13,9 @@ public static class TimeframeAlertText
     public static MobileSignalEvent Locked(TimeframeLockNotice notice)
     {
         var names=notice.Stops.Select(s=>s.Symbol).ToList();
-        while(names.Count<2)names.Insert(0,"معامله با نام ثبت‌نشده");
-        var reason=$"تایم‌فریم {Name(notice.Timeframe)} به‌دلیل دو استاپ پیاپی در {string.Join(" و ",names)} قفل شد.";
+        while(names.Count<notice.StopLimit)names.Insert(0,"معامله با نام ثبت‌نشده");
+        var stopCount=notice.StopLimit==2?"دو":notice.StopLimit.ToString();
+        var reason=$"تایم‌فریم {Name(notice.Timeframe)} به‌دلیل {stopCount} استاپ پیاپی در {string.Join(" و ",names)} قفل شد.";
         return new($"timeframe:{notice.Id:N}:TimeframeLocked","TimeframeLocked",notice.AtUtc,reason,Timeframe:notice.Timeframe);
     }
 }

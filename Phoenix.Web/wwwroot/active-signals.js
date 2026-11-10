@@ -21,10 +21,42 @@
   remove.addEventListener('click',()=>cancelIds([s.id]));body.append(chartHost,metrics);main.append(check,icon,symbol,direction,phase,remove,toggle);article.append(main,body);return {article,check,direction,phase,cancel:remove,stop:()=>chart?.stop()};
  }
  const riskPanel=make('div','','timeframe-risk-panel'),tabs=make('div','','timeframe-risk-tabs'),settings=make('div','','timeframe-risk-settings');riskPanel.append(tabs,settings);list.before(riskPanel);
- if(!document.getElementById('timeframe-risk-style')){const css=document.createElement('link');css.id='timeframe-risk-style';css.rel='stylesheet';css.href='/timeframe-risk.css?v=20261030';document.head.append(css);}
- const label=key=>({'all':'همه','1':'۱ دقیقه','5':'۵ دقیقه','15':'۱۵ دقیقه','30':'۳۰ دقیقه','60':'۱ ساعت','240':'۴ ساعت','D':'روزانه','W':'هفتگی','M':'ماهانه','3M':'سه‌ماهه','unknown':'نامشخص'})[key]||key;
- function paintRisk(){const fingerprint=JSON.stringify([allSignals.map(s=>[s.timeframe,s.id]),rules,timeframe,admin]);if(fingerprint===lastRiskPaint)return;lastRiskPaint=fingerprint;tabs.replaceChildren();const keys=['all','1','5','15','30','60','240','D','W','M','3M',...allSignals.map(s=>s.timeframe||'unknown'),...rules.map(x=>x.rule.timeframe)];for(const key of [...new Set(keys)]){const count=allSignals.filter(s=>key==='all'||(s.timeframe||'unknown')===key).length;const b=make('button',label(key)+' · '+count);b.type='button';b.setAttribute('aria-pressed',String(timeframe===key));b.dataset.timeframe=key;b.onclick=()=>{timeframe=key;paintRisk();filter();};tabs.append(b);}if(settings.contains(document.activeElement)&&document.activeElement.tagName==='INPUT'){lastRiskPaint='';return;}settings.replaceChildren();if(timeframe==='all')return;const current=rules.find(x=>x.rule.timeframe===timeframe);if(!current){settings.append(make('span','در حال دریافت قواعد تایم‌فریم…'));return;}const rule=current.rule;settings.append(make('span','معاملات باز: '+current.open+' · '+(rule.blocked?'قفل پس از دو استاپ متوالی':rule.consecutiveStops>0?(current.awaitingResult?'انتظار نتیجهٔ معاملهٔ باز پس از یک استاپ':'فقط یک معامله پس از یک استاپ'):'فعال')+' · ظرفیت فعلی: '+(current.effectiveMaximumOpen??(rule.blocked?0:rule.consecutiveStops>0?1:rule.maximumOpen))));const field=make('label','سقف معاملات هم‌زمان '),input=make('input','');input.type='number';input.min='1';input.max='100';input.value=rule.maximumOpen;input.setAttribute('aria-label','حداکثر معاملات هم‌زمان '+label(timeframe));input.disabled=!admin;field.append(input);settings.append(field);const save=make('button','ذخیره سقف');save.type='button';save.disabled=!admin;save.onclick=()=>changeRule('/api/signals/timeframe-rules/'+timeframe,{maximumOpen:Number(input.value)});settings.append(save);settings.append(make('small','پس از یک استاپ، فقط یک معامله تا تعیین نتیجه مجاز است؛ تارگت ظرفیت عادی را برمی‌گرداند و استاپ دوم تایم‌فریم را قفل می‌کند.'));if(rule.blocked){const resume=make('button','آزاد کردن');resume.type='button';resume.disabled=!admin;resume.onclick=async()=>{if(await phoenixConfirm('ورودهای جدید این تایم‌فریم دوباره آزاد شوند؟ سیگنال‌هایی که هنگام توقف به ورود رسیده‌اند برنمی‌گردند.'))changeRule('/api/signals/timeframe-rules/'+timeframe+'/resume',{});};settings.append(resume);}}
- async function changeRule(url,body){settings.querySelectorAll('button,input').forEach(e=>e.disabled=true);try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error((await r.json()).error||'ذخیره انجام نشد.');await loadRules();await refresh();}catch(e){status.textContent=e.message;paintRisk();}}
+ if(!document.getElementById('timeframe-risk-style')){const css=document.createElement('link');css.id='timeframe-risk-style';css.rel='stylesheet';css.href='/timeframe-risk.css?v=20261110-stop-limit';document.head.append(css);}
+ const label=key=>({'all':'همه','1':'۱ دقیقه','3':'۳ دقیقه','5':'۵ دقیقه','15':'۱۵ دقیقه','30':'۳۰ دقیقه','60':'۱ ساعت','240':'۴ ساعت','D':'روزانه','W':'هفتگی','M':'ماهانه','3M':'سه‌ماهه','unknown':'نامشخص'})[key]||key;
+ function paintRisk(){const fingerprint=JSON.stringify([allSignals.map(s=>[s.timeframe,s.id]),rules,timeframe,admin]);if(fingerprint===lastRiskPaint)return;lastRiskPaint=fingerprint;tabs.replaceChildren();const keys=['all','1','3','5','15','30','60','240','D','W','M','3M',...allSignals.map(s=>s.timeframe||'unknown'),...rules.map(x=>x.rule.timeframe)];for(const key of [...new Set(keys)]){const count=allSignals.filter(s=>key==='all'||(s.timeframe||'unknown')===key).length;const b=make('button',label(key)+' · '+count);b.type='button';b.setAttribute('aria-pressed',String(timeframe===key));b.dataset.timeframe=key;b.onclick=()=>{timeframe=key;paintRisk();filter();};tabs.append(b);}if(settings.contains(document.activeElement)&&document.activeElement.tagName==='INPUT'){lastRiskPaint='';return;}settings.replaceChildren();
+  if(timeframe==='all')return;
+  const current=rules.find(x=>x.rule.timeframe===timeframe);
+  if(!current){settings.append(make('span','در حال دریافت قواعد تایم‌فریم…'));return;}
+  const rule=current.rule,stopLimit=rule.stopLimit??2;
+  const stopCount=stopLimit===2?'دو':stopLimit;
+  const probation=rule.consecutiveStops===1?'پس از یک استاپ':'پس از استاپ';
+  const state=rule.blocked?`قفل پس از ${stopCount} استاپ پیاپی`:rule.consecutiveStops>0
+   ?(current.awaitingResult?`انتظار نتیجهٔ معاملهٔ باز ${probation}`:`فقط یک معامله ${probation}`):'فعال';
+  const capacity=current.effectiveMaximumOpen??(rule.blocked?0:rule.consecutiveStops>0?1:rule.maximumOpen);
+  settings.append(make('span',`معاملات باز: ${current.open} · ${state} · ظرفیت فعلی: ${capacity} · استاپ پیاپی: ${rule.consecutiveStops}`));
+  function numberField(caption,value,max){
+   const field=make('label',caption),input=make('input','');
+   input.type='number';input.min='1';input.max=String(max);input.step='1';input.value=value;
+   input.setAttribute('aria-label',caption+' '+label(timeframe));input.disabled=!admin;
+   field.append(input);settings.append(field);
+   return input;
+  }
+  const maximumOpen=numberField('سقف معاملات هم‌زمان',rule.maximumOpen,100);
+  const stops=numberField('استاپ پیاپی تا قفل',stopLimit,10);
+  const save=make('button','ذخیره سقف');save.type='button';save.disabled=!admin;
+  save.onclick=()=>{
+   if(!maximumOpen.reportValidity()||!stops.reportValidity()||!maximumOpen.value||!stops.value)return;
+   changeRule('/api/signals/timeframe-rules/'+timeframe,{maximumOpen:Number(maximumOpen.value),stopLimit:Number(stops.value)});
+  };
+  settings.append(save);
+  settings.append(make('small','با رسیدن استاپ‌های پیاپی به سقف، ورودهای جدید این تایم‌فریم قفل می‌شوند.'));
+  if(rule.blocked){
+   const resume=make('button','آزاد کردن');resume.type='button';resume.disabled=!admin;
+   resume.onclick=async()=>{if(await phoenixConfirm('ورودهای جدید این تایم‌فریم دوباره آزاد شوند؟ سیگنال‌هایی که هنگام توقف به ورود رسیده‌اند برنمی‌گردند.'))changeRule('/api/signals/timeframe-rules/'+timeframe+'/resume',{});};
+   settings.append(resume);
+  }
+ }
+ async function changeRule(url,body){settings.querySelectorAll('button,input').forEach(e=>e.disabled=true);try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error((await r.json()).error||'ذخیره انجام نشد.');await loadRules();await refresh();}catch(e){status.textContent=e.message;}finally{lastRiskPaint='';paintRisk();}}
  async function loadRules(){if(rulesLoading)return;rulesLoading=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);try{const r=await fetch('/api/signals/timeframe-rules',{cache:'no-store',signal:controller.signal});if(r.ok){rules=await r.json();if(!Array.isArray(rules))rules=[];paintRisk();}}catch{}finally{clearTimeout(timer);rulesLoading=false;}}
  function filter(){renderRows(allSignals.filter(s=>timeframe==='all'||(s.timeframe||'unknown')===timeframe));}
  function render(next){const fingerprint=JSON.stringify(next);allSignals=next;if(fingerprint!==lastSignals){lastSignals=fingerprint;paintRisk();filter();}loadRules();}

@@ -33,7 +33,7 @@ internal static class WaveSimilarityTests
         Check(e.SameTimeframeNearbyTargets==31 && e.SameTimeframeNearbyStops==31 && e.SameTimeframeNearbyRiskFree==31 &&
             e.OtherTimeframeNearbyTargets==31 && e.OtherTimeframeNearbyStops==31 && e.OtherTimeframeNearbyRiskFree==31,"All six counts; no sixty-row or nearest-N cap");
         var summary=SignalReviewText.Support(e);
-        Check(summary=="\nنزدیکِ کل: 62 تارگت / 62 استاپ / 62 ریسک‌فری","Same and other timeframes render one combined row");
+        Check(summary=="\nنزدیکِ کل: 62 تارگت / 62 استاپ","Same and other timeframes render one combined row");
         var caption="levels\nنزدیکِ هم‌تایم‌فریم: 31 تارگت / 31 استاپ / 31 ریسک‌فری\nنزدیکِ سایر تایم‌فریم‌ها: 31 تارگت / 31 استاپ / 31 ریسک‌فری";
         var combined=SignalReviewText.CurrentSupport(caption,e);
         Check(combined=="levels"+summary && SignalReviewText.CurrentSupport(combined,e)==combined,
@@ -83,7 +83,7 @@ internal static class WaveSimilarityTests
         var excluded=SignalSimilarityService.CalculateFromPatterns(a,[cross]).Evidence!;
         Check(Total(excluded)==0,"Cross-timeframe access never bypasses trade geometry gates");
 
-        Check(SignalReviewText.Support(first)=="\nنزدیکِ کل: 1 تارگت / 0 استاپ / 1 ریسک‌فری","Output remains precisely the three outcome counts");
+        Check(SignalReviewText.Support(first)=="\nنزدیکِ کل: 1 تارگت / 0 استاپ","Output shows only the two terminal outcome counts");
         Check(WaveFingerprint.PricePath([0,.8m,.4m,1]).SequenceEqual(WaveFingerprint.PricePath([0,0,.8m,.8m,.4m,1])),"Flat waiting candles cannot change price-travel shape");
     }
     private static int Total(SimilarityEvidence e)=>e.SameTimeframeNearbyTargets+e.SameTimeframeNearbyStops+e.SameTimeframeNearbyRiskFree+

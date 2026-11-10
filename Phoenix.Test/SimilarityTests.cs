@@ -192,7 +192,7 @@ internal static class SimilarityTests
             "All-time, slow outcomes and other timeframes must count once each, including risk-free");
         var text = SignalReviewText.Similarity(result);
         Check(!text.Contains("۳۰") && !text.Contains("شباهت به") && !text.Contains("دقیقه") &&
-            !text.Contains("سربه‌سر") && text.Contains("ریسک‌فری") && !text.Contains("احتمال"),
+            !text.Contains("سربه‌سر") && !text.Contains("ریسک‌فری") && !text.Contains("احتمال"),
             "Concise summary must not expose diagnostics or disguise similarity as probability");
         Check(SignalReviewText.Support(result.Evidence).Trim().Split('\n').Length == 2,
             "Historical evidence must occupy exactly two lines");

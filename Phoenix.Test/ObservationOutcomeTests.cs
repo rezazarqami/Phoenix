@@ -1,10 +1,12 @@
 using Phoenix.Web;
+using Phoenix.Engine.Exchanges.Bybit;
 
 internal static class ObservationOutcomeTests
 {
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
     public static void Transitions()
     {
+        FollowProtectedExitCandles();
         PersistedPaperResult().GetAwaiter().GetResult();
         var at = new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc);
         foreach (var sign in new[] { 1m, -1m })
@@ -43,6 +45,30 @@ internal static class ObservationOutcomeTests
                 "Unentered expiry is archived explicitly, not deleted or labeled stop");
         }
     }
+    private static void FollowProtectedExitCandles()
+    {
+        const long m = RiskFreePathWorker.Minute;
+        var signal = new ServerSignal { Direction = "Long", EntryPrice = 100, TakeProfit = 120, StopLoss = 90 };
+        var beforeExit = new BybitKline(m, 110, 120, 100, 110, 1);
+        var inside = new BybitKline(m, 110, 115, 100, 110, 1);
+        var target = new BybitKline(2 * m, 110, 120, 100, 110, 1);
+        var stop = new BybitKline(3 * m, 110, 115, 90, 110, 1);
+        var both = new BybitKline(2 * m, 110, 120, 90, 110, 1);
+        Check(RiskFreePathWorker.Follow(signal, m + 1, m, 4 * m, [beforeExit, target]).Outcome == "Indeterminate",
+            "A wick in the exit minute cannot prove a post-exit touch");
+        Check(RiskFreePathWorker.Follow(signal, m + 1, m, 4 * m, [inside, target, stop]).Outcome == "Target",
+            "The first verified touch wins, even if price reaches the other level later");
+        Check(RiskFreePathWorker.Follow(signal, m + 1, m, 4 * m, [inside, stop]) == new RiskFreePathProgress(2 * m),
+            "A missing minute blocks progression before later candles");
+        Check(RiskFreePathWorker.Follow(signal, m + 1, m, 4 * m, [inside, both]).Outcome == "Indeterminate",
+            "Two intraminute touches without known order remain unclassified");
+        Check(RiskFreePathWorker.Follow(signal, m + 1, m, 4 * m, [inside, both with { Open = 90 }]).Outcome == "StopLoss",
+            "An opening price at the stop proves it was touched before the target");
+        signal.Direction = "Short"; signal.TakeProfit = 90; signal.StopLoss = 120;
+        Check(RiskFreePathWorker.Follow(signal, m + 1, m, 4 * m, [inside, target, stop]).Outcome == "StopLoss",
+            "Short paths use the same chronological rule with reversed price boundaries");
+    }
+
     private static async Task PersistedPaperResult()
     {
         var root=Path.Combine(Path.GetTempPath(),"paper-result-"+Guid.NewGuid().ToString("N"));
@@ -70,13 +96,30 @@ internal static class ObservationOutcomeTests
             s=(await restart.GetAllAsync()).Single();
             Check(s.ObservationPolicyVersion==1 && s.RiskFreeReachedAtUtc==at.AddSeconds(2),"Restart preserves the active paper risk-free policy");
             ObservationOutcomeTracker.TrackFilled(s,145,at.AddSeconds(3));await restart.UpdateAsync(s,default);
-            var history=await restart.GetLearningHistoryAsync(default);
-            Check(history.Single().Signal.Outcome=="RiskFree","Paper risk-free closure reaches the learning archive");
-            var patterns=SignalLearningService.BuildPatterns(history).Proposals;
-            Check(patterns.Length==1 && patterns[0].Outcome=="RiskFree","Only-approve outcomes are included in proposal reference patterns");
-            var query=new ServerSignal{Id=Guid.NewGuid(),Symbol="OTHERUSDT",Direction="Long",Timeframe="15",EntryPrice=140,TakeProfit=150,StopLoss=130,CreatedAtUtc=at.AddMinutes(1),TechnicalFeatures=features};
-            var result=SignalSimilarityService.CalculateFromPatterns(query,patterns).Evidence!;
-            Check(result.SameTimeframeNearbyRiskFree==1 && result.SameTimeframeNearbyTargets==0 && result.SameTimeframeNearbyStops==0,"The paper outcome contributes precisely to the risk-free count");
+            var history = await restart.GetLearningHistoryAsync();
+            Check(history.Single().Signal.Outcome == "RiskFree" && history.Single().ForSimilarity() is null,
+                "An unresolved protected exit stays in history but is excluded from similarity");
+            var job = (await restart.GetRiskFreePathsAsync(long.MaxValue, default)).Single();
+            var targetAt = new DateTimeOffset(at.AddSeconds(40)).ToUnixTimeMilliseconds();
+            await restart.SaveRiskFreePathAsync(job, new(targetAt, "Target", targetAt), targetAt, default);
+            await restart.SaveRiskFreePathAsync(job, new(targetAt, "StopLoss", targetAt), targetAt, default);
+            restart = new ServerOrderStore(Path.Combine(root,"shadow-signals.json"),Path.Combine(root,"shadow-history.db"));
+            Check((await restart.GetRiskFreePathsAsync(long.MaxValue, default)).Count == 0,
+                "A completed path survives restart and cannot be processed again");
+            var item = (await restart.GetLearningHistoryAsync()).Single();
+            Check(item.Signal.Outcome == "RiskFree" && item.Signal.RiskFreeClosedAtUtc == at.AddSeconds(3) &&
+                item.Signal.TargetReachedAtUtc is null,
+                "Path resolution never rewrites trade history or creates a live target event");
+            var patterns = SignalLearningService.BuildPatterns([item.ForSimilarity()!]).Proposals;
+            var query = new ServerSignal { Id = Guid.NewGuid(), Symbol = "OTHERUSDT", Direction = "Long",
+                Timeframe = "15", EntryPrice = 140, TakeProfit = 150, StopLoss = 130,
+                CreatedAtUtc = at.AddSeconds(20), TechnicalFeatures = features };
+            Check(SignalSimilarityService.CalculateFromPatterns(query, patterns).Evidence!.SameTimeframeNearbyTargets == 0,
+                "A proposal cannot see the follow-up outcome before it occurs");
+            query.CreatedAtUtc = at.AddMinutes(1);
+            var result = SignalSimilarityService.CalculateFromPatterns(query, patterns).Evidence!;
+            Check(result.SameTimeframeNearbyTargets == 1 && result.SameTimeframeNearbyStops == 0 &&
+                result.SameTimeframeNearbyRiskFree == 0, "A resolved paper exit contributes to the target count once");
         }
         finally
         {

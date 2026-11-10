@@ -2,11 +2,11 @@ const fa = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 4 });
 
 function similaritySupport(e) {
   if (!e) return '<small>نمونه‌های مشابه: اطلاعات فنی کافی نیست.</small>';
-  if (e.comparisonVersion >= 7) return `<small>نزدیکِ کل: ${fa.format((e.sameTimeframeNearbyTargets ?? 0) + (e.otherTimeframeNearbyTargets ?? 0))} تارگت / ${fa.format((e.sameTimeframeNearbyStops ?? 0) + (e.otherTimeframeNearbyStops ?? 0))} استاپ / ${fa.format((e.sameTimeframeNearbyRiskFree ?? 0) + (e.otherTimeframeNearbyRiskFree ?? 0))} ریسک‌فری</small>`;
-  if (e.comparisonVersion >= 2 && !(e.comparableTargets + e.comparableStops + e.comparableRiskFree)) return '<small>نمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.</small>';
+  if (e.comparisonVersion >= 7) return `<small>نزدیکِ کل: ${fa.format((e.sameTimeframeNearbyTargets ?? 0) + (e.otherTimeframeNearbyTargets ?? 0))} تارگت / ${fa.format((e.sameTimeframeNearbyStops ?? 0) + (e.otherTimeframeNearbyStops ?? 0))} استاپ</small>`;
+  if (e.comparisonVersion >= 2 && !(e.comparableTargets + e.comparableStops)) return '<small>نمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.</small>';
   const n = v => fa.format(v ?? 0);
   const stageNote = e.queryStage !== e.referenceStage ? ' (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)' : '';
-  return `<small>نزدیکِ هم‌تایم‌فریم${stageNote}${e.comparisonVersion>=4?` (از ${n(e.sameTimeframeComparable)} نمونه)`:""}: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ / ${n(e.sameTimeframeNearbyRiskFree)} ریسک‌فری<br>نزدیکِ سایر تایم‌فریم‌ها${e.comparisonVersion>=4?` (از ${n(e.otherTimeframeComparable)} نمونه)`:""}: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ / ${n(e.otherTimeframeNearbyRiskFree)} ریسک‌فری</small>`;
+  return `<small>نزدیکِ هم‌تایم‌فریم${stageNote}${e.comparisonVersion>=4?` (از ${n(e.sameTimeframeComparable)} نمونه)`:""}: ${n(e.sameTimeframeNearbyTargets)} تارگت / ${n(e.sameTimeframeNearbyStops)} استاپ<br>نزدیکِ سایر تایم‌فریم‌ها${e.comparisonVersion>=4?` (از ${n(e.otherTimeframeComparable)} نمونه)`:""}: ${n(e.otherTimeframeNearbyTargets)} تارگت / ${n(e.otherTimeframeNearbyStops)} استاپ</small>`;
 }
 function outcomeSummary(s) {
   return '';

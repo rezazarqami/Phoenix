@@ -53,7 +53,10 @@ public sealed class SignalLearningService(
         try
         {
             var outcomeHistory = (await store.GetLearningHistoryAsync(token)).Select(x=>(Source:"main",Item:x))
-                .Concat((await shadow.Store.GetLearningHistoryAsync(token)).Select(x=>(Source:"observation",Item:x))).ToArray();
+                .Concat((await shadow.Store.GetLearningHistoryAsync(token)).Select(x=>(Source:"observation",Item:x)))
+                .Select(x => (x.Source, Item: x.Item.ForSimilarity()))
+                .Where(x => x.Item is not null)
+                .Select(x => (x.Source, Item: x.Item!)).ToArray();
             var (patterns, proposals) = BuildPatterns(outcomeHistory.Select(x=>x.Item));
             // Rebuild old proposal fingerprints from archived, exact anchors/candles in the background.
             // No market requests or historical chart generation enter the proposal hot path.

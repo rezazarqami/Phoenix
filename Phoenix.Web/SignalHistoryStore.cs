@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Phoenix.Web;
 
-public sealed class SignalHistoryStore
+public sealed partial class SignalHistoryStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _connectionString;
@@ -216,8 +216,12 @@ public sealed class SignalHistoryStore
             await using var connection = await OpenAsync(token);
             var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT payload, updated_at_utc, removed_at_utc, review_image IS NOT NULL
-                FROM signals ORDER BY created_at_utc DESC;
+                SELECT s.payload, s.updated_at_utc, s.removed_at_utc, s.review_image IS NOT NULL,
+                       p.outcome, p.resolved_at
+                FROM signals s LEFT JOIN risk_free_paths p ON p.signal_id = s.id
+                  AND p.closed_at = COALESCE(json_extract(s.payload,'$.riskFreeClosedAtUtc'),
+                                             json_extract(s.payload,'$.completedAtUtc'))
+                ORDER BY s.created_at_utc DESC;
                 """;
             var result = new List<SignalHistoryItem>();
             await using var reader = await command.ExecuteReaderAsync(token);
@@ -227,7 +231,12 @@ public sealed class SignalHistoryStore
                 if (signal is null) continue;
                 result.Add(new(signal, DateTime.Parse(reader.GetString(1)).ToUniversalTime(),
                     reader.IsDBNull(2) ? null : DateTime.Parse(reader.GetString(2)).ToUniversalTime(),
-                    reader.GetBoolean(3)));
+                    reader.GetBoolean(3))
+                {
+                    RiskFreePathOutcome = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    RiskFreePathResolvedAtUtc = reader.IsDBNull(5) ? null :
+                        DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(5)).UtcDateTime
+                });
             }
             return result;
         }
@@ -419,6 +428,10 @@ public sealed class SignalHistoryStore
                 CREATE INDEX IF NOT EXISTS ix_signals_created ON signals(created_at_utc DESC);
                 CREATE INDEX IF NOT EXISTS ix_signals_symbol ON signals(symbol, created_at_utc DESC);
                 CREATE INDEX IF NOT EXISTS ix_signals_status ON signals(status, created_at_utc DESC);
+                CREATE TABLE IF NOT EXISTS risk_free_paths (
+                    signal_id TEXT PRIMARY KEY, closed_at TEXT NOT NULL,
+                    next_candle INTEGER NULL, next_check INTEGER NOT NULL,
+                    outcome TEXT NULL, resolved_at INTEGER NULL);
                 CREATE TABLE IF NOT EXISTS signal_events (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT, signal_id TEXT NOT NULL,
                     event_type TEXT NOT NULL, occurred_at_utc TEXT NOT NULL, payload TEXT NOT NULL,
@@ -514,4 +527,16 @@ public sealed class SignalHistoryStore
 }
 
 public sealed record SignalHistoryItem(ServerSignal Signal, DateTime UpdatedAtUtc, DateTime? RemovedAtUtc,
-    bool HasImage = false);
+    bool HasImage = false)
+{
+    internal string? RiskFreePathOutcome { get; init; }
+    internal DateTime? RiskFreePathResolvedAtUtc { get; init; }
+
+    internal SignalHistoryItem? ForSimilarity()
+    {
+        if (Signal.Outcome != "RiskFree") return this;
+        return RiskFreePathOutcome is "Target" or "StopLoss" && RiskFreePathResolvedAtUtc is { } at
+            ? this with { Signal = Signal.WithSimilarityOutcome(RiskFreePathOutcome, at) }
+            : null;
+    }
+}

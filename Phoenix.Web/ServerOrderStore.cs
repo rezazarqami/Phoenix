@@ -113,6 +113,14 @@ public sealed class ServerSignal
         Symbol, Direction == "Long" ? "Buy" : "Sell", Quantity,
         EntryPrice, TakeProfit, StopLoss, Quantity * EntryPrice);
 
+    internal ServerSignal WithSimilarityOutcome(string outcome, DateTime resolvedAtUtc)
+    {
+        var copy = (ServerSignal)MemberwiseClone();
+        copy.Outcome = outcome;
+        copy.CompletedAtUtc = resolvedAtUtc;
+        return copy;
+    }
+
     public void ApplyPhoenixLeverage(
         BybitInstrumentRules rules, decimal targetReturnPercent = 50m)
     {
@@ -479,6 +487,13 @@ public sealed partial class ServerOrderStore
         var archived=await _history.NotificationSignalsAsync(since,token);
         return live.Concat(archived).DistinctBy(s=>s.Id).ToArray();
     }
+
+    internal Task<IReadOnlyList<RiskFreePathJob>> GetRiskFreePathsAsync(long now, CancellationToken token) =>
+        _history.GetRiskFreePathsAsync(now, token);
+
+    internal Task SaveRiskFreePathAsync(RiskFreePathJob job, RiskFreePathProgress progress,
+        long nextCheck, CancellationToken token) =>
+        _history.SaveRiskFreePathAsync(job, progress, nextCheck, token);
 
     internal Task<IReadOnlyList<SignalHistoryItem>> GetLearningHistoryAsync(CancellationToken token = default) =>
         _history.GetLearningAsync(token);

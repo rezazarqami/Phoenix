@@ -42,7 +42,7 @@ internal static class ParallelScanTests
             Check(calls.Any(x=>x.Contains("instruments"))&&calls.Any(x=>x.Contains("kline")),"Candle fetches must overlap instrument metadata instead of waiting for it");
             Check(peak==6,"Combined concurrent symbol/timeframe network activity must be bounded at six");
             release.SetResult();await Task.WhenAll(tasks);
-            Check(total==18&&peak==6&&active==0,"Each of three symbols must fetch exactly one rule set and five timeframes, without an unbounded request burst");
+            Check(total==24&&peak==6&&active==0,"Each of three symbols must fetch exactly one rule set and seven timeframes, without an unbounded request burst");
             release=new(TaskCreationOptions.RunContinuationsAsynchronously);sixReady=new(TaskCreationOptions.RunContinuationsAsynchronously);total=0;
             using var cancel=new CancellationTokenSource();tasks=Start(cancel.Token);await sixReady.Task.WaitAsync(TimeSpan.FromSeconds(4));cancel.Cancel();
             try{await Task.WhenAll(tasks);throw new Exception("Expected cancelled scan");}catch(OperationCanceledException){}

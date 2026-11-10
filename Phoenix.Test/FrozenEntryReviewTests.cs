@@ -22,11 +22,11 @@ internal static class FrozenEntryReviewTests
         var calls = 0;
         var client = new BybitDemoClient(new(null, null), new HttpClient(new Handler(request =>
         {
-            if (request.RequestUri!.AbsolutePath != "/v5/market/kline" || !request.RequestUri.Query.Contains("interval=240"))
+            if (request.RequestUri!.AbsolutePath != "/v5/market/kline" || !request.RequestUri.Query.Contains("interval=60"))
                 throw new Exception("Entry image requested non-chart analysis data");
             calls++;
             var candles = Enumerable.Range(0, 80).Select(i => new[] {
-                (new DateTimeOffset(at).ToUnixTimeMilliseconds() + i * 900000L).ToString(),
+                (new DateTimeOffset(at).ToUnixTimeMilliseconds() + i * 3600000L).ToString(),
                 "100", (105 + calls).ToString(), "95", (100 + calls).ToString(), "10", "1000" }).Reverse().ToArray();
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(
                 JsonSerializer.Serialize(new { retCode = 0, result = new { list = candles } })) };

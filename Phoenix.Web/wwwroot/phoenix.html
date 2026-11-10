@@ -13,7 +13,7 @@
 <link href="/security.css?v=2" rel="stylesheet">
 <link href="/crypto-statistics.css?v=20261030-minimal" rel="stylesheet">
 <title>Phoenix Trading Panel</title>
-<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-status"><link rel="stylesheet" href="/chart-workspace.css?v=20261101"><link rel="stylesheet" href="/organized-shell.css?v=20261101-compact-quotes"><link rel="stylesheet" href="/create-compact.css?v=20261101-signal"><link rel="stylesheet" href="/risk-shell.css?v=20261102-compact"><link rel="stylesheet" href="/entry-control.css?v=1"></head>
+<link href="/phoenix-ice.css?v=20261029-shell" rel="stylesheet"><link rel="stylesheet" href="/signal-live-chart.css?v=20261029-axis"><link rel="stylesheet" href="/phoenix-neon.css?v=20261030-status"><link rel="stylesheet" href="/chart-workspace.css?v=20261101"><link rel="stylesheet" href="/organized-shell.css?v=20261101-compact-quotes"><link rel="stylesheet" href="/create-compact.css?v=20261101-signal"><link rel="stylesheet" href="/risk-shell.css?v=20261110-shared"><link rel="stylesheet" href="/entry-control.css?v=2"></head>
 <body class="organized-shell">
 <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <main>
@@ -33,8 +33,10 @@
 </section><button id="returnHomeButton" type="button">خانه</button><button aria-controls="signal-pane-new" aria-selected="true" class="active" data-signal-tab="new" id="signal-tab-new" role="tab" type="button"><span data-icon="plus"></span>سیگنال‌های جدید</button><button aria-controls="signal-pane-history" aria-selected="false" data-signal-tab="history" id="signal-tab-history" role="tab" tabindex="-1" type="button"><span data-icon="clock"></span>نتایج گذشته</button><button aria-controls="notificationMenu" aria-expanded="false" aria-label="اعلان‌های سیگنال" class="notification-toggle" id="notificationToggle" type="button"><span data-icon="bell"></span><i hidden=""></i></button><button aria-controls="panel-more" aria-label="ابزارها و تنظیمات" class="security-button home-settings-toggle" id="settingsToggle" type="button"><span data-icon="menu"></span></button><div class="notification-menu" hidden="" id="notificationMenu"><b>اعلان‌های سیگنال</b><a class="notification-history-link" href="/notifications">تاریخچهٔ رویدادها و نتایج</a><p id="notificationSummary">در حال دریافت وضعیت سیگنال‌ها…</p><button id="notificationShowActive" type="button">نمایش سیگنال‌های فعال</button><div class="safe" id="modeNote"><i>✓</i><span>در حال بررسی وضعیت موتور سفارش</span></div></div></div>
 <div id="workspaceBreadcrumb" class="workspace-breadcrumb" hidden=""><button type="button" id="workspaceBack">بازگشت</button><span id="workspaceLocation"></span></div><div aria-labelledby="tab-home" class="home-section home-price-grid" id="panel-home" role="tabpanel"><section class="entry-control" id="entryControl" data-state="unknown" aria-labelledby="entryControlTitle">
   <div class="entry-control-copy">
-    <span class="entry-control-kicker">کنترل ربات</span>
-    <h2 id="entryControlTitle">ورودهای جدید</h2>
+    <div class="entry-control-heading">
+      <h2 id="entryControlTitle">ورودهای جدید</h2>
+      <span class="entry-control-kicker">کنترل ربات</span>
+    </div>
     <p id="entryControlStatus" role="status">در حال خواندن وضعیت…</p>
   </div>
   <button id="entryIntakeToggle" class="entry-control-switch" type="button" role="switch"
@@ -164,7 +166,7 @@
 <script src="/crypto-statistics.js?v=20261030-riskfree"></script>
 <script src="/live-positions.js?v=20261103-startup"></script>
 <script src="/hero-motion.js?v=1"></script>
-<script src="/home-tabs.js?v=20261102-risk-compact"></script>
+<script src="/home-tabs.js?v=20261110-shared"></script>
 <script src="/phoenix-ice.js?v=20261103-startup"></script><script defer="" src="/device-alerts.js?v=1"></script><dialog id="deviceAlertsDialog" class="security-dialog" aria-labelledby="deviceAlertsTitle"><div class="dialog-head"><h2 id="deviceAlertsTitle">اعلان زندهٔ گوشی</h2><button type="button" id="closeDeviceAlerts" aria-label="بستن">×</button></div><div class="dialog-body"><p>اتصال مستقیم به سرور فونیکس؛ مستقل از تلگرام. فقط نزدیک ورود، ورود تأییدشدهٔ صرافی، پله‌های ریسک‌فری، تارگت، استاپ و انقضای سیگنال نزدیک‌شده اعلان می‌شوند.</p><p id="deviceAlertsState" role="status">در حال بررسی…</p><p id="deviceAlertsConnection"></p><label>صدای پیام <select id="deviceAlertSound"><option value="crystal">کریستال</option><option value="pulse">ضربان</option><option value="beacon">فانوس</option><option value="soft">ملایم</option></select></label><div class="device-alert-actions"><button type="button" id="soundDeviceAlerts">تنظیم صدا در اندروید</button><button type="button" id="connectionDeviceAlerts">مخفی‌کردن اعلان اتصال</button><button type="button" id="enableDeviceAlerts">فعال‌سازی اعلان زنده</button><button type="button" id="testDeviceAlerts">تست اعلان گوشی</button><button type="button" id="batteryDeviceAlerts">تنظیم باتری گوشی</button><button type="button" id="disableDeviceAlerts">توقف اعلان زنده</button></div><p id="deviceAlertsMessage" role="alert"></p><p class="device-alert-note">هنگام فعال‌بودن، یک اعلان ثابت وضعیت اتصال را نشان می‌دهد. برای جلوگیری از تأخیر در پس‌زمینه، باتری فونیکس را روی «بدون محدودیت» بگذار. پس از توقف اجباری برنامه توسط اندروید، فونیکس را دوباره باز کن. خروج از حساب، اعلان زنده را متوقف می‌کند. ارسال تلگرام فعلاً برقرار می‌ماند.</p></div></dialog>
 
 

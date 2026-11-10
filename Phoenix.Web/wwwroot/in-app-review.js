@@ -130,7 +130,6 @@
  document.getElementById('clearReviewDesk').addEventListener('click',()=>removeFromDesk([...items,...pending.values()]));
  document.getElementById('closeReviewFocus').addEventListener('click',()=>{autoFocus=false;focusReview(false);});
  document.getElementById('market-tab-review').addEventListener('click',()=>{autoFocus=true;focusReview(!!selected);refresh();});
- document.getElementById('startBatch').addEventListener('click',()=>setTimeout(()=>document.getElementById('market-tab-review').click(),500));
  window.addEventListener('phoenix-market-tab-changed',e=>{if(e.detail==='review'){autoFocus=true;focusReview(!!selected);refresh();}});
  window.addEventListener('online',()=>{refresh();const retry=[...detail.querySelectorAll('button')].find(b=>b.textContent==='دریافت دوبارهٔ نمودار'&&!b.hidden);retry?.click();});
  document.addEventListener('visibilitychange',()=>{if(visible())refresh();});

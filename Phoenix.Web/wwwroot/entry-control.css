@@ -5,7 +5,8 @@
   justify-content: space-between;
   gap: 12px;
   direction: rtl;
-  padding: 14px 16px;
+  padding: 7px 12px;
+  margin-inline: 5px;
   min-width: 0;
   border: 1px solid #254968;
   border-radius: 17px;
@@ -15,16 +16,17 @@
 }
 .entry-control[hidden] { display: none; }
 .entry-control[data-state="off"] { border-color: #8e5438; background: linear-gradient(115deg, #302026, #111a2d 75%); }
+.entry-control-heading { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 7px; }
 .entry-control-kicker { color: #9ab2c8; font-size: 10px; font-weight: 700; }
-.entry-control h2 { font-size: 18px; line-height: 1.5; margin: 2px 0; }
+.entry-control h2 { font-size: 16px; line-height: 1.4; margin: 0; }
 .entry-control p { font-size: 11px; line-height: 1.7; color: #b4c6da; margin: 0; }
 .entry-control-switch {
   display: flex;
   align-items: center;
   gap: 9px;
   flex: 0 0 auto;
-  padding: 9px 10px;
-  min-height: 46px;
+  padding: 6px 9px;
+  min-height: 44px;
   border: 1px solid #347668;
   border-radius: 13px;
   background: #102f32;
@@ -59,7 +61,12 @@
 .entry-control[data-state="unknown"] .entry-control-track::before { inset: 3px auto auto 3px; }
 .entry-control[data-state="unknown"] .entry-control-track { background: #455368; }
 @media (max-width: 360px) {
-  .entry-control { padding: 12px; gap: 8px; }
-  .entry-control h2 { font-size: 16px; }
+  .entry-control { padding-inline: 9px; gap: 8px; }
+  .entry-control h2 { font-size: 15px; }
   .entry-control-switch { padding-inline: 8px; }
+}
+
+@media (max-width: 600px) {
+  #panel-home.home-price-grid { margin-top: 12px; }
+  body:has(#panel-home:not([hidden])) > main { padding-bottom: 5px !important; }
 }

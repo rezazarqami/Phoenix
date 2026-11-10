@@ -92,7 +92,6 @@
     document.querySelector('#panel-'+target+' iframe')?.contentWindow?.postMessage({type:'phoenix-frame-visible'},location.origin);
     document.body.classList.remove('review-focus-host','chart-focus-host');
     document.body.classList.toggle('crypto-market-open',name==='crypto');
-    document.body.classList.toggle('market-risk-open',name==='risk');
     const hash='#'+name+(query?'?'+query:'');if(updateHash&&location.hash!==hash)history.pushState(null,'',hash);
     window.dispatchEvent(new CustomEvent('phoenix-tab-changed',{detail:name}));
     if(updateHash)window.scrollTo({top:0,behavior:'instant'});

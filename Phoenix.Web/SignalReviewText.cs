@@ -11,14 +11,14 @@ internal static class SignalReviewText
     {
         if (e is null) return "\nنمونه‌های مشابه: اطلاعات فنی کافی نیست.";
         if (e.ComparisonVersion >= 7)
-            return $"\nنزدیکِ کل: {e.SameTimeframeNearbyTargets + e.OtherTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops + e.OtherTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree + e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
-        if (e.ComparableTargets + e.ComparableStops + e.ComparableRiskFree == 0)
+            return $"\nنزدیکِ کل: {e.SameTimeframeNearbyTargets + e.OtherTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops + e.OtherTimeframeNearbyStops} استاپ";
+        if (e.ComparableTargets + e.ComparableStops == 0)
             return "\nنمونه‌های مشابه: سابقهٔ فنی قابل‌مقایسه در این مرحله وجود ندارد.";
         var stageNote = e.QueryStage != e.ReferenceStage ? " (پیشنهاد با سابقهٔ ورود؛ سابقهٔ پیشنهاد موجود نیست)" : "";
         var sameDenominator=e.ComparisonVersion>=4?$" (از {e.SameTimeframeComparable} نمونه)":"";
         var otherDenominator=e.ComparisonVersion>=4?$" (از {e.OtherTimeframeComparable} نمونه)":"";
-        return $"\nنزدیکِ هم‌تایم‌فریم{stageNote}{sameDenominator}: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ / {e.SameTimeframeNearbyRiskFree} ریسک‌فری" +
-            $"\nنزدیکِ سایر تایم‌فریم‌ها{otherDenominator}: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ / {e.OtherTimeframeNearbyRiskFree} ریسک‌فری";
+        return $"\nنزدیکِ هم‌تایم‌فریم{stageNote}{sameDenominator}: {e.SameTimeframeNearbyTargets} تارگت / {e.SameTimeframeNearbyStops} استاپ" +
+            $"\nنزدیکِ سایر تایم‌فریم‌ها{otherDenominator}: {e.OtherTimeframeNearbyTargets} تارگت / {e.OtherTimeframeNearbyStops} استاپ";
     }
     // Reformat frozen pending captions without recomputing matches or loading candles.
     internal static string CurrentSupport(string caption, SimilarityEvidence? evidence)

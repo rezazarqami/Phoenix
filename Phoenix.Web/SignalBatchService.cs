@@ -407,12 +407,7 @@ public sealed partial class SignalBatchService(
                 chartInterval = option.Interval;
                 chartCandles = option.Candles;
             }
-            // Keep both selected anchors visible without fetching extra tiers
-            // or inspecting Elliott turns just to prepare the review image.
-            var anchorStart = Math.Min(selected.FloorTime, selected.CeilingTime);
-            var anchorEnd = Math.Max(selected.FloorTime, selected.CeilingTime);
-            if (chartCandles.Count < 52 || chartCandles[0].OpenTime > anchorStart ||
-                chartCandles[^1].OpenTime + (chartCandles[^1].OpenTime - chartCandles[^2].OpenTime) < anchorEnd)
+            if (chartCandles.Count == 0)
             {
                 chartInterval = option.Interval;
                 chartCandles = option.Candles;
@@ -420,7 +415,7 @@ public sealed partial class SignalBatchService(
             var similarityResult = analysis.Prediction;
             var similarityLines = SignalReviewText.Similarity(similarityResult);
             var leverageLines = leverageInfo?.Describe(selected.Symbol, selected.EntryPrice, selected.TakeProfit) ?? "";
-            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {IntervalName(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪{leverageLines}\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
+            var caption = $"🔎 پیشنهاد جدید Phoenix\nنماد: {selected.Symbol}\nجهت: {selected.Direction}\nتایم‌فریم سیگنال: {TimeframeAlertText.Name(option.Interval)}\nفاصله تا ورود: {FormatTwoDecimals(option.EntryDistancePercent)}٪\nفاصله ورود تا تارگت: {FormatTwoDecimals(EntryToTargetPercent(selected))}٪{leverageLines}\nسقف: {Format(selected.Ceiling)}\nکف: {Format(selected.Floor)}\nورود: {Format(selected.EntryPrice)}\nتارگت: {Format(selected.TakeProfit)}\nاستاپ: {Format(selected.StopLoss)}\nورودی: {Format(positionSizeUsdt)} USDT{similarityLines}\n\nآیا این سیگنال ثبت شود؟";
             token.ThrowIfCancellationRequested();
             // Chart style is presentation-only; analysis retains the requested mode.
             var image = SignalChartRenderer.Render(chartCandles, selected, false,
@@ -447,13 +442,17 @@ public sealed partial class SignalBatchService(
             _state = update(_state);
         }
     }
-    private static string[] Intervals(string filter) => filter == "All" ? ["1", "5", "15", "60", "240"] : [filter];
+    private static string[] Intervals(string filter) => filter == "All" ? ["1", "3", "5", "15", "30", "60", "240"] : [filter];
     public static string ReviewChartInterval(string signalInterval) => signalInterval switch
     {
-        "1" => "15", "5" => "60", "15" => "240", "60" => "D", "240" => "W", _ => signalInterval
+        "1" => "5", "3" => "15", "5" => "30", "15" => "60",
+        "30" => "120", "60" => "240", "240" => "D", _ => signalInterval
     };
-    private static string IntervalName(string value) => value switch { "1" => "۱ دقیقه", "5" => "۵ دقیقه", "15" => "۱۵ دقیقه", "60" => "۱ ساعت", "240" => "۴ ساعت", _ => value };
-    private static string TimeframeBadge(string value) => value switch { "1" => "1M", "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value };
+    internal static string TimeframeBadge(string value) => value switch
+    {
+        "1" => "1M", "3" => "3M", "5" => "5M", "15" => "15M", "30" => "30M",
+        "60" => "1H", "120" => "2H", "240" => "4H", "D" => "1D", "W" => "1W", "M" => "1M", _ => value
+    };
     internal static bool PassesOutcomeFilter(SignalSimilarityResult prediction, decimal minimum) =>
         true;
 

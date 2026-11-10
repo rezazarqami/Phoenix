@@ -24,7 +24,7 @@ public sealed class EntrySignalReviewService(
             anchorStart, chartCandles[^1].OpenTime, anchorStart, chartCandles[^1].OpenTime,
             chartCandles.Count, "Current market review", false, chartCandles[^1].OpenTime);
         var image = SignalChartRenderer.Render(chartCandles, candidate, false,
-            Badge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent,
+            SignalBatchService.TimeframeBadge(chartInterval), signal.TargetSimilarityPercent, signal.StopSimilarityPercent,
             targetOutcome: signal.TargetOutcomePercent, stopOutcome: signal.StopOutcomePercent);
         return new(image, false);
     }
@@ -66,8 +66,6 @@ public sealed class EntrySignalReviewService(
         }
     }
 
-    private static string Badge(string value) => value switch
-        { "5" => "5M", "15" => "15M", "60" => "1H", "240" => "4H", "D" => "1D", _ => value };
     private static string F(decimal? value) => value?.ToString("0.0") ?? "—";
 }
 

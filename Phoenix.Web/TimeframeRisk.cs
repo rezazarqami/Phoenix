@@ -104,7 +104,7 @@ public sealed partial class ServerOrderStore
     public async Task<IReadOnlyList<TimeframeRiskView>> TimeframeRulesAsync(CancellationToken ct=default)
     {
         await _gate.WaitAsync(ct);try{var signals=await LoadUnsafeAsync(ct);var state=await RiskUnsafeAsync(ct);
-            return new[]{"1","5","15","30","60","240","D","W","M","3M"}.Concat(signals.Select(RiskKey)).Concat(state.Rules.Keys).Distinct()
+            return new[]{"1","3","5","15","30","60","240","D","W","M","3M"}.Concat(signals.Select(RiskKey)).Concat(state.Rules.Keys).Distinct()
                 .Select(key=>{
                     var rule=Rule(state,key);var open=signals.Count(s=>RiskKey(s)==key&&OccupiesSlot(s));
                     return new TimeframeRiskView(rule,open,EffectiveMaximum(rule),!rule.Blocked&&rule.ConsecutiveStops>0&&open>=EffectiveMaximum(rule));
@@ -136,7 +136,7 @@ public sealed partial class ServerOrderStore
             state.Rules[key]=old with{Blocked=false,ConsecutiveStops=0,BlockedAtUtc=null,ResumedAtUtc=DateTime.UtcNow};await SaveRiskUnsafeAsync(ct);
         }finally{_gate.Release();}
     }
-    private static bool ValidRiskKey(string key)=>new[]{"1","5","15","30","60","240","D","W","M","3M","unknown"}.Contains(key);
+    private static bool ValidRiskKey(string key)=>new[]{"1","3","5","15","30","60","240","D","W","M","3M","unknown"}.Contains(key);
 }
 public static class TimeframeRiskEndpoints
 {

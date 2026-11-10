@@ -1293,11 +1293,13 @@ Run("Signal Lab candidate uses confirmed range and Phoenix calculations", () =>
     Equal((byte)25, hourly.R);
     Equal((byte)111, current.R);
     True(SignalChartRenderer.WaveStyle("240", "240").Visible);
-    Equal("15", SignalBatchService.ReviewChartInterval("1"));
-    Equal("60", SignalBatchService.ReviewChartInterval("5"));
-    Equal("240", SignalBatchService.ReviewChartInterval("15"));
-    Equal("D", SignalBatchService.ReviewChartInterval("60"));
-    Equal("W", SignalBatchService.ReviewChartInterval("240"));
+    Equal("5", SignalBatchService.ReviewChartInterval("1"));
+    Equal("15", SignalBatchService.ReviewChartInterval("3"));
+    Equal("30", SignalBatchService.ReviewChartInterval("5"));
+    Equal("60", SignalBatchService.ReviewChartInterval("15"));
+    Equal("120", SignalBatchService.ReviewChartInterval("30"));
+    Equal("240", SignalBatchService.ReviewChartInterval("60"));
+    Equal("D", SignalBatchService.ReviewChartInterval("240"));
 });
 
 Run("Every close-direction reversal ends a raw Elliott leg", () =>
